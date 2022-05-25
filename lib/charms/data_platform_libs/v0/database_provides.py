@@ -1,8 +1,58 @@
-#!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
-# See LICENSE file for licensing details.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-"""TODO: Add a proper docstring here."""
+"""Abstractions for database metadata manipulation and custom
+events related to this metadata.
+
+This library is mostly an uniform interface to a selection of common databases
+metadata, with tailored events that represent actionable database events, and
+methods to set the application related data.
+
+Following an example of using the DatabaseRequestedEvent, within a charm code:
+
+```python from charms.data_platform_libs.v0.database_provides import
+DatabaseProvides
+
+class SampleCharm(CharmBase):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        # Charm events defined in the database provides charm library.
+        self.provides = DatabaseProvides(self, "database")
+        self.framework.observe(self.provides.on.database_requested,
+        self._on_database_requested)
+
+        # Database generic helper self.database = DatabaseHelper()
+
+    def _on_database_requested(self, _) -> None:
+        # Handle the event triggered by a new database requested in the relation
+
+        # Retrieve the database name using the charm library. database =
+        self.provides.database
+
+        # generate a new user credential username =
+        self.database.generate_user() password =
+        self.database.generate_password()
+
+        # set the credentials for the relation
+        self.provides.set_credentials(username, password)
+
+        # set other variables for the relation self.provides.set_tls("False")
+```
+
+"""
 
 import json
 import logging
@@ -39,7 +89,7 @@ class DatabaseEvents(CharmEvents):
 
 
 class DatabaseProvides(Object):
-    """Provides-side of the PostgreSQL relation."""
+    """Provides-side of the database relation."""
 
     on = DatabaseEvents()
 
@@ -158,6 +208,8 @@ class DatabaseProvides(Object):
     def set_replset(self, replset: str) -> None:
         """Set replica set name in the application relation databag.
 
+        MongoDB only.
+
         Args:
             replset: replica set name.
         """
@@ -198,7 +250,7 @@ class DatabaseProvides(Object):
         self._update_relation_data("version", version)
 
     def _update_relation_data(self, key: str, value: str) -> None:
-        """Set PostgreSQL primary connection string.
+        """Set value for key in the application relation databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
