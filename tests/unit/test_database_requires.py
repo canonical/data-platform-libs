@@ -1,6 +1,8 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
+import json
 import unittest
+from unittest.mock import patch
 
 from charms.data_platform_libs.v0.database_requires import DatabaseRequires
 from ops.charm import CharmBase
@@ -18,6 +20,8 @@ requires:
 
 
 class ApplicationCharm(CharmBase):
+    """Mock application charm to use in units tests."""
+
     def __init__(self, *args):
         super().__init__(*args)
         self.database = DatabaseRequires(
@@ -44,16 +48,43 @@ class TestDatabaseRequires(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(ApplicationCharm, meta=METADATA)
         self.addCleanup(self.harness.cleanup)
+
+        # Set up the initial relation and hooks.
+        self.rel_id = self.harness.add_relation(RELATION_NAME, "database")
+        self.harness.add_relation_unit(self.rel_id, "database/0")
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
 
-    def test_database_is_requested(self):
+    def test_set_database(self):
         """Asserts that the database name is in the relation databag when it's requested."""
-        rel_id = self.harness.add_relation(RELATION_NAME, "database")
-        self.harness.add_relation_unit(rel_id, "database/0")
-
         # Set the database name in the relation using the requires charm library.
         self.harness.charm.database.set_database(DATABASE)
 
         # Check that the database name is present in the relation.
-        assert self.harness.get_relation_data(rel_id, "application") == {"database": DATABASE}
+        assert self.harness.get_relation_data(self.rel_id, "application")["database"] == DATABASE
+
+    @patch.object(ApplicationCharm, "_on_database_created")
+    def test_on_database_created_is_called(self, _on_database_created):
+        """Asserts on_database_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created database.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "database",
+            {
+                "credentials": json.dumps(
+                    {"username": "test-username", "password": "test-password"}
+                )
+            },
+        )
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library.
+        assert self.harness.charm.database.username == "test-username"
+        assert self.harness.charm.database.password == "test-password"
+
+        # Assert the correct hook is called.
+        _on_database_created.assert_called_once()
+
+    def test_additional_fields_are_accessible(self):
+        """Asserts additional fields are accessible using the charm library after being set."""
+        pass

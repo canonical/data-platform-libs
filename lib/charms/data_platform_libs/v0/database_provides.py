@@ -11,8 +11,6 @@ from ops.charm import CharmBase, CharmEvents, RelationChangedEvent, RelationEven
 from ops.framework import EventSource, Object
 
 # The unique Charmhub library identifier, never change it
-from ops.model import Relation
-
 LIBID = "8eea9ca584d84c7bb357f1946b6f34ce"
 
 # Increment this major API version when introducing breaking changes
@@ -48,21 +46,11 @@ class DatabaseProvides(Object):
     def __init__(self, charm: CharmBase, relation_name: str = "database") -> None:
         super().__init__(charm, relation_name)
         self.charm = charm
-        self._relation_name = relation_name
+        self.relation = self.charm.model.get_relation(relation_name)
         self.framework.observe(
             charm.on[relation_name].relation_changed,
             self._on_database_relation_changed,
         )
-
-    @property
-    def _relation(self) -> Relation:
-        """Fetch the relation that is handled by the library.
-
-        Returns:
-             A :class:`ops.model.Relation` object representing
-             the relation.
-        """
-        return self.charm.model.get_relation(self._relation_name)
 
     def _diff(self, event: RelationChangedEvent) -> dict:
         """Retrieves the diff of the data in the relation changed databag.
@@ -75,7 +63,7 @@ class DatabaseProvides(Object):
                 keys from the event relation databag.
         """
         # Retrieve the old data from the data key in the application relation databag.
-        old_data = json.loads(self._relation.data[self.charm.model.app].get("data", "{}"))
+        old_data = json.loads(self.relation.data[self.charm.model.app].get("data", "{}"))
         # Retrieve the new data from the event relation databag.
         new_data = event.relation.data[event.app]
 
@@ -118,7 +106,7 @@ class DatabaseProvides(Object):
             value stored in the relation data bag for
                 the specified key.
         """
-        return self._relation.data[self._relation.app].get(key, None)
+        return self.relation.data[self.relation.app].get(key, None)
 
     @property
     def database(self) -> str:
@@ -219,4 +207,4 @@ class DatabaseProvides(Object):
             key: key to write the date in the relation.
             value: value of the data to write in the relation.
         """
-        self._relation.data[self.charm.model.app][key] = value
+        self.relation.data[self.charm.model.app][key] = value

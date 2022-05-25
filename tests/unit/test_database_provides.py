@@ -1,5 +1,6 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
+import json
 import unittest
 from unittest.mock import patch
 
@@ -19,6 +20,8 @@ provides:
 
 
 class DatabaseCharm(CharmBase):
+    """Mock database charm to use in units tests."""
+
     def __init__(self, *args):
         super().__init__(*args)
         self.database = DatabaseProvides(
@@ -35,19 +38,34 @@ class TestDatabaseProvides(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(DatabaseCharm, meta=METADATA)
         self.addCleanup(self.harness.cleanup)
+
+        # Set up the initial relation and hooks.
+        self.rel_id = self.harness.add_relation(RELATION_NAME, "application")
+        self.harness.add_relation_unit(self.rel_id, "application/0")
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
 
     @patch.object(DatabaseCharm, "_on_database_requested")
-    def test_database_is_requested(self, _on_database_requested):
+    def test_on_database_requested_is_called(self, _on_database_requested):
         """Asserts that the correct hook is called when a new database is requested."""
-        rel_id = self.harness.add_relation(RELATION_NAME, "application")
-        self.harness.add_relation_unit(rel_id, "application/0")
-
-        self.harness.update_relation_data(rel_id, "application", {"database": DATABASE})
+        # Simulate the request of a new database.
+        self.harness.update_relation_data(self.rel_id, "application", {"database": DATABASE})
 
         # Assert the database name is accessible in the providers charm library.
         assert self.harness.charm.database.database == DATABASE
 
         # Assert the correct hook is called.
         _on_database_requested.assert_called_once()
+
+    def test_set_credentials(self):
+        """Asserts that the database name is in the relation databag when it's requested."""
+        # Set the credentials in the relation using the provides charm library.
+        self.harness.charm.database.set_credentials("test-username", "test-password")
+
+        # Check that the database name is present in the relation.
+        assert json.loads(
+            self.harness.get_relation_data(self.rel_id, "database")["credentials"]
+        ) == {
+            "username": "test-username",
+            "password": "test-password",
+        }

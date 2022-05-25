@@ -12,8 +12,6 @@ from ops.charm import CharmEvents, RelationChangedEvent, RelationEvent
 from ops.framework import EventSource, Object
 
 # The unique Charmhub library identifier, never change it
-from ops.model import Relation
-
 LIBID = "0241e088ffa9440fb4e3126349b2fb62"
 
 # Increment this major API version when introducing breaking changes
@@ -64,20 +62,10 @@ class DatabaseRequires(Object):
         """Manager of database client relations."""
         super().__init__(charm, relation_name)
         self.charm = charm
-        self._relation_name = relation_name
+        self.relation = self.charm.model.get_relation(relation_name)
         self.framework.observe(
             self.charm.on[relation_name].relation_changed, self._on_relation_changed_event
         )
-
-    @property
-    def _relation(self) -> Relation:
-        """Fetch the relation that is handled by the library.
-
-        Returns:
-             A :class:`ops.model.Relation` object representing
-             the relation.
-        """
-        return self.charm.model.get_relation(self._relation_name)
 
     def _diff(self, event: RelationChangedEvent) -> dict:
         """Retrieves the diff of the data in the relation changed databag.
@@ -90,7 +78,7 @@ class DatabaseRequires(Object):
                 keys from the event relation databag.
         """
         # Retrieve the old data from the data key in the application relation databag.
-        old_data = json.loads(self._relation.data[self.charm.model.app].get("data", "{}"))
+        old_data = json.loads(self.relation.data[self.charm.model.app].get("data", "{}"))
         # Retrieve the new data from the event relation databag.
         new_data = event.relation.data[event.app]
 
@@ -125,7 +113,7 @@ class DatabaseRequires(Object):
             value stored in the relation data bag for
                 the specified key.
         """
-        return self._relation.data[self._relation.app].get(key, None)
+        return self.relation.data[self.relation.app].get(key, None)
 
     @property
     def endpoints(self) -> str:
@@ -212,4 +200,4 @@ class DatabaseRequires(Object):
             key: key to write the date in the relation.
             value: value of the data to write in the relation.
         """
-        self._relation.data[self.charm.model.app][key] = value
+        self.relation.data[self.charm.model.app][key] = value
