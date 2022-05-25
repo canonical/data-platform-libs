@@ -187,7 +187,7 @@ class DatabaseRequires(Object):
         self._update_relation_data("database", database)
 
     def set_extra_user_roles(self, extra_user_roles: str) -> None:
-        """Request extra user roles;."""
+        """Request extra user roles."""
         self._update_relation_data("extra-user-roles", extra_user_roles)
 
     def _update_relation_data(self, key: str, value: str) -> None:

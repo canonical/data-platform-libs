@@ -65,7 +65,4 @@ class TestDatabaseProvides(unittest.TestCase):
         # Check that the database name is present in the relation.
         assert json.loads(
             self.harness.get_relation_data(self.rel_id, "database")["credentials"]
-        ) == {
-            "username": "test-username",
-            "password": "test-password",
-        }
+        ) == {"username": "test-username", "password": "test-password"}

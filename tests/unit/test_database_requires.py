@@ -87,4 +87,23 @@ class TestDatabaseRequires(unittest.TestCase):
 
     def test_additional_fields_are_accessible(self):
         """Asserts additional fields are accessible using the charm library after being set."""
-        pass
+        # Simulate setting the additional fields.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "database",
+            {
+                "replset": "rs0",
+                "tls": "True",
+                "tls-ca": "Canonical",
+                "uris": "host1:port,host2:port",
+                "version": "1.0",
+            },
+        )
+
+        # Check that the fields are present in the relation
+        # using the requires charm library.
+        assert self.harness.charm.database.replset == "rs0"
+        assert self.harness.charm.database.tls == "True"
+        assert self.harness.charm.database.tls_ca == "Canonical"
+        assert self.harness.charm.database.uris == "host1:port,host2:port"
+        assert self.harness.charm.database.version == "1.0"
