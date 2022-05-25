@@ -1,0 +1,11 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: application
+description: |
+  Data platform libs application.
+summary: |
+  Data platform libs application.
+
+requires:
+  database:
+    interface: database-client

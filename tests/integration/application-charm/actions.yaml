@@ -1,0 +1,11 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+get-database:
+  description: Get the database name.
+get-username:
+  description: Get the username needed to connect to the database.
+get-password:
+  description: Get the user's password.
+get-version:
+  description: Get database version.

@@ -1,0 +1,29 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: database
+description: |
+  Data platform libs database.
+summary: |
+  Data platform libs database.
+
+containers:
+  database:
+    resource: database-image
+    mounts:
+      - storage: database
+        location: /var/lib/postgresql/data/pgdata
+
+resources:
+  database-image:
+    type: oci-image
+    description: OCI image for database
+    upstream-source: ubuntu/postgres
+
+provides:
+  database:
+    interface: database-client
+
+storage:
+  database:
+    type: filesystem
+    location: /var/lib/postgresql/data/pgdata
