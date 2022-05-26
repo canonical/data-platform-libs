@@ -1,6 +1,8 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+get-endpoints:
+  description: Get the database endpoints list.
 get-database:
   description: Get the database name.
 get-username:

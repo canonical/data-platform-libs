@@ -25,6 +25,7 @@ class ApplicationCharm(CharmBase):
 
         # Default charm events.
         self.framework.observe(self.on.database_relation_joined, self._on_database_relation_joined)
+        self.framework.observe(self.on.get_endpoints_action, self._on_get_endpoints)
         self.framework.observe(self.on.get_database_action, self._on_get_database)
         self.framework.observe(self.on.get_username_action, self._on_get_username)
         self.framework.observe(self.on.get_password_action, self._on_get_password)
@@ -59,6 +60,10 @@ class ApplicationCharm(CharmBase):
     def _on_endpoints_changed(self, _) -> None:
         """Event triggered when the read/write endpoints of the database change."""
         logger.info(f"_on_endpoints_changed called: {self.database.endpoints}")
+
+    def _on_get_endpoints(self, event: ActionEvent) -> None:
+        """Returns the list of the read/write endpoints of the database."""
+        event.set_results({"endpoints": self.database.endpoints})
 
     def _on_get_database(self, event: ActionEvent) -> None:
         """Returns the name of the database that was created for this application."""

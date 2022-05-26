@@ -91,14 +91,16 @@ class DatabaseCharm(CharmBase):
         # Share the credentials with the application.
         self.database.set_credentials(username, password)
 
+        # Set the read/write endpoint.
+        self.database.set_endpoints(
+            f'{self.model.get_binding("database").network.bind_address}:5432'
+        )
+
         # Share additional information with the application.
         self.database.set_tls("False")
         self.database.set_version(version)
 
         self.unit.status = ActiveStatus()
-
-        # TODO: call the change of the endpoints.
-        # self.application.set_endpoints(event.relation, "database1:5432,database2:5432")
 
     def _on_extra_user_roles_requested(self, _) -> None:
         """Event triggered when extra roles are requested for the user that was created."""
