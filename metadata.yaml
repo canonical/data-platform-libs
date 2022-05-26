@@ -5,11 +5,3 @@ description: |
   Data platform libs.
 summary: |
   Data platform libs.
-
-provides:
-  database:
-    interface: database-client
-
-requires:
-  application:
-    interface: database-client
