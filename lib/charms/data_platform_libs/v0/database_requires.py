@@ -141,6 +141,8 @@ class DatabaseRequires(Object):
             key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
         }
 
+        # TODO: evaluate the possibility of losing the diff if some error
+        # happens in the charm before the diff is completely checked (DPE-412).
         # Convert the new_data to a serializable format and save it for a next diff check.
         data = {key: value for key, value in new_data.items() if key != "data"}
         self._update_relation_data("data", json.dumps(data))
