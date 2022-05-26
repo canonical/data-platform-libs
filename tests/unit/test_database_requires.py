@@ -85,6 +85,17 @@ class TestDatabaseRequires(unittest.TestCase):
         # Assert the correct hook is called.
         _on_database_created.assert_called_once()
 
+    def test_set_extra_user_roles(self):
+        """Asserts that the extra user roles are in the relation databag when they're requested."""
+        # Set the extra roles that the user need using the provides charm library.
+        self.harness.charm.database.set_extra_user_roles("CREATEDB,CREATEROLE")
+
+        # Check that the extra user roles are present in the relation.
+        assert (
+            self.harness.get_relation_data(self.rel_id, "application")["extra-user-roles"]
+            == "CREATEDB,CREATEROLE"
+        )
+
     def test_additional_fields_are_accessible(self):
         """Asserts additional fields are accessible using the charm library after being set."""
         # Simulate setting the additional fields.

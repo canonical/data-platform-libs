@@ -174,10 +174,14 @@ class DatabaseRequires(Object):
         if "credentials" in diff["added"]:
             self.on.database_created.emit(event.relation)
 
+        # Emit an endpoints changed event if the database
+        # added or changed this info in the relation databag.
         if "endpoints" in diff["added"] or "endpoints" in diff["changed"]:
             logger.info(f"endpoints changed on {datetime.now()}")
             self.on.endpoints_changed.emit(event.relation)
 
+        # Emit a read only endpoints changed event if the database
+        # added or changed this info in the relation databag.
         if "read-only-endpoints" in diff["added"] or "read-only-endpoints" in diff["changed"]:
             logger.info(f"read-only-endpoints changed on {datetime.now()}")
             self.on.read_only_endpoints_changed.emit(event.relation)

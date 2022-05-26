@@ -29,8 +29,14 @@ class DatabaseCharm(CharmBase):
             RELATION_NAME,
         )
         self.framework.observe(self.database.on.database_requested, self._on_database_requested)
+        self.framework.observe(
+            self.database.on.extra_user_roles_requested, self._on_extra_user_roles_requested
+        )
 
     def _on_database_requested(self, _) -> None:
+        pass
+
+    def _on_extra_user_roles_requested(self, _) -> None:
         pass
 
 
@@ -66,3 +72,17 @@ class TestDatabaseProvides(unittest.TestCase):
         assert json.loads(
             self.harness.get_relation_data(self.rel_id, "database")["credentials"]
         ) == {"username": "test-username", "password": "test-password"}
+
+    @patch.object(DatabaseCharm, "_on_extra_user_roles_requested")
+    def test_on_extra_user_roles_requested_is_called(self, _on_extra_user_roles_requested):
+        """Asserts that the correct hook is called when extra user roles are requested."""
+        # Simulate the request of extra user roles.
+        self.harness.update_relation_data(
+            self.rel_id, "application", {"extra-user-roles": "CREATEDB,CREATEROLE"}
+        )
+
+        # Assert the extra user roles are accessible in the providers charm library.
+        assert self.harness.charm.database.extra_user_roles == "CREATEDB,CREATEROLE"
+
+        # Assert the correct hook is called.
+        _on_extra_user_roles_requested.assert_called_once()

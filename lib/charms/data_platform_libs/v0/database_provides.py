@@ -100,9 +100,13 @@ class DatabaseProvides(Object):
         # Validate that the expected data has changed to emit the custom event.
         diff = self._diff(event)
 
+        # Emit a database requested event if the database name
+        # was added to the relation databag by the application.
         if "database" in diff["added"]:
             self.on.database_requested.emit(event.relation)
 
+        # Emit an extra user roles requested event if the application
+        # sent some roles or updated them through the relation databag.
         if "extra-user-roles" in diff["added"] or "extra-user-roles" in diff["changed"]:
             self.on.extra_user_roles_requested.emit(event.relation)
 
