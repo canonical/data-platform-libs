@@ -13,7 +13,7 @@ from charms.data_platform_libs.v0.database_provides import DatabaseProvides
 from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus
+from ops.model import ActiveStatus, MaintenanceStatus
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,9 @@ class DatabaseCharm(CharmBase):
         # Charm events defined in the database provides charm library.
         self.database = DatabaseProvides(self, "database")
         self.framework.observe(self.database.on.database_requested, self._on_database_requested)
+        self.framework.observe(
+            self.database.on.extra_user_roles_requested, self._on_extra_user_roles_requested
+        )
 
         # Stored state is used to track the password of the database superuser.
         self._stored.set_default(password=self._new_password())
@@ -60,10 +63,11 @@ class DatabaseCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     def _on_database_requested(self, _) -> None:
-        """Event triggered when ."""
+        """Event triggered when a new database is requested."""
+        self.unit.status = MaintenanceStatus("creating database")
+
         # Retrieve the database name using the charm library.
         database = self.database.database
-        logger.warning(f"_on_database_requested called: {database}")
 
         # Generate a username and a password for the application.
         username = f"juju_{database}"
@@ -91,8 +95,30 @@ class DatabaseCharm(CharmBase):
         self.database.set_tls("False")
         self.database.set_version(version)
 
+        self.unit.status = ActiveStatus()
+
         # TODO: call the change of the endpoints.
         # self.application.set_endpoints(event.relation, "database1:5432,database2:5432")
+
+    def _on_extra_user_roles_requested(self, _) -> None:
+        """Event triggered when extra roles are requested for the user that was created."""
+        self.unit.status = MaintenanceStatus("adding extra user roles")
+
+        # Retrieve the extra user roles using the charm library.
+        extra_user_roles = self.database.extra_user_roles
+
+        # Retrieve the already created username using the charm library.
+        username = self.database.username
+
+        # Connect to the database.
+        connection_string = f"dbname='postgres' user='postgres' host='localhost' password='{self._stored.password}' connect_timeout=10"
+        with psycopg2.connect(connection_string) as connection, connection.cursor() as cursor:
+            connection.autocommit = True
+
+            # Add the roles to the user.
+            cursor.execute(f'ALTER USER {username} {extra_user_roles.replace(",", " ")};')
+
+        self.unit.status = ActiveStatus()
 
     def _new_password(self) -> str:
         """Generate a random password string.
