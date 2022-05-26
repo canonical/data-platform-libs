@@ -32,7 +32,10 @@ class SampleCharm(CharmBase):
 
         # Charm events defined in the database provides charm library.
         self.provided_database = DatabaseProvides(self, "database")
-        self.framework.observe(self.provided_database.on.database_requested, self._on_database_requested)
+        self.framework.observe(
+            self.provided_database.on.database_requested,
+            self._on_database_requested,
+        )
 
         # Database generic helper
         self.database = DatabaseHelper()

@@ -205,7 +205,8 @@ class DatabaseRequires(Object):
     def uris(self) -> str:
         """Returns the connection URIs.
 
-        MongoDB, Redis, OpenSearch and Kafka only."""
+        MongoDB, Redis, OpenSearch and Kafka only.
+        """
         return self._get_relation_data("uris")
 
     @property
@@ -218,8 +219,7 @@ class DatabaseRequires(Object):
 
     @property
     def version(self) -> str:
-        """Returns the version of the database as informed by the database
-        daemon."""
+        """Returns the version of the database as informed by the database daemon."""
         return self._get_relation_data("version")
 
     def _on_relation_changed_event(self, event: RelationChangedEvent):
