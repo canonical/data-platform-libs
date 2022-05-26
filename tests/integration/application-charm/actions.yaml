@@ -9,3 +9,9 @@ get-password:
   description: Get the user's password.
 get-version:
   description: Get database version.
+request-extra-user-roles:
+  description: Request extra user roles from the database (useful for proxy applications).
+  params:
+    roles:
+      type: string
+      description: Comma separated list of roles.

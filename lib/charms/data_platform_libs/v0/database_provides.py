@@ -29,6 +29,12 @@ class DatabaseRequestedEvent(RelationEvent):
     pass
 
 
+class ExtraUserRolesRequestedEvent(RelationEvent):
+    """Event emitted when extra roles are requested for user that was created."""
+
+    pass
+
+
 class DatabaseEvents(CharmEvents):
     """Database events.
 
@@ -36,6 +42,7 @@ class DatabaseEvents(CharmEvents):
     """
 
     database_requested = EventSource(DatabaseRequestedEvent)
+    extra_user_roles_requested = EventSource(ExtraUserRolesRequestedEvent)
 
 
 class DatabaseProvides(Object):
@@ -96,6 +103,9 @@ class DatabaseProvides(Object):
         if "database" in diff["added"]:
             self.on.database_requested.emit(event.relation)
 
+        if "extra-user-roles" in diff["added"] or "extra-user-roles" in diff["changed"]:
+            self.on.extra_user_roles_requested.emit(event.relation)
+
     def _get_relation_data(self, key: str) -> str:
         """Retrieves data from relation.
 
@@ -112,6 +122,21 @@ class DatabaseProvides(Object):
     def database(self) -> str:
         """Returns the database that was requested."""
         return self._get_relation_data("database")
+
+    @property
+    def extra_user_roles(self) -> str:
+        """Returns the extra user roles that were requested."""
+        return self._get_relation_data("extra-user-roles")
+
+    @property
+    def username(self) -> str:
+        """Returns the username that was created."""
+        # Retrieve the credentials key from the provides side databag
+        # as it was set on this side.
+        credentials = self.relation.data[self.charm.model.app].get("credentials")
+        if credentials is None:
+            return None
+        return json.loads(credentials)["username"]
 
     def set_credentials(self, username: str, password: str) -> None:
         """Set database primary connections.
