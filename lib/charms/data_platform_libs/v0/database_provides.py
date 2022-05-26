@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Relation provider side abstraction for database relation data manipulation
-and custom events related to it.
+"""Relation provider side abstraction for database relation.
 
 This library is mostly an uniform interface to a selection of common databases
 metadata, with added custom events that add convenience to database management,
@@ -32,7 +31,8 @@ class SampleCharm(CharmBase):
 
         # Charm events defined in the database provides charm library.
         self.provided_database = DatabaseProvides(self, "database")
-        self.framework.observe(self.provided_database.on.database_requested, self._on_database_requested)
+        self.framework.observe(self.provided_database.on.database_requested,
+            self._on_database_requested)
 
         # Database generic helper
         self.database = DatabaseHelper()

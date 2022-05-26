@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Relation requirer side abstraction for database relation data manipulation
-and custom events related to it.
+"""Relation requirer side abstraction for database relation.
 
 This library is mostly an uniform interface to a selection of common databases
 metadata, with added custom events that add convenience to database management,
@@ -205,7 +204,8 @@ class DatabaseRequires(Object):
     def uris(self) -> str:
         """Returns the connection URIs.
 
-        MongoDB, Redis, OpenSearch and Kafka only."""
+        MongoDB, Redis, OpenSearch and Kafka only.
+        """
         return self._get_relation_data("uris")
 
     @property
@@ -218,8 +218,10 @@ class DatabaseRequires(Object):
 
     @property
     def version(self) -> str:
-        """Returns the version of the database as informed by the database
-        daemon."""
+        """Returns the version of the database.
+
+        Version as informed by the database daemon.
+        """
         return self._get_relation_data("version")
 
     def _on_relation_changed_event(self, event: RelationChangedEvent):
