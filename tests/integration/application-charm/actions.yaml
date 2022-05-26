@@ -1,0 +1,19 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+get-endpoints:
+  description: Get the database endpoints list.
+get-database:
+  description: Get the database name.
+get-username:
+  description: Get the username needed to connect to the database.
+get-password:
+  description: Get the user's password.
+get-version:
+  description: Get database version.
+request-extra-user-roles:
+  description: Request extra user roles from the database (useful for proxy applications).
+  params:
+    roles:
+      type: string
+      description: Comma separated list of roles.
