@@ -1,8 +1,58 @@
-#!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
-# See LICENSE file for licensing details.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-"""TODO: Add a proper docstring here."""
+"""Relation requirer side abstraction for database relation data manipulation
+and custom events related to it.
+
+This library is mostly an uniform interface to a selection of common databases
+metadata, with added custom events that add convenience to database management,
+and methods to consume the application related data.
+
+Following an example of using the DatabaseCreatedEvent, in the context of the
+application charm code:
+
+```python
+
+from charms.data_platform_libs.v0.database_requires import DatabaseRequires
+
+class ApplicationCharm(CharmBase):
+    # Application charm that connects to database charms.
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        # Charm events defined in the database requires charm library.
+        self.database = DatabaseRequires(self, "database")
+        self.framework.observe(self.database.on.database_created, self._on_database_created)
+
+    def _on_database_created(self, _) -> None:
+        # Handle the created database
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            self.database.username,
+            self.database.password,
+            self.database.endpoints,
+        )
+
+        # Start application with rendered configuration
+        self._start_application(config_file)
+
+        # Set active status
+        self.unit.status = ActiveStatus("received database credentials")
+```
+"""
 
 import json
 import logging
@@ -110,7 +160,7 @@ class DatabaseRequires(Object):
             key: key to retrieve the data from the relation.
 
         Returns:
-            value stored in the relation data bag for
+            a string value stored in the relation data bag for
                 the specified key.
         """
         return self.relation.data[self.relation.app].get(key, None)
@@ -122,7 +172,7 @@ class DatabaseRequires(Object):
 
     @property
     def password(self) -> str:
-        """Returns the password of the created user."""
+        """Returns the password for the created user."""
         credentials = self._get_relation_data("credentials")
         if credentials is None:
             return None
@@ -135,7 +185,10 @@ class DatabaseRequires(Object):
 
     @property
     def replset(self) -> str:
-        """Returns the replicaset name (MongoDB only)."""
+        """Returns the replicaset name.
+
+        MongoDB only.
+        """
         return self._get_relation_data("replset")
 
     @property
@@ -150,12 +203,14 @@ class DatabaseRequires(Object):
 
     @property
     def uris(self) -> str:
-        """Returns the connection URIs (MongoDB, Redis, OpenSearch and Kafka only)."""
+        """Returns the connection URIs.
+
+        MongoDB, Redis, OpenSearch and Kafka only."""
         return self._get_relation_data("uris")
 
     @property
     def username(self) -> str:
-        """Returns the username that was created."""
+        """Returns the created username."""
         credentials = self._get_relation_data("credentials")
         if credentials is None:
             return None
@@ -163,7 +218,8 @@ class DatabaseRequires(Object):
 
     @property
     def version(self) -> str:
-        """Returns the version of the database."""
+        """Returns the version of the database as informed by the database
+        daemon."""
         return self._get_relation_data("version")
 
     def _on_relation_changed_event(self, event: RelationChangedEvent):
@@ -191,7 +247,7 @@ class DatabaseRequires(Object):
         self._update_relation_data("extra-user-roles", extra_user_roles)
 
     def _update_relation_data(self, key: str, value: str) -> None:
-        """Set PostgreSQL primary connection string.
+        """Set value for key in the application relation databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.

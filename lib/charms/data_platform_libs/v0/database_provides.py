@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Abstractions for database metadata manipulation and custom
-events related to this metadata.
+"""Relation provider side abstraction for database relation data manipulation
+and custom events related to it.
 
 This library is mostly an uniform interface to a selection of common databases
-metadata, with tailored events that represent actionable database events, and
-methods to set the application related data.
+metadata, with added custom events that add convenience to database management,
+and methods to set the application related data.
 
-Following an example of using the DatabaseRequestedEvent, within a charm code:
+Following an example of using the DatabaseRequestedEvent, in the context of the
+database charm code:
 
-```python from charms.data_platform_libs.v0.database_provides import
-DatabaseProvides
+```python
+from charms.data_platform_libs.v0.database_provides import DatabaseProvides
 
 class SampleCharm(CharmBase):
 
@@ -30,28 +31,27 @@ class SampleCharm(CharmBase):
         super().__init__(*args)
 
         # Charm events defined in the database provides charm library.
-        self.provides = DatabaseProvides(self, "database")
-        self.framework.observe(self.provides.on.database_requested,
-        self._on_database_requested)
+        self.provided_database = DatabaseProvides(self, "database")
+        self.framework.observe(self.provided_database.on.database_requested, self._on_database_requested)
 
-        # Database generic helper self.database = DatabaseHelper()
+        # Database generic helper
+        self.database = DatabaseHelper()
 
     def _on_database_requested(self, _) -> None:
         # Handle the event triggered by a new database requested in the relation
 
-        # Retrieve the database name using the charm library. database =
-        self.provides.database
+        # Retrieve the database name using the charm library.
+        db_name = self.provided_database.database
 
-        # generate a new user credential username =
-        self.database.generate_user() password =
-        self.database.generate_password()
+        # generate a new user credential
+        username = self.database.generate_user()
+        password = self.database.generate_password()
 
         # set the credentials for the relation
-        self.provides.set_credentials(username, password)
+        self.provided_database.set_credentials(username, password)
 
-        # set other variables for the relation self.provides.set_tls("False")
+        # set other variables for the relation self.provided_database.set_tls("False")
 ```
-
 """
 
 import json
