@@ -56,6 +56,7 @@ class ApplicationCharm(CharmBase):
 import json
 import logging
 from datetime import datetime
+from typing import Optional
 
 from ops.charm import CharmEvents, RelationChangedEvent, RelationEvent
 from ops.framework import EventSource, Object
@@ -148,7 +149,7 @@ class DatabaseRequires(Object):
             "deleted": deleted,
         }
 
-    def _get_relation_data(self, key: str) -> str:
+    def _get_relation_data(self, key: str) -> Optional[str]:
         """Retrieves data from relation.
 
         Args:
@@ -161,12 +162,12 @@ class DatabaseRequires(Object):
         return self.relation.data[self.relation.app].get(key, None)
 
     @property
-    def endpoints(self) -> str:
+    def endpoints(self) -> Optional[str]:
         """Returns a comma separated list of read/write endpoints."""
         return self._get_relation_data("endpoints")
 
     @property
-    def password(self) -> str:
+    def password(self) -> Optional[str]:
         """Returns the password for the created user."""
         credentials = self._get_relation_data("credentials")
         if credentials is None:
@@ -174,12 +175,12 @@ class DatabaseRequires(Object):
         return json.loads(credentials)["password"]
 
     @property
-    def read_only_endpoints(self) -> str:
+    def read_only_endpoints(self) -> Optional[str]:
         """Returns a comma separated list of read only endpoints."""
         return self._get_relation_data("read-only-endpoints")
 
     @property
-    def replset(self) -> str:
+    def replset(self) -> Optional[str]:
         """Returns the replicaset name.
 
         MongoDB only.
@@ -187,17 +188,17 @@ class DatabaseRequires(Object):
         return self._get_relation_data("replset")
 
     @property
-    def tls(self) -> str:
+    def tls(self) -> Optional[str]:
         """Returns whether TLS is configured."""
         return self._get_relation_data("tls")
 
     @property
-    def tls_ca(self) -> str:
+    def tls_ca(self) -> Optional[str]:
         """Returns TLS CA."""
         return self._get_relation_data("tls-ca")
 
     @property
-    def uris(self) -> str:
+    def uris(self) -> Optional[str]:
         """Returns the connection URIs.
 
         MongoDB, Redis, OpenSearch and Kafka only.
@@ -205,7 +206,7 @@ class DatabaseRequires(Object):
         return self._get_relation_data("uris")
 
     @property
-    def username(self) -> str:
+    def username(self) -> Optional[str]:
         """Returns the created username."""
         credentials = self._get_relation_data("credentials")
         if credentials is None:
@@ -213,14 +214,14 @@ class DatabaseRequires(Object):
         return json.loads(credentials)["username"]
 
     @property
-    def version(self) -> str:
+    def version(self) -> Optional[str]:
         """Returns the version of the database.
 
         Version as informed by the database daemon.
         """
         return self._get_relation_data("version")
 
-    def _on_relation_changed_event(self, event: RelationChangedEvent):
+    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         diff = self._diff(event)
 
         # Check if the database is created
