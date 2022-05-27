@@ -32,7 +32,7 @@ class ApplicationCharm(CharmBase):
         super().__init__(*args)
 
         # Charm events defined in the database requires charm library.
-        self.database = DatabaseRequires(self, "database")
+        self.database = DatabaseRequires(self, relation_name="database")
         self.framework.observe(self.database.on.database_created, self._on_database_created)
 
     def _on_database_created(self, _) -> None:
