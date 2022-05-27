@@ -4,7 +4,7 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 
-from charms.data_platform_libs.v0.database_requires import DatabaseRequires
+from charms.data_platform_libs.v0.database_requires import DatabaseRequires, Diff
 from ops.charm import CharmBase
 from ops.testing import Harness
 
@@ -68,22 +68,22 @@ class TestDatabaseRequires(unittest.TestCase):
 
         # Test with new data added to the relation databag.
         result = self.harness.charm.database._diff(mock_event)
-        assert result == {"added": {"username", "password"}, "changed": set(), "deleted": set()}
+        assert result == Diff({"username", "password"}, set(), set())
 
         # Test with the same data.
         result = self.harness.charm.database._diff(mock_event)
-        assert result == {"added": set(), "changed": set(), "deleted": set()}
+        assert result == Diff(set(), set(), set())
 
         # Test with changed data.
         data["username"] = "test-username-1"
         result = self.harness.charm.database._diff(mock_event)
-        assert result == {"added": set(), "changed": {"username"}, "deleted": set()}
+        assert result == Diff(set(), {"username"}, set())
 
         # Test with deleted data.
         del data["username"]
         del data["password"]
         result = self.harness.charm.database._diff(mock_event)
-        assert result == {"added": set(), "changed": set(), "deleted": {"username", "password"}}
+        assert result == Diff(set(), set(), {"username", "password"})
 
     def test_set_database(self):
         """Asserts that the database name is in the relation databag when it's requested."""

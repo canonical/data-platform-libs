@@ -55,6 +55,7 @@ class ApplicationCharm(CharmBase):
 
 import json
 import logging
+from collections import namedtuple
 from datetime import datetime
 from typing import Optional
 
@@ -97,6 +98,15 @@ class DatabaseEvents(CharmEvents):
     read_only_endpoints_changed = EventSource(DatabaseReadOnlyEndpointsChangedEvent)
 
 
+Diff = namedtuple("Diff", "added changed deleted")
+Diff.__doc__ = """
+A tuple for storing the diff between two data mappings.
+
+added - keys that were added
+changed - keys that still exist but have new values
+deleted - key that were deleted"""
+
+
 class DatabaseRequires(Object):
     """Requires-side of the database relation."""
 
@@ -111,14 +121,14 @@ class DatabaseRequires(Object):
             self.charm.on[relation_name].relation_changed, self._on_relation_changed_event
         )
 
-    def _diff(self, event: RelationChangedEvent) -> dict:
+    def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
 
         Args:
             event: relation changed event.
 
         Returns:
-            a dict containing the added, deleted and changed
+            a Diff instance containing the added, deleted and changed
                 keys from the event relation databag.
         """
         # Retrieve the old data from the data key in the application relation databag.
@@ -143,11 +153,7 @@ class DatabaseRequires(Object):
         self._update_relation_data("data", json.dumps(data))
 
         # Return the diff with all possible changes.
-        return {
-            "added": added,
-            "changed": changed,
-            "deleted": deleted,
-        }
+        return Diff(added, changed, deleted)
 
     def _get_relation_data(self, key: str) -> Optional[str]:
         """Retrieves data from relation.
@@ -222,22 +228,24 @@ class DatabaseRequires(Object):
         return self._get_relation_data("version")
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
+        """Event emitted when the database relation has changed."""
+        # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
         # Check if the database is created
         # (the database charm shared the credentials).
-        if "credentials" in diff["added"]:
+        if "credentials" in diff.added:
             self.on.database_created.emit(event.relation)
 
         # Emit an endpoints changed event if the database
         # added or changed this info in the relation databag.
-        if "endpoints" in diff["added"] or "endpoints" in diff["changed"]:
+        if "endpoints" in diff.added or "endpoints" in diff.changed:
             logger.info(f"endpoints changed on {datetime.now()}")
             self.on.endpoints_changed.emit(event.relation)
 
         # Emit a read only endpoints changed event if the database
         # added or changed this info in the relation databag.
-        if "read-only-endpoints" in diff["added"] or "read-only-endpoints" in diff["changed"]:
+        if "read-only-endpoints" in diff.added or "read-only-endpoints" in diff.changed:
             logger.info(f"read-only-endpoints changed on {datetime.now()}")
             self.on.read_only_endpoints_changed.emit(event.relation)
 
