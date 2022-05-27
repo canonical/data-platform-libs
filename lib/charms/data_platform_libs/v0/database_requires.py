@@ -76,19 +76,13 @@ logger = logging.getLogger(__name__)
 class DatabaseCreatedEvent(RelationEvent):
     """Event emitted when a new database is created for use on this relation."""
 
-    pass
-
 
 class DatabaseEndpointsChangedEvent(RelationEvent):
     """Event emitted when the read/write endpoints are changed."""
 
-    pass
-
 
 class DatabaseReadOnlyEndpointsChangedEvent(RelationEvent):
     """Event emitted when the read only endpoints are changed."""
-
-    pass
 
 
 class DatabaseEvents(CharmEvents):
