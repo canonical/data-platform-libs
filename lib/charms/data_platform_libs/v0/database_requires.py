@@ -14,7 +14,7 @@
 
 """Relation requirer side abstraction for database relation.
 
-This library is mostly an uniform interface to a selection of common databases
+This library is a uniform interface to a selection of common databases
 metadata, with added custom events that add convenience to database management,
 and methods to consume the application related data.
 
@@ -32,7 +32,7 @@ class ApplicationCharm(CharmBase):
         super().__init__(*args)
 
         # Charm events defined in the database requires charm library.
-        self.database = DatabaseRequires(self, relation_name="database")
+        self.database = DatabaseRequires(self, relation_name="database", database_name="database")
         self.framework.observe(self.database.on.database_created, self._on_database_created)
 
     def _on_database_created(self, _) -> None:
@@ -112,11 +112,18 @@ class DatabaseRequires(Object):
 
     on = DatabaseEvents()
 
-    def __init__(self, charm, relation_name: str = "database"):
+    def __init__(
+        self, charm, relation_name: str, database_name: str, extra_user_roles: str = None
+    ):
         """Manager of database client relations."""
         super().__init__(charm, relation_name)
         self.charm = charm
+        self.database = database_name
+        self.extra_user_roles = extra_user_roles
         self.relation = self.charm.model.get_relation(relation_name)
+        self.framework.observe(
+            self.charm.on[relation_name].relation_joined, self._on_relation_joined_event
+        )
         self.framework.observe(
             self.charm.on[relation_name].relation_changed, self._on_relation_changed_event
         )
@@ -150,7 +157,7 @@ class DatabaseRequires(Object):
         # happens in the charm before the diff is completely checked (DPE-412).
         # Convert the new_data to a serializable format and save it for a next diff check.
         data = {key: value for key, value in new_data.items() if key != "data"}
-        self._update_relation_data("data", json.dumps(data))
+        self._update_relation_data({"data": json.dumps(data)})
 
         # Return the diff with all possible changes.
         return Diff(added, changed, deleted)
@@ -175,10 +182,7 @@ class DatabaseRequires(Object):
     @property
     def password(self) -> Optional[str]:
         """Returns the password for the created user."""
-        credentials = self._get_relation_data("credentials")
-        if credentials is None:
-            return None
-        return json.loads(credentials)["password"]
+        return self._get_relation_data("password")
 
     @property
     def read_only_endpoints(self) -> Optional[str]:
@@ -214,10 +218,7 @@ class DatabaseRequires(Object):
     @property
     def username(self) -> Optional[str]:
         """Returns the created username."""
-        credentials = self._get_relation_data("credentials")
-        if credentials is None:
-            return None
-        return json.loads(credentials)["username"]
+        return self._get_relation_data("username")
 
     @property
     def version(self) -> Optional[str]:
@@ -227,6 +228,20 @@ class DatabaseRequires(Object):
         """
         return self._get_relation_data("version")
 
+    def _on_relation_joined_event(self, _) -> None:
+        """Event emitted when the application joins the database relation."""
+        # Sets both database and extra user roles in the relation
+        # if the roles are provided. Otherwise, sets only the database.
+        if self.extra_user_roles:
+            self._update_relation_data(
+                {
+                    "database": self.database,
+                    "extra-user-roles": self.extra_user_roles,
+                }
+            )
+        else:
+            self._update_relation_data({"database": self.database})
+
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
         # Check which data has changed to emit customs events.
@@ -234,7 +249,7 @@ class DatabaseRequires(Object):
 
         # Check if the database is created
         # (the database charm shared the credentials).
-        if "credentials" in diff.added:
+        if "username" in diff.added and "password" in diff.added:
             self.on.database_created.emit(event.relation)
 
         # Emit an endpoints changed event if the database
@@ -249,22 +264,15 @@ class DatabaseRequires(Object):
             logger.info(f"read-only-endpoints changed on {datetime.now()}")
             self.on.read_only_endpoints_changed.emit(event.relation)
 
-    def set_database(self, database: str) -> None:
-        """Set database name."""
-        self._update_relation_data("database", database)
-
-    def set_extra_user_roles(self, extra_user_roles: str) -> None:
-        """Request extra user roles."""
-        self._update_relation_data("extra-user-roles", extra_user_roles)
-
-    def _update_relation_data(self, key: str, value: str) -> None:
-        """Set value for key in the application relation databag.
+    def _update_relation_data(self, data: dict) -> None:
+        """Updates a set of key-value pairs in the relation.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
 
         Args:
-            key: key to write the date in the relation.
-            value: value of the data to write in the relation.
+            data: dict containing the key-value pairs
+                that should be updated in the relation.
         """
-        self.relation.data[self.charm.model.app][key] = value
+        if self.charm.unit.is_leader():
+            self.relation.data[self.charm.model.app].update(data)

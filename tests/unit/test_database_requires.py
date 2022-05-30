@@ -1,6 +1,5 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-import json
 import unittest
 from unittest.mock import Mock, patch
 
@@ -9,6 +8,7 @@ from ops.charm import CharmBase
 from ops.testing import Harness
 
 DATABASE = "data_platform"
+EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 RELATION_INTERFACE = "database-client"
 RELATION_NAME = "database"
 METADATA = f"""
@@ -27,6 +27,8 @@ class ApplicationCharm(CharmBase):
         self.database = DatabaseRequires(
             self,
             RELATION_NAME,
+            DATABASE,
+            EXTRA_USER_ROLES,
         )
         self.framework.observe(self.database.on.database_created, self._on_database_created)
         self.framework.observe(self.database.on.endpoints_changed, self._on_endpoints_changed)
@@ -85,26 +87,12 @@ class TestDatabaseRequires(unittest.TestCase):
         result = self.harness.charm.database._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
 
-    def test_set_database(self):
-        """Asserts that the database name is in the relation databag when it's requested."""
-        # Set the database name in the relation using the requires charm library.
-        self.harness.charm.database.set_database(DATABASE)
-
-        # Check that the database name is present in the relation.
-        assert self.harness.get_relation_data(self.rel_id, "application")["database"] == DATABASE
-
     @patch.object(ApplicationCharm, "_on_database_created")
     def test_on_database_created(self, _on_database_created):
         """Asserts on_database_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created database.
         self.harness.update_relation_data(
-            self.rel_id,
-            "database",
-            {
-                "credentials": json.dumps(
-                    {"username": "test-username", "password": "test-password"}
-                )
-            },
+            self.rel_id, "database", {"username": "test-username", "password": "test-password"}
         )
 
         # Check that the username and the password are present in the relation
@@ -194,17 +182,6 @@ class TestDatabaseRequires(unittest.TestCase):
 
         # Assert the hook is called now.
         _on_read_only_endpoints_changed.assert_called_once()
-
-    def test_set_extra_user_roles(self):
-        """Asserts that the extra user roles are in the relation databag when they're requested."""
-        # Set the extra roles that the user need using the provides charm library.
-        self.harness.charm.database.set_extra_user_roles("CREATEDB,CREATEROLE")
-
-        # Check that the extra user roles are present in the relation.
-        assert (
-            self.harness.get_relation_data(self.rel_id, "application")["extra-user-roles"]
-            == "CREATEDB,CREATEROLE"
-        )
 
     def test_additional_fields_are_accessible(self):
         """Asserts additional fields are accessible using the charm library after being set."""
