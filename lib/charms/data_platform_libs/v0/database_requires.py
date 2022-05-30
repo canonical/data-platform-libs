@@ -244,6 +244,10 @@ class DatabaseRequires(Object):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
+        # Only the leader should handle this event.
+        if not self.charm.unit.is_leader():
+            return
+
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
