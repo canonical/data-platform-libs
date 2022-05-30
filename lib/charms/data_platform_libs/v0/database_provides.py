@@ -14,7 +14,7 @@
 
 """Relation provider side abstraction for database relation.
 
-This library is mostly an uniform interface to a selection of common databases
+This library is a uniform interface to a selection of common database
 metadata, with added custom events that add convenience to database management,
 and methods to set the application related data.
 
@@ -30,7 +30,7 @@ class SampleCharm(CharmBase):
         super().__init__(*args)
 
         # Charm events defined in the database provides charm library.
-        self.provided_database = DatabaseProvides(self, "database")
+        self.provided_database = DatabaseProvides(self, relation_name="database")
         self.framework.observe(self.provided_database.on.database_requested,
             self._on_database_requested)
 
@@ -56,6 +56,8 @@ class SampleCharm(CharmBase):
 
 import json
 import logging
+from collections import namedtuple
+from typing import Optional
 
 from ops.charm import CharmBase, CharmEvents, RelationChangedEvent, RelationEvent
 from ops.framework import EventSource, Object
@@ -76,14 +78,6 @@ logger = logging.getLogger(__name__)
 class DatabaseRequestedEvent(RelationEvent):
     """Event emitted when a new database is requested for use on this relation."""
 
-    pass
-
-
-class ExtraUserRolesRequestedEvent(RelationEvent):
-    """Event emitted when extra roles are requested for user that was created."""
-
-    pass
-
 
 class DatabaseEvents(CharmEvents):
     """Database events.
@@ -92,7 +86,15 @@ class DatabaseEvents(CharmEvents):
     """
 
     database_requested = EventSource(DatabaseRequestedEvent)
-    extra_user_roles_requested = EventSource(ExtraUserRolesRequestedEvent)
+
+
+Diff = namedtuple("Diff", "added changed deleted")
+Diff.__doc__ = """
+A tuple for storing the diff between two data mappings.
+
+added - keys that were added
+changed - keys that still exist but have new values
+deleted - key that were deleted"""
 
 
 class DatabaseProvides(Object):
@@ -100,23 +102,23 @@ class DatabaseProvides(Object):
 
     on = DatabaseEvents()
 
-    def __init__(self, charm: CharmBase, relation_name: str = "database") -> None:
+    def __init__(self, charm: CharmBase, relation_name: str) -> None:
         super().__init__(charm, relation_name)
         self.charm = charm
         self.relation = self.charm.model.get_relation(relation_name)
         self.framework.observe(
             charm.on[relation_name].relation_changed,
-            self._on_database_relation_changed,
+            self._on_relation_changed,
         )
 
-    def _diff(self, event: RelationChangedEvent) -> dict:
+    def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
 
         Args:
             event: relation changed event.
 
         Returns:
-            a dict containing the added, deleted and changed
+            a Diff instance containing the added, deleted and changed
                 keys from the event relation databag.
         """
         # Retrieve the old data from the data key in the application relation databag.
@@ -138,31 +140,26 @@ class DatabaseProvides(Object):
         # happens in the charm before the diff is completely checked (DPE-412).
         # Convert the new_data to a serializable format and save it for a next diff check.
         data = {key: value for key, value in new_data.items() if key != "data"}
-        self._update_relation_data("data", json.dumps(data))
+        self._update_relation_data({"data": json.dumps(data)})
 
         # Return the diff with all possible changes.
-        return {
-            "added": added,
-            "changed": changed,
-            "deleted": deleted,
-        }
+        return Diff(added, changed, deleted)
 
-    def _on_database_relation_changed(self, event: RelationChangedEvent) -> None:
+    def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
-        # Validate that the expected data has changed to emit the custom event.
+        # Only the leader should handle this event.
+        if not self.charm.unit.is_leader():
+            return
+
+        # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
-        # Emit a database requested event if the database name
-        # was added to the relation databag by the application.
-        if "database" in diff["added"]:
+        # Emit a database requested event if the setup key (database name and optional
+        # extra user roles) was added to the relation databag by the application.
+        if "database" in diff.added:
             self.on.database_requested.emit(event.relation)
 
-        # Emit an extra user roles requested event if the application
-        # sent some roles or updated them through the relation databag.
-        if "extra-user-roles" in diff["added"] or "extra-user-roles" in diff["changed"]:
-            self.on.extra_user_roles_requested.emit(event.relation)
-
-    def _get_relation_data(self, key: str) -> str:
+    def _get_relation_data(self, key: str) -> Optional[str]:
         """Retrieves data from relation.
 
         Args:
@@ -170,29 +167,26 @@ class DatabaseProvides(Object):
 
         Returns:
             value stored in the relation data bag for
-                the specified key.
+                the specified key or None if the key doesn't exist.
         """
-        return self.relation.data[self.relation.app].get(key, None)
+        return self.relation.data[self.relation.app].get(key)
 
     @property
-    def database(self) -> str:
+    def database(self) -> Optional[str]:
         """Returns the database that was requested."""
         return self._get_relation_data("database")
 
     @property
-    def extra_user_roles(self) -> str:
+    def extra_user_roles(self) -> Optional[str]:
         """Returns the extra user roles that were requested."""
         return self._get_relation_data("extra-user-roles")
 
     @property
-    def username(self) -> str:
+    def username(self) -> Optional[str]:
         """Returns the username that was created."""
         # Retrieve the credentials key from the provides side databag
         # as it was set on this side.
-        credentials = self.relation.data[self.charm.model.app].get("credentials")
-        if credentials is None:
-            return None
-        return json.loads(credentials)["username"]
+        return self.relation.data[self.charm.model.app].get("username")
 
     def set_credentials(self, username: str, password: str) -> None:
         """Set database primary connections.
@@ -205,13 +199,10 @@ class DatabaseProvides(Object):
             password: password of the created user.
         """
         self._update_relation_data(
-            "credentials",
-            json.dumps(
-                {
-                    "username": username,
-                    "password": password,
-                }
-            ),
+            {
+                "username": username,
+                "password": password,
+            }
         )
 
     def set_endpoints(self, connection_strings: str) -> None:
@@ -223,7 +214,7 @@ class DatabaseProvides(Object):
         Args:
             connection_strings: database hosts and ports comma separated list.
         """
-        self._update_relation_data("endpoints", connection_strings)
+        self._update_relation_data({"endpoints": connection_strings})
 
     def set_read_only_endpoints(self, connection_strings: str) -> None:
         """Set database replicas connection strings.
@@ -234,7 +225,7 @@ class DatabaseProvides(Object):
         Args:
             connection_strings: database hosts and ports comma separated list.
         """
-        self._update_relation_data("read-only-endpoints", connection_strings)
+        self._update_relation_data({"read-only-endpoints": connection_strings})
 
     def set_replset(self, replset: str) -> None:
         """Set replica set name in the application relation databag.
@@ -244,7 +235,7 @@ class DatabaseProvides(Object):
         Args:
             replset: replica set name.
         """
-        self._update_relation_data("replset", replset)
+        self._update_relation_data({"replset": replset})
 
     def set_tls(self, tls: str) -> None:
         """Set whether TLS is enabled.
@@ -252,7 +243,7 @@ class DatabaseProvides(Object):
         Args:
             tls: whether tls is enabled (True or False).
         """
-        self._update_relation_data("tls", tls)
+        self._update_relation_data({"tls": tls})
 
     def set_tls_ca(self, tls_ca: str) -> None:
         """Set the TLS CA in the application relation databag.
@@ -260,7 +251,7 @@ class DatabaseProvides(Object):
         Args:
             tls_ca: TLS certification authority.
         """
-        self._update_relation_data("tls_ca", tls_ca)
+        self._update_relation_data({"tls_ca": tls_ca})
 
     def set_uris(self, uris: str) -> None:
         """Set the database connection URIs in the application relation databag.
@@ -270,7 +261,7 @@ class DatabaseProvides(Object):
         Args:
             uris: connection URIs.
         """
-        self._update_relation_data("uris", uris)
+        self._update_relation_data({"uris": uris})
 
     def set_version(self, version: str) -> None:
         """Set the database version in the application relation databag.
@@ -278,16 +269,17 @@ class DatabaseProvides(Object):
         Args:
             version: database version.
         """
-        self._update_relation_data("version", version)
+        self._update_relation_data({"version": version})
 
-    def _update_relation_data(self, key: str, value: str) -> None:
-        """Set value for key in the application relation databag.
+    def _update_relation_data(self, data: dict) -> None:
+        """Updates a set of key-value pairs in the relation.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
 
         Args:
-            key: key to write the date in the relation.
-            value: value of the data to write in the relation.
+            data: dict containing the key-value pairs
+                that should be updated in the relation.
         """
-        self.relation.data[self.charm.model.app][key] = value
+        if self.charm.unit.is_leader():
+            self.relation.data[self.charm.model.app].update(data)

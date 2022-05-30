@@ -1,14 +1,14 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-import json
 import unittest
 from unittest.mock import Mock, patch
 
-from charms.data_platform_libs.v0.database_provides import DatabaseProvides
+from charms.data_platform_libs.v0.database_provides import DatabaseProvides, Diff
 from ops.charm import CharmBase
 from ops.testing import Harness
 
 DATABASE = "data_platform"
+EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 RELATION_INTERFACE = "database-client"
 RELATION_NAME = "database"
 METADATA = f"""
@@ -29,14 +29,8 @@ class DatabaseCharm(CharmBase):
             RELATION_NAME,
         )
         self.framework.observe(self.database.on.database_requested, self._on_database_requested)
-        self.framework.observe(
-            self.database.on.extra_user_roles_requested, self._on_extra_user_roles_requested
-        )
 
     def _on_database_requested(self, _) -> None:
-        pass
-
-    def _on_extra_user_roles_requested(self, _) -> None:
         pass
 
 
@@ -64,31 +58,36 @@ class TestDatabaseProvides(unittest.TestCase):
 
         # Test with new data added to the relation databag.
         result = self.harness.charm.database._diff(mock_event)
-        assert result == {"added": {"username", "password"}, "changed": set(), "deleted": set()}
+        assert result == Diff({"username", "password"}, set(), set())
 
         # Test with the same data.
         result = self.harness.charm.database._diff(mock_event)
-        assert result == {"added": set(), "changed": set(), "deleted": set()}
+        assert result == Diff(set(), set(), set())
 
         # Test with changed data.
         data["username"] = "test-username-1"
         result = self.harness.charm.database._diff(mock_event)
-        assert result == {"added": set(), "changed": {"username"}, "deleted": set()}
+        assert result == Diff(set(), {"username"}, set())
 
         # Test with deleted data.
         del data["username"]
         del data["password"]
         result = self.harness.charm.database._diff(mock_event)
-        assert result == {"added": set(), "changed": set(), "deleted": {"username", "password"}}
+        assert result == Diff(set(), set(), {"username", "password"})
 
     @patch.object(DatabaseCharm, "_on_database_requested")
     def test_on_database_requested(self, _on_database_requested):
         """Asserts that the correct hook is called when a new database is requested."""
-        # Simulate the request of a new database.
-        self.harness.update_relation_data(self.rel_id, "application", {"database": DATABASE})
+        # Simulate the request of a new database plus extra user roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {"database": DATABASE, "extra-user-roles": EXTRA_USER_ROLES},
+        )
 
         # Assert the database name is accessible in the providers charm library.
         assert self.harness.charm.database.database == DATABASE
+        assert self.harness.charm.database.extra_user_roles == EXTRA_USER_ROLES
 
         # Assert the correct hook is called.
         _on_database_requested.assert_called_once()
@@ -99,9 +98,11 @@ class TestDatabaseProvides(unittest.TestCase):
         self.harness.charm.database.set_credentials("test-username", "test-password")
 
         # Check that the database name is present in the relation.
-        assert json.loads(
-            self.harness.get_relation_data(self.rel_id, "database")["credentials"]
-        ) == {"username": "test-username", "password": "test-password"}
+        assert self.harness.get_relation_data(self.rel_id, "database") == {
+            "data": "{}",  # Data is the diff stored between multiple relation changed events.
+            "username": "test-username",
+            "password": "test-password",
+        }
 
     def test_set_endpoints(self):
         """Asserts that the endpoints are in the relation databag when they change."""
@@ -143,22 +144,3 @@ class TestDatabaseProvides(unittest.TestCase):
             "uris": "host1:port,host2:port",
             "version": "1.0",
         }
-
-    @patch.object(DatabaseCharm, "_on_extra_user_roles_requested")
-    def test_on_extra_user_roles_requested(self, _on_extra_user_roles_requested):
-        """Asserts that the correct hook is called when extra user roles are requested."""
-        # Set the username in the relation databag (like after a database is created).
-        self.harness.update_relation_data(
-            self.rel_id, "database", {"credentials": json.dumps({"username": "test-user"})}
-        )
-        # Simulate the request of extra user roles.
-        self.harness.update_relation_data(
-            self.rel_id, "application", {"extra-user-roles": "CREATEDB,CREATEROLE"}
-        )
-
-        # Assert the extra user roles (and the user) are accessible in the providers charm library.
-        assert self.harness.charm.database.extra_user_roles == "CREATEDB,CREATEROLE"
-        assert self.harness.charm.database.username == "test-user"
-
-        # Assert the correct hook is called.
-        _on_extra_user_roles_requested.assert_called_once()
