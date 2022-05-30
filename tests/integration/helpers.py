@@ -1,44 +1,52 @@
 #!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
+from typing import Optional
 
+import yaml
 from pytest_operator.plugin import OpsTest
 
 
 async def build_connection_string(ops_test: OpsTest, application_name: str) -> str:
-    """Get data using an action.
+    """Build a PostgreSQL connection string.
 
     Args:
         ops_test: The ops test framework instance
         application_name: The name of the application
-        host: connection data (username, password, database, etc.)
 
     Returns:
-        the connection data that was requested
+        a PostgreSQL connection string
     """
     # Get the connection data exposed to the application through the relation.
-    database = await get_data_from_application(ops_test, application_name, "database")
-    username = await get_data_from_application(ops_test, application_name, "username")
-    endpoints = await get_data_from_application(ops_test, application_name, "endpoints")
+    username = await get_application_relation_data(ops_test, application_name, "username")
+    password = await get_application_relation_data(ops_test, application_name, "password")
+    endpoints = await get_application_relation_data(ops_test, application_name, "endpoints")
     host = endpoints.split(",")[0].split(":")[0]
-    password = await get_data_from_application(ops_test, application_name, "password")
 
     # Build the complete connection string to connect to the database.
-    return f"dbname='{database}' user='{username}' host='{host}' password='{password}' connect_timeout=10"
+    return f"dbname='data_platform' user='{username}' host='{host}' password='{password}' connect_timeout=10"
 
 
-async def get_data_from_application(ops_test: OpsTest, application_name: str, data: str) -> str:
-    """Get data from the application using an action.
+async def get_application_relation_data(
+    ops_test: OpsTest, application_name: str, key: str
+) -> Optional[str]:
+    """Get relation data for an application.
 
     Args:
         ops_test: The ops test framework instance
         application_name: The name of the application
-        data: data to be retrieved (it has the same name of an action)
+        key: key of data to be retrieved
 
     Returns:
-        the connection data that was requested
+        the that that was requested or None
+            if no data in the relation
+
+    Raises:
+        ValueError if it's not possible to get application unit data.
     """
-    unit = ops_test.model.units.get(f"{application_name}/0")
-    action = await unit.run_action(f"get-{data}")
-    result = await action.wait()
-    return result.results[data]
+    unit_name = f"{application_name}/0"
+    raw_data = (await ops_test.juju("show-unit", unit_name))[1]
+    if not raw_data:
+        raise ValueError(f"no unit info could be grabbed for {unit_name}")
+    data = yaml.safe_load(raw_data)
+    return data[unit_name]["relation-info"][0]["application-data"].get(key)

@@ -2,9 +2,10 @@
 # See LICENSE file for licensing details.
 name: application
 description: |
-  Data platform libs application.
+  Data platform libs application charm used in integration tests.
 summary: |
-  Data platform libs application.
+  Data platform libs application meant to be used
+  only for testing of the libs in this repository.
 
 requires:
   database:

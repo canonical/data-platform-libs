@@ -2,7 +2,11 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Database charm that accepts connections from application charms."""
+"""Database charm that accepts connections from application charms.
+
+This charm is meant to be used only for testing
+of the libraries in this repository.
+"""
 
 import logging
 import secrets
@@ -30,11 +34,8 @@ class DatabaseCharm(CharmBase):
         self.framework.observe(self.on.database_pebble_ready, self._on_database_pebble_ready)
 
         # Charm events defined in the database provides charm library.
-        self.database = DatabaseProvides(self, "database")
+        self.database = DatabaseProvides(self, relation_name="database")
         self.framework.observe(self.database.on.database_requested, self._on_database_requested)
-        self.framework.observe(
-            self.database.on.extra_user_roles_requested, self._on_extra_user_roles_requested
-        )
 
         # Stored state is used to track the password of the database superuser.
         self._stored.set_default(password=self._new_password())
@@ -66,8 +67,9 @@ class DatabaseCharm(CharmBase):
         """Event triggered when a new database is requested."""
         self.unit.status = MaintenanceStatus("creating database")
 
-        # Retrieve the database name using the charm library.
+        # Retrieve the database name and extra user roles using the charm library.
         database = self.database.database
+        extra_user_roles = self.database.extra_user_roles
 
         # Generate a username and a password for the application.
         username = f"juju_{database}"
@@ -82,8 +84,11 @@ class DatabaseCharm(CharmBase):
         cursor.execute(f"CREATE DATABASE {database};")
         cursor.execute(f"CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';")
         cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {database} TO {username};")
-        cursor.execute("SELECT version();")
+        # Add the roles to the user.
+        if extra_user_roles:
+            cursor.execute(f'ALTER USER {username} {extra_user_roles.replace(",", " ")};')
         # Get the database version.
+        cursor.execute("SELECT version();")
         version = cursor.fetchone()[0]
         cursor.close()
         connection.close()
@@ -99,26 +104,6 @@ class DatabaseCharm(CharmBase):
         # Share additional information with the application.
         self.database.set_tls("False")
         self.database.set_version(version)
-
-        self.unit.status = ActiveStatus()
-
-    def _on_extra_user_roles_requested(self, _) -> None:
-        """Event triggered when extra roles are requested for the user that was created."""
-        self.unit.status = MaintenanceStatus("adding extra user roles")
-
-        # Retrieve the extra user roles using the charm library.
-        extra_user_roles = self.database.extra_user_roles
-
-        # Retrieve the already created username using the charm library.
-        username = self.database.username
-
-        # Connect to the database.
-        connection_string = f"dbname='postgres' user='postgres' host='localhost' password='{self._stored.password}' connect_timeout=10"
-        with psycopg2.connect(connection_string) as connection, connection.cursor() as cursor:
-            connection.autocommit = True
-
-            # Add the roles to the user.
-            cursor.execute(f'ALTER USER {username} {extra_user_roles.replace(",", " ")};')
 
         self.unit.status = ActiveStatus()
 
