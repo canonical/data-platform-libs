@@ -14,7 +14,7 @@
 
 """Relation requirer side abstraction for database relation.
 
-This library is a uniform interface to a selection of common databases
+This library is a uniform interface to a selection of common database
 metadata, with added custom events that add convenience to database management,
 and methods to consume the application related data.
 
@@ -170,9 +170,9 @@ class DatabaseRequires(Object):
 
         Returns:
             a string value stored in the relation data bag for
-                the specified key.
+                the specified key or None if the key doesn't exist.
         """
-        return self.relation.data[self.relation.app].get(key, None)
+        return self.relation.data[self.relation.app].get(key)
 
     @property
     def endpoints(self) -> Optional[str]:

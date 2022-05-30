@@ -11,15 +11,16 @@ for hosting libraries only.
 
 ## Usage
 
-contains information on usage and code examples. They are meant to be complete
-as standalone libraries, and should be managed as [charm libraries], with
-installation via `fetch-lib` ([ref.
-link](https://discourse.charmhub.io/t/how-to-find-and-use-a-charm-library/5780)),
-after which they may be imported and used as normal charms.
+This charm is not intended to be deployed. It is a container for standalone charm libraries, which can be managed using `charmcraft fetch-lib` ([ref.
+link](https://discourse.charmhub.io/t/how-to-find-and-use-a-charm-library/5780)), after which they may be imported and used as normal charms. For example: 
 
-- database_provides - a library that offers custom events and methods for
+`charmcraft fetch-lib charms.data_platform_libs.v0.database_requires`
+
+Following are the libraries available in this repository: 
+
+- `database_provides` - a library that offers custom events and methods for
   provider-side of the relation (e.g. mysql)
-- database_requires - a library that offers custom events and methods for
+- `database_requires` - a library that offers custom events and methods for
   requirer-side of the relation (e.g. wordpress)
 
 ## Contributing
