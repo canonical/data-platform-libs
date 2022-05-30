@@ -28,11 +28,13 @@ DATABASE_APP_METADATA = yaml.safe_load(
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(ops_test: OpsTest, application_charm, database_charm):
     """Deploy both charms (application and database) to use in the tests."""
-    # Deploy both charms.
+    # Deploy both charms (2 units for each application to test that later they correctly
+    # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
             application_charm,
             application_name=APPLICATION_APP_NAME,
+            num_units=2,
         ),
         ops_test.model.deploy(
             database_charm,
@@ -42,6 +44,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
                 ]
             },
             application_name=DATABASE_APP_NAME,
+            num_units=2,
         ),
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active", wait_for_units=1)
