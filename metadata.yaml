@@ -1,0 +1,7 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: data-platform-libs
+description: |
+  Data platform libs.
+summary: |
+  Data platform libs.

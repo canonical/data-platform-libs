@@ -1,0 +1,9 @@
+venv/
+build/
+*.charm
+.tox/
+.coverage
+__pycache__/
+*.py[cod]
+tests/integration/application-charm/lib/charms/data_platform_libs/v0/database_requires.py
+tests/integration/database-charm/lib/charms/data_platform_libs/v0/database_provides.py
