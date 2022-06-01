@@ -23,6 +23,8 @@ Following are the libraries available in this repository:
 - `database_requires` - a library that offers custom events and methods for
   requirer-side of the relation (e.g. wordpress)
 
+The charms from the `tests/integration` folder aren't meant to be used for anything beyond testing and example code. They serve as examples of how to use the charm libraries.
+
 ## Contributing
 
 Please see the [Juju SDK docs](https://juju.is/docs/sdk) for guidelines on enhancements to this
