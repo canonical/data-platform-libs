@@ -98,3 +98,32 @@ async def test_user_with_extra_roles(ops_test: OpsTest):
 
     cursor.close()
     connection.close()
+
+
+async def test_two_applications_doesnt_share_the_same_relation_data(
+    ops_test: OpsTest, application_charm
+):
+    """Test that two different application connect to the database with different credentials."""
+    # Set some variables to use in this test.
+    another_application_app_name = "another-application"
+    all_app_names = [another_application_app_name]
+    all_app_names.extend(APP_NAMES)
+
+    # Deploy another application.
+    await ops_test.model.deploy(
+        application_charm,
+        application_name=another_application_app_name,
+    )
+    await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
+
+    # Relate the new application with the database
+    # and wait for them exchanging some connection data.
+    await ops_test.model.add_relation(another_application_app_name, DATABASE_APP_NAME)
+    await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
+
+    # Assert the two application have different relation (connection) data.
+    application_connection_string = await build_connection_string(ops_test, APPLICATION_APP_NAME)
+    another_application_connection_string = await build_connection_string(
+        ops_test, another_application_app_name
+    )
+    assert application_connection_string != another_application_connection_string

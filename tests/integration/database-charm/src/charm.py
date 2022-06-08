@@ -13,7 +13,10 @@ import secrets
 import string
 
 import psycopg2
-from charms.data_platform_libs.v0.database_provides import DatabaseProvides
+from charms.data_platform_libs.v0.database_provides import (
+    DatabaseProvides,
+    DatabaseRequestedEvent,
+)
 from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
@@ -63,13 +66,13 @@ class DatabaseCharm(CharmBase):
         container.autostart()
         self.unit.status = ActiveStatus()
 
-    def _on_database_requested(self, _) -> None:
+    def _on_database_requested(self, event: DatabaseRequestedEvent) -> None:
         """Event triggered when a new database is requested."""
         self.unit.status = MaintenanceStatus("creating database")
 
         # Retrieve the database name and extra user roles using the charm library.
-        database = self.database.database
-        extra_user_roles = self.database.extra_user_roles
+        database = event.database
+        extra_user_roles = event.extra_user_roles
 
         # Generate a username and a password for the application.
         username = f"juju_{database}"
@@ -94,16 +97,14 @@ class DatabaseCharm(CharmBase):
         connection.close()
 
         # Share the credentials with the application.
-        self.database.set_credentials(username, password)
+        event.set_credentials(username, password)
 
         # Set the read/write endpoint.
-        self.database.set_endpoints(
-            f'{self.model.get_binding("database").network.bind_address}:5432'
-        )
+        event.set_endpoints(f'{self.model.get_binding("database").network.bind_address}:5432')
 
         # Share additional information with the application.
-        self.database.set_tls("False")
-        self.database.set_version(version)
+        event.set_tls("False")
+        event.set_version(version)
 
         self.unit.status = ActiveStatus()
 

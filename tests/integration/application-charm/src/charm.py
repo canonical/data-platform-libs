@@ -17,8 +17,6 @@ from ops.model import ActiveStatus
 
 logger = logging.getLogger(__name__)
 
-# Name of the database that this application requests to the database charm.
-DATABASE = "data_platform"
 # Extra roles that this application needs when interacting with the database.
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 
@@ -32,8 +30,10 @@ class ApplicationCharm(CharmBase):
         # Default charm events.
         self.framework.observe(self.on.start, self._on_start)
 
+        # Name of the database that this application requests to the database charm.
+        database = f'data_platform_{self.app.name.replace("-", "_")}'
         # Charm events defined in the database requires charm library.
-        self.database = DatabaseRequires(self, "database", DATABASE, EXTRA_USER_ROLES)
+        self.database = DatabaseRequires(self, "database", database, EXTRA_USER_ROLES)
         self.framework.observe(self.database.on.database_created, self._on_database_created)
         self.framework.observe(self.database.on.endpoints_changed, self._on_endpoints_changed)
 
