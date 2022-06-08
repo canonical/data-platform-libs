@@ -116,37 +116,10 @@ class TestDatabaseProvides(unittest.TestCase):
             "password": "test-password",
         }
 
-    def test_event_set_credentials(self):
-        # Emit an event to use it later.
-        event = self.emit_database_requested_event()
-
-        # Set the credentials using the event function.
-        event.set_credentials("test-username", "test-password")
-
-        # Check that the credentials are present in the relation.
-        assert self.harness.get_relation_data(self.rel_id, "database") == {
-            "data": "{}",  # Data is the diff stored between multiple relation changed events.
-            "username": "test-username",
-            "password": "test-password",
-        }
-
     def test_set_endpoints(self):
         """Asserts that the endpoints are in the relation databag when they change."""
         # Set the endpoints in the relation using the provides charm library.
         self.harness.charm.database.set_endpoints(self.rel_id, "host1:port,host2:port")
-
-        # Check that the endpoints are present in the relation.
-        assert (
-            self.harness.get_relation_data(self.rel_id, "database")["endpoints"]
-            == "host1:port,host2:port"
-        )
-
-    def test_event_set_endpoints(self):
-        # Emit an event to use it later.
-        event = self.emit_database_requested_event()
-
-        # Set the endpoints using the event function.
-        event.set_endpoints("host1:port,host2:port")
 
         # Check that the endpoints are present in the relation.
         assert (
@@ -165,19 +138,6 @@ class TestDatabaseProvides(unittest.TestCase):
             == "host1:port,host2:port"
         )
 
-    def test_event_set_read_only_endpoints(self):
-        # Emit an event to use it later.
-        event = self.emit_database_requested_event()
-
-        # Set the endpoints using the event function.
-        event.set_read_only_endpoints("host1:port,host2:port")
-
-        # Check that the endpoints are present in the relation.
-        assert (
-            self.harness.get_relation_data(self.rel_id, "database")["read-only-endpoints"]
-            == "host1:port,host2:port"
-        )
-
     def test_set_additional_fields(self):
         """Asserts that the additional fields are in the relation databag when they are set."""
         # Set the additional fields in the relation using the provides charm library.
@@ -186,27 +146,6 @@ class TestDatabaseProvides(unittest.TestCase):
         self.harness.charm.database.set_tls_ca(self.rel_id, "Canonical")
         self.harness.charm.database.set_uris(self.rel_id, "host1:port,host2:port")
         self.harness.charm.database.set_version(self.rel_id, "1.0")
-
-        # Check that the additional fields are present in the relation.
-        assert self.harness.get_relation_data(self.rel_id, "database") == {
-            "data": "{}",  # Data is the diff stored between multiple relation changed events.
-            "replset": "rs0",
-            "tls": "True",
-            "tls_ca": "Canonical",
-            "uris": "host1:port,host2:port",
-            "version": "1.0",
-        }
-
-    def test_event_set_additional_fields(self):
-        # Emit an event to use it later.
-        event = self.emit_database_requested_event()
-
-        # Set the additional fields using the event function.
-        event.set_replset("rs0")
-        event.set_tls("True")
-        event.set_tls_ca("Canonical")
-        event.set_uris("host1:port,host2:port")
-        event.set_version("1.0")
 
         # Check that the additional fields are present in the relation.
         assert self.harness.get_relation_data(self.rel_id, "database") == {

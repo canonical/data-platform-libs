@@ -97,14 +97,16 @@ class DatabaseCharm(CharmBase):
         connection.close()
 
         # Share the credentials with the application.
-        event.set_credentials(username, password)
+        self.database.set_credentials(event.relation.id, username, password)
 
         # Set the read/write endpoint.
-        event.set_endpoints(f'{self.model.get_binding("database").network.bind_address}:5432')
+        self.database.set_endpoints(
+            event.relation.id, f'{self.model.get_binding("database").network.bind_address}:5432'
+        )
 
         # Share additional information with the application.
-        event.set_tls("False")
-        event.set_version(version)
+        self.database.set_tls(event.relation.id, "False")
+        self.database.set_version(event.relation.id, version)
 
         self.unit.status = ActiveStatus()
 

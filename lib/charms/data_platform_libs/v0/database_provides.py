@@ -48,7 +48,7 @@ class SampleCharm(CharmBase):
         password = self.database.generate_password()
 
         # set the credentials for the relation
-        event.set_credentials(username, password)
+        self.provided_database.set_credentials(event.relation.id, username, password)
 
         # set other variables for the relation event.set_tls("False")
 ```
@@ -60,7 +60,7 @@ from typing import List, Optional
 
 from ops.charm import CharmBase, CharmEvents, RelationChangedEvent, RelationEvent
 from ops.framework import EventSource, Object
-from ops.model import Application, Relation
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "8eea9ca584d84c7bb357f1946b6f34ce"
@@ -78,142 +78,15 @@ logger = logging.getLogger(__name__)
 class DatabaseEvent(RelationEvent):
     """Base class for database events."""
 
-    def __init__(self, handle, relation: Relation, local_app: Application):
-        super().__init__(handle, relation, relation.app, None)
-        self.local_app = local_app
-
-    def snapshot(self):
-        """Used by the framework to serialize the event to disk."""
-        snapshot = super(DatabaseEvent, self).snapshot()
-        if self.local_app:
-            snapshot["local_app_name"] = self.local_app.name
-        return snapshot
-
-    def restore(self, snapshot):
-        """Used by the framework to deserialize the event from disk."""
-        super(DatabaseEvent, self).restore(snapshot)
-        local_app_name = snapshot.get("local_app_name")
-        if local_app_name:
-            self.local_app = self.framework.model.get_app(local_app_name)
-        else:
-            self.local_app = None
-
-    def _get_relation_data(self, key: str) -> Optional[str]:
-        """Retrieves data from relation.
-
-        Args:
-            key: key to retrieve the data from the relation.
-
-        Returns:
-            value stored in the relation data bag for
-                the specified key or None if the key doesn't exist.
-        """
-        return self.relation.data[self.relation.app].get(key)
-
-    def _update_relation_data(self, data: dict) -> None:
-        """Updates a set of key-value pairs in the relation.
-
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
-
-        Args:
-            data: dict containing the key-value pairs
-                that should be updated in the relation.
-        """
-        self.relation.data[self.local_app].update(data)
-
     @property
     def database(self) -> Optional[str]:
         """Returns the database that was requested."""
-        return self._get_relation_data("database")
+        return self.relation.data[self.relation.app].get("database")
 
     @property
     def extra_user_roles(self) -> Optional[str]:
         """Returns the extra user roles that were requested."""
-        return self._get_relation_data("extra-user-roles")
-
-    def set_credentials(self, username: str, password: str) -> None:
-        """Set database primary connections.
-
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
-
-        Args:
-            username: user that was created.
-            password: password of the created user.
-        """
-        self._update_relation_data(
-            {
-                "username": username,
-                "password": password,
-            }
-        )
-
-    def set_endpoints(self, connection_strings: str) -> None:
-        """Set database primary connections.
-
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
-
-        Args:
-            connection_strings: database hosts and ports comma separated list.
-        """
-        self._update_relation_data({"endpoints": connection_strings})
-
-    def set_read_only_endpoints(self, connection_strings: str) -> None:
-        """Set database replicas connection strings.
-
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
-
-        Args:
-            connection_strings: database hosts and ports comma separated list.
-        """
-        self._update_relation_data({"read-only-endpoints": connection_strings})
-
-    def set_replset(self, replset: str) -> None:
-        """Set replica set name in the application relation databag.
-
-        MongoDB only.
-
-        Args:
-            replset: replica set name.
-        """
-        self._update_relation_data({"replset": replset})
-
-    def set_tls(self, tls: str) -> None:
-        """Set whether TLS is enabled.
-
-        Args:
-            tls: whether tls is enabled (True or False).
-        """
-        self._update_relation_data({"tls": tls})
-
-    def set_tls_ca(self, tls_ca: str) -> None:
-        """Set the TLS CA in the application relation databag.
-
-        Args:
-            tls_ca: TLS certification authority.
-        """
-        self._update_relation_data({"tls_ca": tls_ca})
-
-    def set_uris(self, uris: str) -> None:
-        """Set the database connection URIs in the application relation databag.
-
-        MongoDB, Redis, OpenSearch and Kafka only.
-
-        Args:
-            uris: connection URIs.
-        """
-        self._update_relation_data({"uris": uris})
-
-    def set_version(self, version: str) -> None:
-        """Set the database version in the application relation databag.
-
-        Args:
-            version: database version.
-        """
-        self._update_relation_data({"version": version})
+        return self.relation.data[self.relation.app].get("extra-user-roles")
 
 
 class DatabaseRequestedEvent(DatabaseEvent):
@@ -301,7 +174,7 @@ class DatabaseProvides(Object):
         # Emit a database requested event if the setup key (database name and optional
         # extra user roles) was added to the relation databag by the application.
         if "database" in diff.added:
-            self.on.database_requested.emit(event.relation, self.local_app)
+            self.on.database_requested.emit(event.relation)
 
     def fetch_relation_data(self) -> dict:
         """Retrieves data from relation.
