@@ -61,7 +61,9 @@ class TestDatabaseRequires(unittest.TestCase):
         """Asserts that the charm library correctly returns a diff of the relation data."""
         # Define a mock relation changed event to be used in the subsequent diff calls.
         mock_event = Mock()
-        # Set the initial data for the event.
+        # Set the app, id and the initial data for the relation.
+        mock_event.app = self.harness.charm.model.get_app("application")
+        mock_event.relation.id = self.rel_id
         mock_event.relation.data = {
             mock_event.app: {"username": "test-username", "password": "test-password"}
         }
@@ -95,13 +97,14 @@ class TestDatabaseRequires(unittest.TestCase):
             self.rel_id, "database", {"username": "test-username", "password": "test-password"}
         )
 
-        # Check that the username and the password are present in the relation
-        # using the requires charm library.
-        assert self.harness.charm.database.username == "test-username"
-        assert self.harness.charm.database.password == "test-password"
-
         # Assert the correct hook is called.
         _on_database_created.assert_called_once()
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_database_created.call_args[0][0]
+        assert event.username == "test-username"
+        assert event.password == "test-password"
 
     @patch.object(ApplicationCharm, "_on_endpoints_changed")
     def test_on_endpoints_changed(self, _on_endpoints_changed):
@@ -113,12 +116,13 @@ class TestDatabaseRequires(unittest.TestCase):
             {"endpoints": "host1:port,host2:port"},
         )
 
-        # Check that the endpoints are present in the relation
-        # using the requires charm library.
-        assert self.harness.charm.database.endpoints == "host1:port,host2:port"
-
         # Assert the correct hook is called.
         _on_endpoints_changed.assert_called_once()
+
+        # Check that the endpoints are present in the relation
+        # using the requires charm library event.
+        event = _on_endpoints_changed.call_args[0][0]
+        assert event.endpoints == "host1:port,host2:port"
 
         # Reset the mock call count.
         _on_endpoints_changed.reset_mock()
@@ -153,12 +157,13 @@ class TestDatabaseRequires(unittest.TestCase):
             {"read-only-endpoints": "host1:port,host2:port"},
         )
 
-        # Check that the endpoints are present in the relation
-        # using the requires charm library.
-        assert self.harness.charm.database.read_only_endpoints == "host1:port,host2:port"
-
         # Assert the correct hook is called.
         _on_read_only_endpoints_changed.assert_called_once()
+
+        # Check that the endpoints are present in the relation
+        # using the requires charm library event.
+        event = _on_read_only_endpoints_changed.call_args[0][0]
+        assert event.read_only_endpoints == "host1:port,host2:port"
 
         # Reset the mock call count.
         _on_read_only_endpoints_changed.reset_mock()
@@ -200,8 +205,42 @@ class TestDatabaseRequires(unittest.TestCase):
 
         # Check that the fields are present in the relation
         # using the requires charm library.
-        assert self.harness.charm.database.replset == "rs0"
-        assert self.harness.charm.database.tls == "True"
-        assert self.harness.charm.database.tls_ca == "Canonical"
-        assert self.harness.charm.database.uris == "host1:port,host2:port"
-        assert self.harness.charm.database.version == "1.0"
+        relation_data = self.harness.charm.database.fetch_relation_data()[self.rel_id]
+        assert relation_data["replset"] == "rs0"
+        assert relation_data["tls"] == "True"
+        assert relation_data["tls-ca"] == "Canonical"
+        assert relation_data["uris"] == "host1:port,host2:port"
+        assert relation_data["version"] == "1.0"
+
+    @patch.object(ApplicationCharm, "_on_database_created")
+    def test_fields_are_accessible_through_event(self, _on_database_created):
+        """Asserts fields are accessible through the requires charm library event."""
+        # Simulate setting the additional fields.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "database",
+            {
+                "username": "test-username",
+                "password": "test-password",
+                "endpoints": "host1:port,host2:port",
+                "read-only-endpoints": "host1:port,host2:port",
+                "replset": "rs0",
+                "tls": "True",
+                "tls-ca": "Canonical",
+                "uris": "host1:port,host2:port",
+                "version": "1.0",
+            },
+        )
+
+        # Check that the fields are present in the relation
+        # using the requires charm library event.
+        event = _on_database_created.call_args[0][0]
+        assert event.username == "test-username"
+        assert event.password == "test-password"
+        assert event.endpoints == "host1:port,host2:port"
+        assert event.read_only_endpoints == "host1:port,host2:port"
+        assert event.replset == "rs0"
+        assert event.tls == "True"
+        assert event.tls_ca == "Canonical"
+        assert event.uris == "host1:port,host2:port"
+        assert event.version == "1.0"
