@@ -219,9 +219,6 @@ class DatabaseProvides(Object):
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
 
-        This function can be used to set the data
-        when outside an event callback.
-
         Args:
             relation_id: the identifier for a particular relation.
             username: user that was created.
@@ -241,9 +238,6 @@ class DatabaseProvides(Object):
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
 
-        This function can be used to set the data
-        when outside an event callback.
-
         Args:
             relation_id: the identifier for a particular relation.
             connection_strings: database hosts and ports comma separated list.
@@ -256,9 +250,6 @@ class DatabaseProvides(Object):
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
 
-        This function can be used to set the data
-        when outside an event callback.
-
         Args:
             relation_id: the identifier for a particular relation.
             connection_strings: database hosts and ports comma separated list.
@@ -270,9 +261,6 @@ class DatabaseProvides(Object):
 
         MongoDB only.
 
-        This function can be used to set the data
-        when outside an event callback.
-
         Args:
             relation_id: the identifier for a particular relation.
             replset: replica set name.
@@ -282,9 +270,6 @@ class DatabaseProvides(Object):
     def set_tls(self, relation_id: int, tls: str) -> None:
         """Set whether TLS is enabled.
 
-        This function can be used to set the data
-        when outside an event callback.
-
         Args:
             relation_id: the identifier for a particular relation.
             tls: whether tls is enabled (True or False).
@@ -293,9 +278,6 @@ class DatabaseProvides(Object):
 
     def set_tls_ca(self, relation_id: int, tls_ca: str) -> None:
         """Set the TLS CA in the application relation databag.
-
-        This function can be used to set the data
-        when outside an event callback.
 
         Args:
             relation_id: the identifier for a particular relation.
@@ -308,9 +290,6 @@ class DatabaseProvides(Object):
 
         MongoDB, Redis, OpenSearch and Kafka only.
 
-        This function can be used to set the data
-        when outside an event callback.
-
         Args:
             relation_id: the identifier for a particular relation.
             uris: connection URIs.
@@ -319,9 +298,6 @@ class DatabaseProvides(Object):
 
     def set_version(self, relation_id: int, version: str) -> None:
         """Set the database version in the application relation databag.
-
-        This function can be used to set the data
-        when outside an event callback.
 
         Args:
             relation_id: the identifier for a particular relation.
