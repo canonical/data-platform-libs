@@ -23,6 +23,8 @@ APP_NAMES = [APPLICATION_APP_NAME, DATABASE_APP_NAME]
 DATABASE_APP_METADATA = yaml.safe_load(
     Path("./tests/integration/database-charm/metadata.yaml").read_text()
 )
+FIRST_DATABASE_RELATION_NAME = "first-database"
+SECOND_DATABASE_RELATION_NAME = "second-database"
 
 
 @pytest.mark.abort_on_fail
@@ -54,11 +56,15 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
 async def test_database_relation_with_charm_libraries(ops_test: OpsTest):
     """Test basic functionality of database relation interface."""
     # Relate the charms and wait for them exchanging some connection data.
-    await ops_test.model.add_relation(APPLICATION_APP_NAME, DATABASE_APP_NAME)
+    await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+    )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # Get the connection string to connect to the database.
-    connection_string = await build_connection_string(ops_test, APPLICATION_APP_NAME)
+    connection_string = await build_connection_string(
+        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+    )
 
     # Connect to the database.
     with psycopg2.connect(connection_string) as connection, connection.cursor() as cursor:
@@ -78,14 +84,18 @@ async def test_database_relation_with_charm_libraries(ops_test: OpsTest):
 
         # Get the version of the database and compare with the information that
         # was retrieved directly from the database.
-        version = await get_application_relation_data(ops_test, APPLICATION_APP_NAME, "version")
+        version = await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "version"
+        )
         assert version == data[0]
 
 
 async def test_user_with_extra_roles(ops_test: OpsTest):
     """Test superuser actions and the request for more permissions."""
     # Get the connection string to connect to the database.
-    connection_string = await build_connection_string(ops_test, APPLICATION_APP_NAME)
+    connection_string = await build_connection_string(
+        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+    )
 
     # Connect to the database.
     connection = psycopg2.connect(connection_string)
@@ -98,3 +108,23 @@ async def test_user_with_extra_roles(ops_test: OpsTest):
 
     cursor.close()
     connection.close()
+
+
+async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, application_charm):
+    """Test that an application can request additional databases using the same interface."""
+    # Relate the charms using another relation and wait for them exchanging some connection data.
+    await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{SECOND_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    # Get the connection strings to connect to both databases.
+    first_database_connection_string = await build_connection_string(
+        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+    )
+    second_database_connection_string = await build_connection_string(
+        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME
+    )
+
+    # Assert the two application have different relation (connection) data.
+    assert first_database_connection_string != second_database_connection_string
