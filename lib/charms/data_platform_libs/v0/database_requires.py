@@ -35,14 +35,14 @@ class ApplicationCharm(CharmBase):
         self.database = DatabaseRequires(self, relation_name="database", database_name="database")
         self.framework.observe(self.database.on.database_created, self._on_database_created)
 
-    def _on_database_created(self, _) -> None:
+    def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
         # Handle the created database
 
         # Create configuration file for app
         config_file = self._render_app_config_file(
-            self.database.username,
-            self.database.password,
-            self.database.endpoints,
+            event.username,
+            event.password,
+            event.endpoints,
         )
 
         # Start application with rendered configuration
@@ -57,10 +57,16 @@ import json
 import logging
 from collections import namedtuple
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
-from ops.charm import CharmEvents, RelationChangedEvent, RelationEvent
+from ops.charm import (
+    CharmEvents,
+    RelationChangedEvent,
+    RelationEvent,
+    RelationJoinedEvent,
+)
 from ops.framework import EventSource, Object
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "0241e088ffa9440fb4e3126349b2fb62"
@@ -75,15 +81,73 @@ LIBPATCH = 1
 logger = logging.getLogger(__name__)
 
 
-class DatabaseCreatedEvent(RelationEvent):
+class DatabaseEvent(RelationEvent):
+    """Base class for database events."""
+
+    @property
+    def endpoints(self) -> Optional[str]:
+        """Returns a comma separated list of read/write endpoints."""
+        return self.relation.data[self.relation.app].get("endpoints")
+
+    @property
+    def password(self) -> Optional[str]:
+        """Returns the password for the created user."""
+        return self.relation.data[self.relation.app].get("password")
+
+    @property
+    def read_only_endpoints(self) -> Optional[str]:
+        """Returns a comma separated list of read only endpoints."""
+        return self.relation.data[self.relation.app].get("read-only-endpoints")
+
+    @property
+    def replset(self) -> Optional[str]:
+        """Returns the replicaset name.
+
+        MongoDB only.
+        """
+        return self.relation.data[self.relation.app].get("replset")
+
+    @property
+    def tls(self) -> Optional[str]:
+        """Returns whether TLS is configured."""
+        return self.relation.data[self.relation.app].get("tls")
+
+    @property
+    def tls_ca(self) -> Optional[str]:
+        """Returns TLS CA."""
+        return self.relation.data[self.relation.app].get("tls-ca")
+
+    @property
+    def uris(self) -> Optional[str]:
+        """Returns the connection URIs.
+
+        MongoDB, Redis, OpenSearch and Kafka only.
+        """
+        return self.relation.data[self.relation.app].get("uris")
+
+    @property
+    def username(self) -> Optional[str]:
+        """Returns the created username."""
+        return self.relation.data[self.relation.app].get("username")
+
+    @property
+    def version(self) -> Optional[str]:
+        """Returns the version of the database.
+
+        Version as informed by the database daemon.
+        """
+        return self.relation.data[self.relation.app].get("version")
+
+
+class DatabaseCreatedEvent(DatabaseEvent):
     """Event emitted when a new database is created for use on this relation."""
 
 
-class DatabaseEndpointsChangedEvent(RelationEvent):
+class DatabaseEndpointsChangedEvent(DatabaseEvent):
     """Event emitted when the read/write endpoints are changed."""
 
 
-class DatabaseReadOnlyEndpointsChangedEvent(RelationEvent):
+class DatabaseReadOnlyEndpointsChangedEvent(DatabaseEvent):
     """Event emitted when the read only endpoints are changed."""
 
 
@@ -113,14 +177,20 @@ class DatabaseRequires(Object):
     on = DatabaseEvents()
 
     def __init__(
-        self, charm, relation_name: str, database_name: str, extra_user_roles: str = None
+        self,
+        charm,
+        relation_name: str,
+        database_name: str,
+        extra_user_roles: str = None,
     ):
         """Manager of database client relations."""
         super().__init__(charm, relation_name)
         self.charm = charm
         self.database = database_name
         self.extra_user_roles = extra_user_roles
-        self.relation = self.charm.model.get_relation(relation_name)
+        self.local_app = self.charm.model.app
+        self.local_unit = self.charm.unit
+        self.relation_name = relation_name
         self.framework.observe(
             self.charm.on[relation_name].relation_joined, self._on_relation_joined_event
         )
@@ -139,9 +209,11 @@ class DatabaseRequires(Object):
                 keys from the event relation databag.
         """
         # Retrieve the old data from the data key in the application relation databag.
-        old_data = json.loads(self.relation.data[self.charm.model.app].get("data", "{}"))
+        old_data = json.loads(event.relation.data[self.charm.model.app].get("data", "{}"))
         # Retrieve the new data from the event relation databag.
-        new_data = event.relation.data[event.app]
+        new_data = {
+            key: value for key, value in event.relation.data[event.app].items() if key != "data"
+        }
 
         # These are the keys that were added to the databag and triggered this event.
         added = new_data.keys() - old_data.keys()
@@ -156,91 +228,57 @@ class DatabaseRequires(Object):
         # TODO: evaluate the possibility of losing the diff if some error
         # happens in the charm before the diff is completely checked (DPE-412).
         # Convert the new_data to a serializable format and save it for a next diff check.
-        data = {key: value for key, value in new_data.items() if key != "data"}
-        self._update_relation_data({"data": json.dumps(data)})
+        event.relation.data[self.local_app].update({"data": json.dumps(new_data)})
 
         # Return the diff with all possible changes.
         return Diff(added, changed, deleted)
 
-    def _get_relation_data(self, key: str) -> Optional[str]:
+    def fetch_relation_data(self) -> dict:
         """Retrieves data from relation.
 
-        Args:
-            key: key to retrieve the data from the relation.
+        This function can be used to retrieve data from a relation
+        in the charm code when outside an event callback.
 
         Returns:
-            a string value stored in the relation data bag for
-                the specified key or None if the key doesn't exist.
+            a dict of the values stored in the relation data bag
+                for all relation instances (indexed by the relation id).
         """
-        return self.relation.data[self.relation.app].get(key)
+        data = {}
+        for relation in self.relations:
+            data[relation.id] = {
+                key: value for key, value in relation.data[relation.app].items() if key != "data"
+            }
+        return data
 
-    @property
-    def endpoints(self) -> Optional[str]:
-        """Returns a comma separated list of read/write endpoints."""
-        return self._get_relation_data("endpoints")
+    def _update_relation_data(self, relation_id: int, data: dict) -> None:
+        """Updates a set of key-value pairs in the relation.
 
-    @property
-    def password(self) -> Optional[str]:
-        """Returns the password for the created user."""
-        return self._get_relation_data("password")
+        This function writes in the application data bag, therefore,
+        only the leader unit can call it.
 
-    @property
-    def read_only_endpoints(self) -> Optional[str]:
-        """Returns a comma separated list of read only endpoints."""
-        return self._get_relation_data("read-only-endpoints")
-
-    @property
-    def replset(self) -> Optional[str]:
-        """Returns the replicaset name.
-
-        MongoDB only.
+        Args:
+            relation_id: the identifier for a particular relation.
+            data: dict containing the key-value pairs
+                that should be updated in the relation.
         """
-        return self._get_relation_data("replset")
+        if self.local_unit.is_leader():
+            relation = self.charm.model.get_relation(self.relation_name, relation_id)
+            relation.data[self.local_app].update(data)
 
-    @property
-    def tls(self) -> Optional[str]:
-        """Returns whether TLS is configured."""
-        return self._get_relation_data("tls")
-
-    @property
-    def tls_ca(self) -> Optional[str]:
-        """Returns TLS CA."""
-        return self._get_relation_data("tls-ca")
-
-    @property
-    def uris(self) -> Optional[str]:
-        """Returns the connection URIs.
-
-        MongoDB, Redis, OpenSearch and Kafka only.
-        """
-        return self._get_relation_data("uris")
-
-    @property
-    def username(self) -> Optional[str]:
-        """Returns the created username."""
-        return self._get_relation_data("username")
-
-    @property
-    def version(self) -> Optional[str]:
-        """Returns the version of the database.
-
-        Version as informed by the database daemon.
-        """
-        return self._get_relation_data("version")
-
-    def _on_relation_joined_event(self, _) -> None:
+    def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
         """Event emitted when the application joins the database relation."""
         # Sets both database and extra user roles in the relation
         # if the roles are provided. Otherwise, sets only the database.
         if self.extra_user_roles:
             self._update_relation_data(
+                event.relation.id,
                 {
                     "database": self.database,
                     "extra-user-roles": self.extra_user_roles,
-                }
+                },
             )
         else:
-            self._update_relation_data({"database": self.database})
+            self._update_relation_data(event.relation.id, {"database": self.database})
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
@@ -268,15 +306,7 @@ class DatabaseRequires(Object):
             logger.info(f"read-only-endpoints changed on {datetime.now()}")
             self.on.read_only_endpoints_changed.emit(event.relation)
 
-    def _update_relation_data(self, data: dict) -> None:
-        """Updates a set of key-value pairs in the relation.
-
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
-
-        Args:
-            data: dict containing the key-value pairs
-                that should be updated in the relation.
-        """
-        if self.charm.unit.is_leader():
-            self.relation.data[self.charm.model.app].update(data)
+    @property
+    def relations(self) -> List[Relation]:
+        """The list of Relation instances associated with this relation_name."""
+        return list(self.charm.model.relations[self.relation_name])
