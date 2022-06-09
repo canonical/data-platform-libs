@@ -8,5 +8,9 @@ summary: |
   only for testing of the libs in this repository.
 
 requires:
-  database:
+  first-database:
+    interface: database-client
+  second-database:
+    interface: database-client
+  multiple-database-clusters:
     interface: database-client
