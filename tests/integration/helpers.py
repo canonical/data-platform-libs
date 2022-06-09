@@ -18,13 +18,14 @@ async def build_connection_string(ops_test: OpsTest, application_name: str) -> s
         a PostgreSQL connection string
     """
     # Get the connection data exposed to the application through the relation.
+    database = f'data_platform_{application_name.replace("-", "_")}'
     username = await get_application_relation_data(ops_test, application_name, "username")
     password = await get_application_relation_data(ops_test, application_name, "password")
     endpoints = await get_application_relation_data(ops_test, application_name, "endpoints")
     host = endpoints.split(",")[0].split(":")[0]
 
     # Build the complete connection string to connect to the database.
-    return f"dbname='data_platform' user='{username}' host='{host}' password='{password}' connect_timeout=10"
+    return f"dbname='{database}' user='{username}' host='{host}' password='{password}' connect_timeout=10"
 
 
 async def get_application_relation_data(
