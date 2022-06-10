@@ -71,8 +71,10 @@ async def get_application_relation_data(
     if not raw_data:
         raise ValueError(f"no unit info could be grabbed for {unit_name}")
     data = yaml.safe_load(raw_data)
+    # Filter the data based on the relation name.
     relation_data = [v for v in data[unit_name]["relation-info"] if v["endpoint"] == relation_name]
     if relation_alias:
+        # Filter the data based on the cluster/relation alias.
         relation_data = [
             v
             for v in relation_data
