@@ -167,14 +167,14 @@ async def test_an_application_can_connect_to_multiple_database_clusters(
 
     # Relate the application with both database clusters
     # and wait for them exchanging some connection data.
-    await ops_test.model.add_relation(
-        f"{APPLICATION_APP_NAME}:{MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}", DATABASE_APP_NAME
-    )
-    # await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
-
-    await ops_test.model.add_relation(
-        f"{APPLICATION_APP_NAME}:{MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}",
-        another_database_app_name,
+    await asyncio.gather(
+        ops_test.model.add_relation(
+            f"{APPLICATION_APP_NAME}:{MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}", DATABASE_APP_NAME
+        ),
+        ops_test.model.add_relation(
+            f"{APPLICATION_APP_NAME}:{MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}",
+            another_database_app_name,
+        ),
     )
     await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
 
