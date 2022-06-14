@@ -238,11 +238,10 @@ class DatabaseRequires(Object):
 
         # Retrieve the available aliases (the ones that weren't assigned to any relation).
         available_aliases = self.relations_aliases[:]
-        print(available_aliases)
         for relation in self.charm.model.relations[self.relation_name]:
             alias = relation.data[self.local_app].get("alias")
             if alias:
-                print(f"Alias {alias} was already assigned to relation {relation.id}")
+                logger.debug(f"Alias {alias} was already assigned to relation {relation.id}")
                 available_aliases.remove(alias)
 
         # Don't assign an alias if there is no available alias in the list
