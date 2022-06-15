@@ -3,10 +3,16 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from charms.data_platform_libs.v0.database_requires import DatabaseRequires, Diff
+import pytest
+from charms.data_platform_libs.v0.database_requires import (
+    DatabaseEvents,
+    DatabaseRequires,
+    Diff,
+)
 from ops.charm import CharmBase
 from ops.testing import Harness
 
+CLUSTER_ALIASES = ["cluster1", "cluster2"]
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 RELATION_INTERFACE = "database-client"
@@ -16,6 +22,7 @@ name: application
 requires:
   {RELATION_NAME}:
     interface: {RELATION_INTERFACE}
+    limit: {len(CLUSTER_ALIASES)}
 """
 
 
@@ -25,15 +32,15 @@ class ApplicationCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.database = DatabaseRequires(
-            self,
-            RELATION_NAME,
-            DATABASE,
-            EXTRA_USER_ROLES,
+            self, RELATION_NAME, DATABASE, EXTRA_USER_ROLES, CLUSTER_ALIASES[:]
         )
         self.framework.observe(self.database.on.database_created, self._on_database_created)
         self.framework.observe(self.database.on.endpoints_changed, self._on_endpoints_changed)
         self.framework.observe(
             self.database.on.read_only_endpoints_changed, self._on_read_only_endpoints_changed
+        )
+        self.framework.observe(
+            self.database.on.cluster1_database_created, self._on_cluster1_database_created
         )
 
     def _on_database_created(self, _) -> None:
@@ -44,6 +51,26 @@ class ApplicationCharm(CharmBase):
 
     def _on_read_only_endpoints_changed(self, _) -> None:
         pass
+
+    def _on_cluster1_database_created(self, _) -> None:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def reset_aliases():
+    """Fixture that runs before each test to delete the custom events created for the aliases.
+
+    This is needed because the events are created again in the next test,
+    which causes an error related to duplicated events.
+    """
+    for cluster_alias in CLUSTER_ALIASES:
+        try:
+            delattr(DatabaseEvents, f"{cluster_alias}_database_created")
+            delattr(DatabaseEvents, f"{cluster_alias}_endpoints_changed")
+            delattr(DatabaseEvents, f"{cluster_alias}_read_only_endpoints_changed")
+        except AttributeError:
+            # Ignore the events not existing before the first test.
+            pass
 
 
 class TestDatabaseRequires(unittest.TestCase):
@@ -94,7 +121,9 @@ class TestDatabaseRequires(unittest.TestCase):
         """Asserts on_database_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created database.
         self.harness.update_relation_data(
-            self.rel_id, "database", {"username": "test-username", "password": "test-password"}
+            self.rel_id,
+            "database",
+            {"username": "test-username", "password": "test-password"},
         )
 
         # Assert the correct hook is called.
@@ -244,3 +273,50 @@ class TestDatabaseRequires(unittest.TestCase):
         assert event.tls_ca == "Canonical"
         assert event.uris == "host1:port,host2:port"
         assert event.version == "1.0"
+
+    def test_assign_relation_alias(self):
+        """Asserts the correct relation alias is assigned to the relation."""
+        # Reset the alias.
+        self.harness.update_relation_data(self.rel_id, "application", {"alias": None})
+
+        # Call the function and check the alias.
+        self.harness.charm.database._assign_relation_alias(self.rel_id)
+        assert (
+            self.harness.get_relation_data(self.rel_id, "application")["alias"]
+            == CLUSTER_ALIASES[0]
+        )
+
+        # Add another relation and check that the second cluster alias was assigned to it.
+        second_rel_id = self.harness.add_relation(RELATION_NAME, "database")
+        self.harness.add_relation_unit(second_rel_id, "another-database/0")
+        assert (
+            self.harness.get_relation_data(second_rel_id, "application")["alias"]
+            == CLUSTER_ALIASES[1]
+        )
+
+        # Reset the alias and test again using the function call.
+        self.harness.update_relation_data(second_rel_id, "application", {"alias": None})
+        self.harness.charm.database._assign_relation_alias(second_rel_id)
+        assert (
+            self.harness.get_relation_data(second_rel_id, "application")["alias"]
+            == CLUSTER_ALIASES[1]
+        )
+
+    @patch.object(ApplicationCharm, "_on_cluster1_database_created")
+    def test_emit_aliased_event(self, _on_cluster1_database_created):
+        """Asserts the correct custom event is triggered."""
+        # Reset the diff/data key in the relation to correctly emit the event.
+        self.harness.update_relation_data(self.rel_id, "application", {"data": "{}"})
+
+        # Check that the event wasn't triggered yet.
+        _on_cluster1_database_created.assert_not_called()
+
+        # Call the emit function and assert the desired event is triggered.
+        relation = self.harness.charm.model.get_relation(RELATION_NAME, self.rel_id)
+        self.harness.charm.database._emit_aliased_event(relation, "database_created")
+        _on_cluster1_database_created.assert_called_once()
+
+    def test_get_relation_alias(self):
+        """Asserts the correct relation alias is returned."""
+        # Assert the relation got the first cluster alias.
+        assert self.harness.charm.database._get_relation_alias(self.rel_id) == CLUSTER_ALIASES[0]
