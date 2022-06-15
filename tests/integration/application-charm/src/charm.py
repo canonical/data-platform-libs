@@ -60,27 +60,46 @@ class ApplicationCharm(CharmBase):
             self.second_database.on.endpoints_changed, self._on_second_database_endpoints_changed
         )
 
+        # Multiple database clusters charm events (clusters/relations without alias).
+        database_name = f'{self.app.name.replace("-", "_")}_multiple_database_clusters'
+        self.database_clusters = DatabaseRequires(
+            self, "multiple-database-clusters", database_name, EXTRA_USER_ROLES
+        )
+        self.framework.observe(
+            self.database_clusters.on.database_created, self._on_cluster_database_created
+        )
+        self.framework.observe(
+            self.database_clusters.on.endpoints_changed,
+            self._on_cluster_endpoints_changed,
+        )
+
         # Multiple database clusters charm events (defined dynamically
         # in the database requires charm library, using the provided cluster/relation aliases).
-        database_name = f'{self.app.name.replace("-", "_")}_multiple_database_clusters'
+        database_name = f'{self.app.name.replace("-", "_")}_aliased_multiple_database_clusters'
         cluster_aliases = ["cluster1", "cluster2"]  # Aliases for the multiple clusters/relations.
-        self.database_clusters = DatabaseRequires(
-            self, "multiple-database-clusters", database_name, EXTRA_USER_ROLES, cluster_aliases
+        self.aliased_database_clusters = DatabaseRequires(
+            self,
+            "aliased-multiple-database-clusters",
+            database_name,
+            EXTRA_USER_ROLES,
+            cluster_aliases,
         )
         # Each database cluster will have its own events
         # with the name having the cluster/relation alias as the prefix.
         self.framework.observe(
-            self.database_clusters.on.cluster1_database_created, self._on_cluster1_database_created
+            self.aliased_database_clusters.on.cluster1_database_created,
+            self._on_cluster1_database_created,
         )
         self.framework.observe(
-            self.database_clusters.on.cluster1_endpoints_changed,
+            self.aliased_database_clusters.on.cluster1_endpoints_changed,
             self._on_cluster1_endpoints_changed,
         )
         self.framework.observe(
-            self.database_clusters.on.cluster2_database_created, self._on_cluster2_database_created
+            self.aliased_database_clusters.on.cluster2_database_created,
+            self._on_cluster2_database_created,
         )
         self.framework.observe(
-            self.database_clusters.on.cluster2_endpoints_changed,
+            self.aliased_database_clusters.on.cluster2_endpoints_changed,
             self._on_cluster2_endpoints_changed,
         )
 
@@ -111,6 +130,23 @@ class ApplicationCharm(CharmBase):
         logger.info(f"second database endpoints have been changed to: {event.endpoints}")
 
     # Multiple database clusters events observers.
+    def _on_cluster_database_created(self, event: DatabaseCreatedEvent) -> None:
+        """Event triggered when a database was created for this application."""
+        # Retrieve the credentials using the charm library.
+        logger.info(
+            f"cluster {event.relation.app.name} credentials: {event.username} {event.password}"
+        )
+        self.unit.status = ActiveStatus(
+            f"received database credentials for cluster {event.relation.app.name}"
+        )
+
+    def _on_cluster_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
+        """Event triggered when the read/write endpoints of the database change."""
+        logger.info(
+            f"cluster {event.relation.app.name} endpoints have been changed to: {event.endpoints}"
+        )
+
+    # Multiple database clusters events observers (for aliased clusters/relations).
     def _on_cluster1_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Event triggered when a database was created for this application."""
         # Retrieve the credentials using the charm library.

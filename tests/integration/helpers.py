@@ -9,7 +9,12 @@ from pytest_operator.plugin import OpsTest
 
 
 async def build_connection_string(
-    ops_test: OpsTest, application_name: str, relation_name: str, relation_alias: str = None
+    ops_test: OpsTest,
+    application_name: str,
+    relation_name: str,
+    *,
+    relation_id: str = None,
+    relation_alias: str = None,
 ) -> str:
     """Build a PostgreSQL connection string.
 
@@ -17,6 +22,7 @@ async def build_connection_string(
         ops_test: The ops test framework instance
         application_name: The name of the application
         relation_name: name of the relation to get connection data from
+        relation_id: id of the relation to get connection data from
         relation_alias: alias of the relation (like a connection name)
             to get connection data from
 
@@ -26,13 +32,13 @@ async def build_connection_string(
     # Get the connection data exposed to the application through the relation.
     database = f'{application_name.replace("-", "_")}_{relation_name.replace("-", "_")}'
     username = await get_application_relation_data(
-        ops_test, application_name, relation_name, "username", relation_alias
+        ops_test, application_name, relation_name, "username", relation_id, relation_alias
     )
     password = await get_application_relation_data(
-        ops_test, application_name, relation_name, "password", relation_alias
+        ops_test, application_name, relation_name, "password", relation_id, relation_alias
     )
     endpoints = await get_application_relation_data(
-        ops_test, application_name, relation_name, "endpoints", relation_alias
+        ops_test, application_name, relation_name, "endpoints", relation_id, relation_alias
     )
     host = endpoints.split(",")[0].split(":")[0]
 
@@ -45,6 +51,7 @@ async def get_application_relation_data(
     application_name: str,
     relation_name: str,
     key: str,
+    relation_id: str = None,
     relation_alias: str = None,
 ) -> Optional[str]:
     """Get relation data for an application.
@@ -54,6 +61,7 @@ async def get_application_relation_data(
         application_name: The name of the application
         relation_name: name of the relation to get connection data from
         key: key of data to be retrieved
+        relation_id: id of the relation to get connection data from
         relation_alias: alias of the relation (like a connection name)
             to get connection data from
 
@@ -73,6 +81,9 @@ async def get_application_relation_data(
     data = yaml.safe_load(raw_data)
     # Filter the data based on the relation name.
     relation_data = [v for v in data[unit_name]["relation-info"] if v["endpoint"] == relation_name]
+    if relation_id:
+        # Filter the data based on the relation id.
+        relation_data = [v for v in relation_data if v["relation-id"] == relation_id]
     if relation_alias:
         # Filter the data based on the cluster/relation alias.
         relation_data = [
