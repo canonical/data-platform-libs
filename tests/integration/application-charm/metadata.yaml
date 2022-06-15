@@ -14,3 +14,4 @@ requires:
     interface: database-client
   multiple-database-clusters:
     interface: database-client
+    limit: 2

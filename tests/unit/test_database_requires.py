@@ -8,7 +8,6 @@ from charms.data_platform_libs.v0.database_requires import (
     DatabaseEvents,
     DatabaseRequires,
     Diff,
-    NoAliasAvailableError,
 )
 from ops.charm import CharmBase
 from ops.testing import Harness
@@ -23,6 +22,7 @@ name: application
 requires:
   {RELATION_NAME}:
     interface: {RELATION_INTERFACE}
+    limit: {len(CLUSTER_ALIASES)}
 """
 
 
@@ -301,17 +301,6 @@ class TestDatabaseRequires(unittest.TestCase):
             self.harness.get_relation_data(second_rel_id, "application")["alias"]
             == CLUSTER_ALIASES[1]
         )
-
-        # Add one more relation and check that it doesn't get an alias
-        # because there is no alias available.
-        third_rel_id = self.harness.add_relation(RELATION_NAME, "database")
-        self.harness.add_relation_unit(third_rel_id, "other-database/0")
-        assert "alias" not in self.harness.get_relation_data(third_rel_id, "application")
-
-        # Test again using the function call and assert
-        # it leads to an error in the alias assignment.
-        with self.assertRaises(NoAliasAvailableError):
-            self.harness.charm.database._assign_relation_alias(third_rel_id)
 
     @patch.object(ApplicationCharm, "_on_cluster1_database_created")
     def test_emit_aliased_event(self, _on_cluster1_database_created):

@@ -66,7 +66,7 @@ from ops.charm import (
     RelationJoinedEvent,
 )
 from ops.framework import EventSource, Object
-from ops.model import BlockedStatus, Relation
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "0241e088ffa9440fb4e3126349b2fb62"
@@ -171,10 +171,6 @@ changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
 
-class NoAliasAvailableError(Exception):
-    """Exception raised when there is no available alias to assign to a relation."""
-
-
 class DatabaseRequires(Object):
     """Requires-side of the database relation."""
 
@@ -206,6 +202,15 @@ class DatabaseRequires(Object):
 
         # Define custom event names for each alias.
         if relations_aliases:
+            # Ensure the number of aliases match the maximum number
+            # of connections allowed in the specific relation.
+            relation_connection_limit = self.charm.meta.requires[relation_name].limit
+            if len(relations_aliases) != relation_connection_limit:
+                raise ValueError(
+                    f"The number of aliases must match the maximum number of connections allowed in the relation. "
+                    f"Expected {relation_connection_limit}, got {len(relations_aliases)}"
+                )
+
             for relation_alias in relations_aliases:
                 self.on.define_event(f"{relation_alias}_database_created", DatabaseCreatedEvent)
                 self.on.define_event(
@@ -224,16 +229,18 @@ class DatabaseRequires(Object):
 
         Args:
             relation_id: the identifier for a particular relation.
-
-        Raises:
-            NoAliasAvailableError if there is no available alias to assign to the relation.
         """
-        # Only the leader should handle this task.
-        if not self.local_unit.is_leader():
+        # If this unit isn't the leader or no aliases were provided, return immediately.
+        if not self.local_unit.is_leader() or not self.relations_aliases:
             return
 
-        # If no aliases were provided, return immediately.
-        if not self.relations_aliases:
+        # Return if an alias was already assigned to this relation
+        # (like when there are more than one unit joining the relation).
+        if (
+            self.charm.model.get_relation(self.relation_name, relation_id)
+            .data[self.local_app]
+            .get("alias")
+        ):
             return
 
         # Retrieve the available aliases (the ones that weren't assigned to any relation).
@@ -243,11 +250,6 @@ class DatabaseRequires(Object):
             if alias:
                 logger.debug(f"Alias {alias} was already assigned to relation {relation.id}")
                 available_aliases.remove(alias)
-
-        # Don't assign an alias if there is no available alias in the list
-        # (an alias that wasn't assigned yet to another relation).
-        if len(available_aliases) == 0:
-            raise NoAliasAvailableError(f"No alias available to assign to relation {relation_id}")
 
         # Set the alias in the application relation databag of the specific relation.
         self._update_relation_data(relation_id, {"alias": available_aliases[0]})
@@ -347,13 +349,7 @@ class DatabaseRequires(Object):
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
         """Event emitted when the application joins the database relation."""
         # If relations aliases were provided, assign one to the relation.
-        try:
-            self._assign_relation_alias(event.relation.id)
-        except NoAliasAvailableError as e:
-            logger.error(str(e))
-            # Set a blocked status if there is no available alias
-            # (all of them were already assigned to other relations).
-            self.charm.unit.status = BlockedStatus(str(e))
+        self._assign_relation_alias(event.relation.id)
 
         # Sets both database and extra user roles in the relation
         # if the roles are provided. Otherwise, sets only the database.
