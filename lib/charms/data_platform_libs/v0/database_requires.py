@@ -94,7 +94,10 @@ class ApplicationCharm(CharmBase):
 
         # Define the cluster aliases and one handler for each cluster database created event.
         self.database = DatabaseRequires(
-            self, relation_name="database", database_name="database", cluster
+            self,
+            relation_name="database",
+            database_name="database",
+            relations_aliases = ["cluster1", "cluster2"],
         )
         self.framework.observe(
             self.database.on.cluster1_database_created, self._on_cluster1_database_created
