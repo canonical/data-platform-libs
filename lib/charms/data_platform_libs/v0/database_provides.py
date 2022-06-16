@@ -18,6 +18,10 @@ This library is a uniform interface to a selection of common database
 metadata, with added custom events that add convenience to database management,
 and methods to set the application related data.
 
+It can be used as the main library in a database charm to handle relations with
+application charms or be extended/used as a template when creating a more complete library
+(like one that also handles the database and user creation using database specific APIs).
+
 Following an example of using the DatabaseRequestedEvent, in the context of the
 database charm code:
 
