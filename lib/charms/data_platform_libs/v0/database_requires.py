@@ -61,10 +61,11 @@ which are listed below:
   have changed
 
 If it's needed to connect multiple database clusters to the same relation endpoint
-it's possible to provide or not aliases for the different clusters/relations.
+the application charm can implement the same code as if it would connect to only
+one database cluster (like the above code example).
 
 To differentiate multiple clusters connected to the same relation endpoint
-without providing aliases, it's possible to use the name of the remote application:
+the application charm can use the name of the remote application:
 
 ```python
 
@@ -73,7 +74,9 @@ def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
     cluster = event.relation.app.name
 ```
 
-If cluster aliases are provided, then it's possible to differentiate the clusters in two ways.
+It's also possible to provide an alias for each different database cluster/relation.
+
+This way, it's possible to differentiate the clusters in two ways.
 The first is to use the remote application name, ie `event.relation.app.name`, as mentioned above.
 
 The second way is to use different event handlers to handle each cluster events.
