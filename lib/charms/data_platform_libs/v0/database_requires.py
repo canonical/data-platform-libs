@@ -52,6 +52,14 @@ class ApplicationCharm(CharmBase):
         self.unit.status = ActiveStatus("received database credentials")
 ```
 
+As shown above, the library provides some custom events to handle specific situations,
+which are listed below:
+
+- database_created: event emitted when the requested database was created
+- endpoints_changed: event emitted when the read/write endpoints of the database have changed
+- read_only_endpoints_changed: event emitted when the read-only endpoints of the database
+  have changed
+
 If it's needed to connect multiple database clusters to the same relation endpoint
 it's possible to provide or not aliases for the different clusters/relations.
 

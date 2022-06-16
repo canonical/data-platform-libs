@@ -52,6 +52,12 @@ class SampleCharm(CharmBase):
 
         # set other variables for the relation event.set_tls("False")
 ```
+
+As shown above, the library provides a custom event (database_requested) to handle
+the situation when an application charm requests a new database to be created.
+It's preferred to subscribe to this event instead of relation changed event to avoid
+creating a new database when other information other than a database name is
+exchanged in the relation databag.
 """
 import json
 import logging
