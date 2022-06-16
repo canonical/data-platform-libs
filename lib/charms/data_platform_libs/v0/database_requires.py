@@ -76,7 +76,7 @@ def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
 
 It's also possible to provide an alias for each different database cluster/relation.
 
-This way, it's possible to differentiate the clusters in two ways.
+So, it's possible to differentiate the clusters in two ways.
 The first is to use the remote application name, ie `event.relation.app.name`, as mentioned above.
 
 The second way is to use different event handlers to handle each cluster events.
