@@ -51,6 +51,84 @@ class ApplicationCharm(CharmBase):
         # Set active status
         self.unit.status = ActiveStatus("received database credentials")
 ```
+
+As shown above, the library provides some custom events to handle specific situations,
+which are listed below:
+
+- database_created: event emitted when the requested database was created
+- endpoints_changed: event emitted when the read/write endpoints of the database have changed
+- read_only_endpoints_changed: event emitted when the read-only endpoints of the database
+  have changed
+
+If it's needed to connect multiple database clusters to the same relation endpoint
+the application charm can implement the same code as if it would connect to only
+one database cluster (like the above code example).
+
+To differentiate multiple clusters connected to the same relation endpoint
+the application charm can use the name of the remote application:
+
+```python
+
+def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
+    # Get the remote app name of the cluster that triggered this event
+    cluster = event.relation.app.name
+```
+
+It's also possible to provide an alias for each different database cluster/relation.
+
+So, it's possible to differentiate the clusters in two ways.
+The first is to use the remote application name, ie `event.relation.app.name`, as mentioned above.
+
+The second way is to use different event handlers to handle each cluster events.
+The implementation would be something like the following code:
+
+```python
+
+from charms.data_platform_libs.v0.database_requires import DatabaseRequires
+
+class ApplicationCharm(CharmBase):
+    # Application charm that connects to database charms.
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        # Define the cluster aliases and one handler for each cluster database created event.
+        self.database = DatabaseRequires(
+            self,
+            relation_name="database",
+            database_name="database",
+            relations_aliases = ["cluster1", "cluster2"],
+        )
+        self.framework.observe(
+            self.database.on.cluster1_database_created, self._on_cluster1_database_created
+        )
+        self.framework.observe(
+            self.database.on.cluster2_database_created, self._on_cluster2_database_created
+        )
+
+    def _on_cluster1_database_created(self, event: DatabaseCreatedEvent) -> None:
+        # Handle the created database on the cluster named cluster1
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            event.username,
+            event.password,
+            event.endpoints,
+        )
+        ...
+
+    def _on_cluster2_database_created(self, event: DatabaseCreatedEvent) -> None:
+        # Handle the created database on the cluster named cluster2
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            event.username,
+            event.password,
+            event.endpoints,
+        )
+        ...
+
+```
 """
 
 import json
