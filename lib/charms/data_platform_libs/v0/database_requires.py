@@ -51,6 +51,70 @@ class ApplicationCharm(CharmBase):
         # Set active status
         self.unit.status = ActiveStatus("received database credentials")
 ```
+
+If it's needed to connect multiple database clusters to the same relation endpoint
+it's possible to provide or not aliases for the different clusters/relations.
+
+To differentiate multiple clusters connected to the same relation endpoint
+without providing aliases, it's possible to use the name of the remote application:
+
+```python
+
+def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
+    # Get the remote app name of the cluster that triggered this event
+    cluster = event.relation.app.name
+```
+
+If cluster aliases are provided, then it's possible to differentiate the clusters in two ways.
+The first is the same as without providing cluster aliases (using the remote application name).
+
+The second way to do that is by using different event handlers to handle each cluster events.
+The implementation would be something like the following code:
+
+```python
+
+from charms.data_platform_libs.v0.database_requires import DatabaseRequires
+
+class ApplicationCharm(CharmBase):
+    # Application charm that connects to database charms.
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        # Define the cluster aliases and one handler for each cluster database created event.
+        self.database = DatabaseRequires(
+            self, relation_name="database", database_name="database", cluster
+        )
+        self.framework.observe(
+            self.database.on.cluster1_database_created, self._on_cluster1_database_created
+        )
+        self.framework.observe(
+            self.database.on.cluster2_database_created, self._on_cluster2_database_created
+        )
+
+    def _on_cluster1_database_created(self, event: DatabaseCreatedEvent) -> None:
+        # Handle the created database on the cluster named cluster1
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            event.username,
+            event.password,
+            event.endpoints,
+        )
+        ...
+
+    def _on_cluster2_database_created(self, event: DatabaseCreatedEvent) -> None:
+        # Handle the created database on the cluster named cluster2
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            event.username,
+            event.password,
+            event.endpoints,
+        )
+        ...
+
+```
 """
 
 import json
