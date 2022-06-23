@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Relation requirer side abstraction for database relation.
+"""Relation require side abstraction for database relation.
 
 This library is a uniform interface to a selection of common database
 metadata, with added custom events that add convenience to database management,
@@ -55,12 +55,12 @@ class ApplicationCharm(CharmBase):
 As shown above, the library provides some custom events to handle specific situations,
 which are listed below:
 
-- database_created: event emitted when the requested database was created
-- endpoints_changed: event emitted when the read/write endpoints of the database have changed
-- read_only_endpoints_changed: event emitted when the read-only endpoints of the database
-  have changed
+— database_created: event emitted when the requested database was created.
+— endpoints_changed: event emitted when the read/write endpoints of the database have changed.
+— read_only_endpoints_changed: event emitted when the read-only endpoints of the database
+  have changed.
 
-If it's needed to connect multiple database clusters to the same relation endpoint
+If it is needed to connect multiple database clusters to the same relation endpoint
 the application charm can implement the same code as if it would connect to only
 one database cluster (like the above code example).
 
@@ -74,10 +74,10 @@ def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
     cluster = event.relation.app.name
 ```
 
-It's also possible to provide an alias for each different database cluster/relation.
+It is also possible to provide an alias for each different database cluster/relation.
 
-So, it's possible to differentiate the clusters in two ways.
-The first is to use the remote application name, ie `event.relation.app.name`, as mentioned above.
+So, it is possible to differentiate the clusters in two ways.
+The first is to use the remote application name, i.e., `event.relation.app.name`, as above.
 
 The second way is to use different event handlers to handle each cluster events.
 The implementation would be something like the following code:
@@ -153,7 +153,7 @@ LIBID = "0241e088ffa9440fb4e3126349b2fb62"
 LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
-# to 0 if you are raising the major API version
+# to 0 if you are raising the major API version.
 LIBPATCH = 1
 
 logger = logging.getLogger(__name__)
@@ -244,9 +244,10 @@ Diff = namedtuple("Diff", "added changed deleted")
 Diff.__doc__ = """
 A tuple for storing the diff between two data mappings.
 
-added - keys that were added
-changed - keys that still exist but have new values
-deleted - key that were deleted"""
+— added — keys that were added.
+— changed — keys that still exist but have new values.
+— deleted — key were deleted.
+"""
 
 
 class DatabaseRequires(Object):
@@ -280,7 +281,7 @@ class DatabaseRequires(Object):
 
         # Define custom event names for each alias.
         if relations_aliases:
-            # Ensure the number of aliases match the maximum number
+            # Ensure the amount aliases match the maximum amount
             # of connections allowed in the specific relation.
             relation_connection_limit = self.charm.meta.requires[relation_name].limit
             if len(relations_aliases) != relation_connection_limit:
@@ -385,7 +386,7 @@ class DatabaseRequires(Object):
             relation_id: the identifier for a particular relation.
 
         Returns:
-            the relation alias or None if the relation wasn't found.
+            the relation alias or None if the relation was not found.
         """
         for relation in self.charm.model.relations[self.relation_name]:
             if relation.id == relation_id:
@@ -400,7 +401,7 @@ class DatabaseRequires(Object):
 
         Returns:
             a dict of the values stored in the relation data bag
-                for all relation instances (indexed by the relation id).
+                for all relation instances (indexed by the relation ID).
         """
         data = {}
         for relation in self.relations:
@@ -455,6 +456,7 @@ class DatabaseRequires(Object):
         # (the database charm shared the credentials).
         if "username" in diff.added and "password" in diff.added:
             # Emit the default event (the one without an alias).
+            logger.info(f"database created on {datetime.now()}")
             self.on.database_created.emit(event.relation)
 
             # Emit the aliased event (if any).
