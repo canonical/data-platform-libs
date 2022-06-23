@@ -34,6 +34,7 @@ class ApplicationCharm(CharmBase):
         # Charm events defined in the database requires charm library.
         self.database = DatabaseRequires(self, relation_name="database", database_name="database")
         self.framework.observe(self.database.on.database_created, self._on_database_created)
+        self.framework.observe(self.database.on.database_departed, self._on_database_departed)
 
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
         # Handle the created database
@@ -56,6 +57,7 @@ As shown above, the library provides some custom events to handle specific situa
 which are listed below:
 
 - database_created: event emitted when the requested database was created
+— database_departed: event emitted when the requested database was departed.
 - endpoints_changed: event emitted when the read/write endpoints of the database have changed
 - read_only_endpoints_changed: event emitted when the read-only endpoints of the database
   have changed
@@ -140,6 +142,7 @@ from typing import List, Optional
 from ops.charm import (
     CharmEvents,
     RelationChangedEvent,
+    RelationDepartedEvent,
     RelationEvent,
     RelationJoinedEvent,
 )
@@ -221,6 +224,10 @@ class DatabaseCreatedEvent(DatabaseEvent):
     """Event emitted when a new database is created for use on this relation."""
 
 
+class DatabaseDepartedEvent(DatabaseEvent):
+    """Event emitted when database relation departed."""
+
+
 class DatabaseEndpointsChangedEvent(DatabaseEvent):
     """Event emitted when the read/write endpoints are changed."""
 
@@ -236,6 +243,7 @@ class DatabaseEvents(CharmEvents):
     """
 
     database_created = EventSource(DatabaseCreatedEvent)
+    database_departed = EventSource(DatabaseDepartedEvent)
     endpoints_changed = EventSource(DatabaseEndpointsChangedEvent)
     read_only_endpoints_changed = EventSource(DatabaseReadOnlyEndpointsChangedEvent)
 
@@ -276,6 +284,9 @@ class DatabaseRequires(Object):
         )
         self.framework.observe(
             self.charm.on[relation_name].relation_changed, self._on_relation_changed_event
+        )
+        self.framework.observe(
+            self.charm.on[relation_name].relation_departed, self._on_relation_departed_event
         )
 
         # Define custom event names for each alias.
@@ -479,6 +490,13 @@ class DatabaseRequires(Object):
 
             # Emit the aliased event (if any).
             self._emit_aliased_event(event.relation, "read_only_endpoints_changed")
+
+    def _on_relation_departed_event(self, event: RelationDepartedEvent) -> None:
+        """Event emitted when the database relation has departed."""
+        self.on.database_departed.emit(event.relation)
+
+        # Emit the aliased event (if any).
+        self._emit_aliased_event(event.relation, "database_departed")
 
     @property
     def relations(self) -> List[Relation]:
