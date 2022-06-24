@@ -246,7 +246,7 @@ A tuple for storing the diff between two data mappings.
 
 — added — keys that were added.
 — changed — keys that still exist but have new values.
-— deleted — key were deleted.
+— deleted — keys that were deleted.
 """
 
 
