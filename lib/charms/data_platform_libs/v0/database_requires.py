@@ -456,7 +456,7 @@ class DatabaseRequires(Object):
         # (the database charm shared the credentials).
         if "username" in diff.added and "password" in diff.added:
             # Emit the default event (the one without an alias).
-            logger.info(f"database created on {datetime.now()}")
+            logger.info("database created at %s", datetime.now())
             self.on.database_created.emit(event.relation)
 
             # Emit the aliased event (if any).
