@@ -55,7 +55,7 @@ class ApplicationCharm(CharmBase):
 As shown above, the library provides some custom events to handle specific situations,
 which are listed below:
 
-— database_created: event emitted when the requested database was created.
+— database_created: event emitted when the requested database is created.
 — endpoints_changed: event emitted when the read/write endpoints of the database have changed.
 — read_only_endpoints_changed: event emitted when the read-only endpoints of the database
   have changed.
