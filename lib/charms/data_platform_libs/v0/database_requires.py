@@ -302,6 +302,7 @@ class DatabaseRequires(Object):
 
             for relation_alias in relations_aliases:
                 self.on.define_event(f"{relation_alias}_database_created", DatabaseCreatedEvent)
+                self.on.define_event(f"{relation_alias}_database_departed", DatabaseDepartedEvent)
                 self.on.define_event(
                     f"{relation_alias}_endpoints_changed", DatabaseEndpointsChangedEvent
                 )

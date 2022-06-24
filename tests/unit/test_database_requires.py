@@ -66,6 +66,7 @@ def reset_aliases():
     for cluster_alias in CLUSTER_ALIASES:
         try:
             delattr(DatabaseEvents, f"{cluster_alias}_database_created")
+            delattr(DatabaseEvents, f"{cluster_alias}_database_departed")
             delattr(DatabaseEvents, f"{cluster_alias}_endpoints_changed")
             delattr(DatabaseEvents, f"{cluster_alias}_read_only_endpoints_changed")
         except AttributeError:
