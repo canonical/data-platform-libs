@@ -58,7 +58,7 @@ which are listed below:
 - database_created: event emitted when the requested database was created
 - endpoints_changed: event emitted when the read/write endpoints of the database have changed
 - read_only_endpoints_changed: event emitted when the read-only endpoints of the database
-  have changed
+  have changed. Event is not triggered if read/write endpoints changed too.
 
 If it's needed to connect multiple database clusters to the same relation endpoint
 the application charm can implement the same code as if it would connect to only
@@ -460,6 +460,10 @@ class DatabaseRequires(Object):
             # Emit the aliased event (if any).
             self._emit_aliased_event(event.relation, "database_created")
 
+            # To avoid unnecessary application restarts do not trigger
+            # “endpoints_changed“ event if “database_created“ is triggered.
+            return
+
         # Emit an endpoints changed event if the database
         # added or changed this info in the relation databag.
         if "endpoints" in diff.added or "endpoints" in diff.changed:
@@ -469,6 +473,10 @@ class DatabaseRequires(Object):
 
             # Emit the aliased event (if any).
             self._emit_aliased_event(event.relation, "endpoints_changed")
+
+            # To avoid unnecessary application restarts do not trigger
+            # “read_only_endpoints_changed“ event if “endpoints_changed“ is triggered.
+            return
 
         # Emit a read only endpoints changed event if the database
         # added or changed this info in the relation databag.
