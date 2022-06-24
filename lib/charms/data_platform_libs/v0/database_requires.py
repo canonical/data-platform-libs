@@ -281,7 +281,7 @@ class DatabaseRequires(Object):
 
         # Define custom event names for each alias.
         if relations_aliases:
-            # Ensure the amount aliases match the maximum amount
+            # Ensure the number of aliases does not exceed the maximum
             # of connections allowed in the specific relation.
             relation_connection_limit = self.charm.meta.requires[relation_name].limit
             if len(relations_aliases) != relation_connection_limit:
