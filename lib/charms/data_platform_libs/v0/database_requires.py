@@ -327,7 +327,7 @@ class DatabaseRequires(Object):
         for relation in self.charm.model.relations[self.relation_name]:
             alias = relation.data[self.local_app].get("alias")
             if alias:
-                logger.debug(f"Alias {alias} was already assigned to relation {relation.id}")
+                logger.debug("Alias %s was already assigned to relation %d", alias, relation.id)
                 available_aliases.remove(alias)
 
         # Set the alias in the application relation databag of the specific relation.
@@ -466,7 +466,7 @@ class DatabaseRequires(Object):
         # added or changed this info in the relation databag.
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
-            logger.info(f"endpoints changed on {datetime.now()}")
+            logger.info("endpoints changed on %s", datetime.now())
             self.on.endpoints_changed.emit(event.relation)
 
             # Emit the aliased event (if any).
@@ -476,7 +476,7 @@ class DatabaseRequires(Object):
         # added or changed this info in the relation databag.
         if "read-only-endpoints" in diff.added or "read-only-endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
-            logger.info(f"read-only-endpoints changed on {datetime.now()}")
+            logger.info("read-only-endpoints changed on %s", datetime.now())
             self.on.read_only_endpoints_changed.emit(event.relation)
 
             # Emit the aliased event (if any).
