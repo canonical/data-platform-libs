@@ -313,7 +313,11 @@ class TestDatabaseRequires(unittest.TestCase):
 
         # Call the emit function and assert the desired event is triggered.
         relation = self.harness.charm.model.get_relation(RELATION_NAME, self.rel_id)
-        self.harness.charm.database._emit_aliased_event(relation, "database_created")
+        mock_event = Mock()
+        mock_event.app = self.harness.charm.model.get_app("application")
+        mock_event.unit = self.harness.charm.model.get_unit("application/0")
+        mock_event.relation = relation
+        self.harness.charm.database._emit_aliased_event(mock_event, "database_created")
         _on_cluster1_database_created.assert_called_once()
 
     def test_get_relation_alias(self):

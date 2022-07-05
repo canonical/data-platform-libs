@@ -164,6 +164,9 @@ async def test_an_application_can_connect_to_multiple_database_clusters(
     first_cluster_relation = await ops_test.model.add_relation(
         f"{APPLICATION_APP_NAME}:{MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}", DATABASE_APP_NAME
     )
+    # This call enables the unit to be available in the relation changed event.
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
     second_cluster_relation = await ops_test.model.add_relation(
         f"{APPLICATION_APP_NAME}:{MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}",
         ANOTHER_DATABASE_APP_NAME,
@@ -193,15 +196,16 @@ async def test_an_application_can_connect_to_multiple_aliased_database_clusters(
     """Test that an application can connect to different clusters of the same database."""
     # Relate the application with both database clusters
     # and wait for them exchanging some connection data.
-    await asyncio.gather(
-        ops_test.model.add_relation(
-            f"{APPLICATION_APP_NAME}:{ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}",
-            DATABASE_APP_NAME,
-        ),
-        ops_test.model.add_relation(
-            f"{APPLICATION_APP_NAME}:{ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}",
-            ANOTHER_DATABASE_APP_NAME,
-        ),
+    await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}",
+        DATABASE_APP_NAME,
+    )
+    # This call enables the unit to be available in the relation changed event.
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME}",
+        ANOTHER_DATABASE_APP_NAME,
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 

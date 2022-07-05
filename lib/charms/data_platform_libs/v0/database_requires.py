@@ -154,7 +154,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version.
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -368,16 +368,18 @@ class DatabaseRequires(Object):
         # Return the diff with all possible changes.
         return Diff(added, changed, deleted)
 
-    def _emit_aliased_event(self, relation: Relation, event_name: str) -> None:
+    def _emit_aliased_event(self, event: RelationChangedEvent, event_name: str) -> None:
         """Emit an aliased event to a particular relation if it has an alias.
 
         Args:
-            relation: a particular relation.
+            event: the relation changed event that was received.
             event_name: the name of the event to emit.
         """
-        alias = self._get_relation_alias(relation.id)
+        alias = self._get_relation_alias(event.relation.id)
         if alias:
-            getattr(self.on, f"{alias}_{event_name}").emit(relation)
+            getattr(self.on, f"{alias}_{event_name}").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
 
     def _get_relation_alias(self, relation_id: int) -> Optional[str]:
         """Returns the relation alias.
@@ -457,30 +459,32 @@ class DatabaseRequires(Object):
         if "username" in diff.added and "password" in diff.added:
             # Emit the default event (the one without an alias).
             logger.info("database created at %s", datetime.now())
-            self.on.database_created.emit(event.relation)
+            self.on.database_created.emit(event.relation, app=event.app, unit=event.unit)
 
             # Emit the aliased event (if any).
-            self._emit_aliased_event(event.relation, "database_created")
+            self._emit_aliased_event(event, "database_created")
 
         # Emit an endpoints changed event if the database
         # added or changed this info in the relation databag.
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("endpoints changed on %s", datetime.now())
-            self.on.endpoints_changed.emit(event.relation)
+            self.on.endpoints_changed.emit(event.relation, app=event.app, unit=event.unit)
 
             # Emit the aliased event (if any).
-            self._emit_aliased_event(event.relation, "endpoints_changed")
+            self._emit_aliased_event(event, "endpoints_changed")
 
         # Emit a read only endpoints changed event if the database
         # added or changed this info in the relation databag.
         if "read-only-endpoints" in diff.added or "read-only-endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("read-only-endpoints changed on %s", datetime.now())
-            self.on.read_only_endpoints_changed.emit(event.relation)
+            self.on.read_only_endpoints_changed.emit(
+                event.relation, app=event.app, unit=event.unit
+            )
 
             # Emit the aliased event (if any).
-            self._emit_aliased_event(event.relation, "read_only_endpoints_changed")
+            self._emit_aliased_event(event, "read_only_endpoints_changed")
 
     @property
     def relations(self) -> List[Relation]:
