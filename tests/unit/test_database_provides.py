@@ -174,6 +174,15 @@ class TestDatabaseProvides(unittest.TestCase):
     def test_database_requested_event(self):
         # Test custom event creation
 
+        # Test the event being emitted by the application.
         with capture(self.harness.charm, DatabaseRequestedEvent) as captured:
             self.harness.update_relation_data(self.rel_id, "application", {"database": DATABASE})
         assert captured.event.app.name == "application"
+
+        # Reset the diff data to trigger the event again later.
+        self.harness.update_relation_data(self.rel_id, "database", {"data": "{}"})
+
+        # Test the event being emitted by the unit.
+        with capture(self.harness.charm, DatabaseRequestedEvent) as captured:
+            self.harness.update_relation_data(self.rel_id, "application/0", {"database": DATABASE})
+        assert captured.event.unit.name == "application/0"

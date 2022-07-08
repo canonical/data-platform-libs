@@ -5,10 +5,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 from charms.data_platform_libs.v0.database_requires import (
+    DatabaseCreatedEvent,
+    DatabaseEndpointsChangedEvent,
     DatabaseEvents,
+    DatabaseReadOnlyEndpointsChangedEvent,
     DatabaseRequires,
     Diff,
 )
+from charms.harness_extensions.v0.capture_events import capture_events
 from ops.charm import CharmBase
 from ops.testing import Harness
 
@@ -324,3 +328,43 @@ class TestDatabaseRequires(unittest.TestCase):
         """Asserts the correct relation alias is returned."""
         # Assert the relation got the first cluster alias.
         assert self.harness.charm.database._get_relation_alias(self.rel_id) == CLUSTER_ALIASES[0]
+
+    def test_database_events(self):
+        # Test custom events creation
+
+        events = [
+            {
+                "event": DatabaseCreatedEvent,
+                "data": {"username": "test-username", "password": "test-password"},
+            },
+            {
+                "event": DatabaseEndpointsChangedEvent,
+                "data": {"endpoints": "host1:port,host2:port"},
+            },
+            {
+                "event": DatabaseReadOnlyEndpointsChangedEvent,
+                "data": {"read-only-endpoints": "host1:port,host2:port"},
+            },
+        ]
+
+        for event in events:
+            # Test the event being emitted by the application.
+            with capture_events(self.harness.charm, event["event"]) as captured_events:
+                self.harness.update_relation_data(self.rel_id, "database", event["data"])
+
+            # There are two events (one aliased and the other without alias).
+            assert len(captured_events) == 2
+            for captured in captured_events:
+                assert captured.app.name == "database"
+
+            # Reset the diff data to trigger the event again later.
+            self.harness.update_relation_data(self.rel_id, "application", {"data": "{}"})
+
+            # Test the event being emitted by the unit.
+            with capture_events(self.harness.charm, event["event"]) as captured_events:
+                self.harness.update_relation_data(self.rel_id, "database/0", event["data"])
+
+            # There are two events (one aliased and the other without alias).
+            assert len(captured_events) == 2
+            for captured in captured_events:
+                assert captured.unit.name == "database/0"
