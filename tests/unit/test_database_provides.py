@@ -3,7 +3,12 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from charms.data_platform_libs.v0.database_provides import DatabaseProvides, Diff
+from charms.data_platform_libs.v0.database_provides import (
+    DatabaseProvides,
+    DatabaseRequestedEvent,
+    Diff,
+)
+from charms.harness_extensions.v0.capture_events import capture
 from ops.charm import CharmBase
 from ops.testing import Harness
 
@@ -165,3 +170,10 @@ class TestDatabaseProvides(unittest.TestCase):
         # (the diff/data key should not be present).
         data = self.harness.charm.database.fetch_relation_data()
         assert data == {self.rel_id: {"database": DATABASE}}
+
+    def test_database_requested_event(self):
+        # Test custom event creation
+
+        with capture(self.harness.charm, DatabaseRequestedEvent) as captured:
+            self.harness.update_relation_data(self.rel_id, "application", {"database": DATABASE})
+        assert captured.event.app.name == "application"
