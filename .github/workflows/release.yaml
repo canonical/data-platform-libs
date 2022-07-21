@@ -1,6 +1,9 @@
-name: PR Tests
+name: Release to latest/edge
+
 on:
-  pull_request:
+  push:
+    branches:
+      - main
 
 jobs:
   lint:
@@ -13,6 +16,7 @@ jobs:
         run: python3 -m pip install tox
       - name: Run linters
         run: tox -e lint
+
   unit-test:
     name: Unit tests
     runs-on: ubuntu-latest
@@ -23,7 +27,8 @@ jobs:
         run: python -m pip install tox
       - name: Run tests
         run: tox -e unit
-  integration-test-microk8s:
+
+  integration-test:
     name: Integration tests (microk8s)
     runs-on: ubuntu-latest
     steps:
@@ -34,11 +39,26 @@ jobs:
         with:
           provider: microk8s
       - name: Run integration tests
-        # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox -e integration -- --model testing
-      - name: Dump logs
-        uses: canonical/charm-logdump-action@main
-        if: failure()
+        run: tox -e integration
+
+  release-to-charmhub:
+    name: Release to CharmHub
+    needs:
+      - lint
+      - unit-test
+      - integration-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
         with:
-          app: data-platform-libs
-          model: testing
+          fetch-depth: 0
+      - name: Select charmhub channel
+        uses: canonical/charming-actions/channel@1.0.3
+        id: channel
+      - name: Upload charm to charmhub
+        uses: canonical/charming-actions/upload-charm@1.0.3
+        with:
+          credentials: "${{ secrets.CHARMHUB_TOKEN }}" # FIXME: current token will expire in 2025-04-16
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          channel: "${{ steps.channel.outputs.name }}"
