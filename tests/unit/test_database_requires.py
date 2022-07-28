@@ -19,7 +19,7 @@ from ops.testing import Harness
 CLUSTER_ALIASES = ["cluster1", "cluster2"]
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
-RELATION_INTERFACE = "database-client"
+RELATION_INTERFACE = "database_client"
 RELATION_NAME = "database"
 METADATA = f"""
 name: application

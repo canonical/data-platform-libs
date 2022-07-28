@@ -14,7 +14,7 @@ from ops.testing import Harness
 
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
-RELATION_INTERFACE = "database-client"
+RELATION_INTERFACE = "database_client"
 RELATION_NAME = "database"
 METADATA = f"""
 name: database
