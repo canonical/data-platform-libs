@@ -9,11 +9,11 @@ summary: |
 
 requires:
   first-database:
-    interface: database-client
+    interface: database_client
   second-database:
-    interface: database-client
+    interface: database_client
   multiple-database-clusters:
-    interface: database-client
+    interface: database_client
   aliased-multiple-database-clusters:
-    interface: database-client
+    interface: database_client
     limit: 2
