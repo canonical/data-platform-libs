@@ -308,7 +308,7 @@ class DatabaseRequires(Object):
         Args:
             relation_id: the identifier for a particular relation.
         """
-        # If this unit isn't the leader or no aliases were provided, return immediately.
+        # If no aliases were provided, return immediately.
         if not self.relations_aliases:
             return
 
@@ -447,8 +447,6 @@ class DatabaseRequires(Object):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
-        # Only the leader should handle this event.
-
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
