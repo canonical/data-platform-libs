@@ -10,10 +10,7 @@ import pytest
 import yaml
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.helpers import (
-    build_connection_string,
-    get_application_relation_data,
-)
+from tests.integration.helpers import build_connection_string, get_unit_relation_data
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +72,7 @@ async def test_database_relation_with_charm_libraries(ops_test: OpsTest):
 
     # Get the connection string to connect to the database.
     connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+        ops_test, f"{APPLICATION_APP_NAME}/0", FIRST_DATABASE_RELATION_NAME
     )
 
     # Connect to the database.
@@ -96,8 +93,8 @@ async def test_database_relation_with_charm_libraries(ops_test: OpsTest):
 
         # Get the version of the database and compare with the information that
         # was retrieved directly from the database.
-        version = await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "version"
+        version = await get_unit_relation_data(
+            ops_test, f"{APPLICATION_APP_NAME}/0", FIRST_DATABASE_RELATION_NAME, "version"
         )
         assert version == data[0]
 
@@ -106,7 +103,7 @@ async def test_user_with_extra_roles(ops_test: OpsTest):
     """Test superuser actions and the request for more permissions."""
     # Get the connection string to connect to the database.
     connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+        ops_test, f"{APPLICATION_APP_NAME}/0", FIRST_DATABASE_RELATION_NAME
     )
 
     # Connect to the database.
@@ -147,10 +144,10 @@ async def test_two_applications_doesnt_share_the_same_relation_data(
 
     # Assert the two application have different relation (connection) data.
     application_connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+        ops_test, f"{APPLICATION_APP_NAME}/0", FIRST_DATABASE_RELATION_NAME
     )
     another_application_connection_string = await build_connection_string(
-        ops_test, another_application_app_name, FIRST_DATABASE_RELATION_NAME
+        ops_test, f"{another_application_app_name}/0", FIRST_DATABASE_RELATION_NAME
     )
     assert application_connection_string != another_application_connection_string
 
@@ -177,13 +174,13 @@ async def test_an_application_can_connect_to_multiple_database_clusters(
     # and assert they are different.
     application_connection_string = await build_connection_string(
         ops_test,
-        APPLICATION_APP_NAME,
+        f"{APPLICATION_APP_NAME}/0",
         MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME,
         relation_id=first_cluster_relation.id,
     )
     another_application_connection_string = await build_connection_string(
         ops_test,
-        APPLICATION_APP_NAME,
+        f"{APPLICATION_APP_NAME}/0",
         MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME,
         relation_id=second_cluster_relation.id,
     )
@@ -213,13 +210,13 @@ async def test_an_application_can_connect_to_multiple_aliased_database_clusters(
     # and assert they are different.
     application_connection_string = await build_connection_string(
         ops_test,
-        APPLICATION_APP_NAME,
+        f"{APPLICATION_APP_NAME}/0",
         ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME,
         relation_alias="cluster1",
     )
     another_application_connection_string = await build_connection_string(
         ops_test,
-        APPLICATION_APP_NAME,
+        f"{APPLICATION_APP_NAME}/0",
         ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME,
         relation_alias="cluster2",
     )
@@ -236,10 +233,10 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
 
     # Get the connection strings to connect to both databases.
     first_database_connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+        ops_test, f"{APPLICATION_APP_NAME}/0", FIRST_DATABASE_RELATION_NAME
     )
     second_database_connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME
+        ops_test, f"{APPLICATION_APP_NAME}/0", SECOND_DATABASE_RELATION_NAME
     )
 
     # Assert the two application have different relation (connection) data.
