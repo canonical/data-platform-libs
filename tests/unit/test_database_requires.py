@@ -15,6 +15,7 @@ from charms.data_platform_libs.v0.database_requires import (
 from charms.harness_extensions.v0.capture_events import capture_events
 from ops.charm import CharmBase
 from ops.testing import Harness
+from parameterized import parameterized
 
 CLUSTER_ALIASES = ["cluster1", "cluster2"]
 DATABASE = "data_platform"
@@ -331,8 +332,12 @@ class TestDatabaseRequires(unittest.TestCase):
         # Assert the relation got the first cluster alias.
         assert self.harness.charm.database._get_relation_alias(self.rel_id) == CLUSTER_ALIASES[0]
 
-    def test_database_events(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_database_events(self, is_leader: bool):
         # Test custom events creation
+        # Test that the events are emitted to both the leader
+        # and the non-leader units through is_leader parameter.
+        self.harness.set_leader(is_leader)
 
         events = [
             {
