@@ -303,8 +303,7 @@ class DatabaseRequires(Object):
     def _assign_relation_alias(self, relation_id: int) -> None:
         """Assigns an alias to a relation.
 
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
+        This function writes in the unit data bag.
 
         Args:
             relation_id: the identifier for a particular relation.
@@ -330,7 +329,7 @@ class DatabaseRequires(Object):
                 logger.debug("Alias %s was already assigned to relation %d", alias, relation.id)
                 available_aliases.remove(alias)
 
-        # Set the alias in the application relation databag of the specific relation.
+        # Set the alias in the unit relation databag of the specific relation.
         relation = self.charm.model.get_relation(self.relation_name, relation_id)
         relation.data[self.local_unit].update({"alias": available_aliases[0]})
 
@@ -344,7 +343,7 @@ class DatabaseRequires(Object):
             a Diff instance containing the added, deleted and changed
                 keys from the event relation databag.
         """
-        # Retrieve the old data from the data key in the application relation databag.
+        # Retrieve the old data from the data key in the local unit relation databag.
         old_data = json.loads(event.relation.data[self.local_unit].get("data", "{}"))
         # Retrieve the new data from the event relation databag.
         new_data = {
