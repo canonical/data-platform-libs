@@ -9,7 +9,7 @@ from pytest_operator.plugin import OpsTest
 
 async def build_connection_string(
     ops_test: OpsTest,
-    unit_name: str,
+    application_name: str,
     relation_name: str,
     *,
     relation_id: str = None,
@@ -19,7 +19,7 @@ async def build_connection_string(
 
     Args:
         ops_test: The ops test framework instance
-        unit_name: The name of the unit
+        application_name: The name of the application
         relation_name: name of the relation to get connection data from
         relation_id: id of the relation to get connection data from
         relation_alias: alias of the relation (like a connection name)
@@ -28,16 +28,16 @@ async def build_connection_string(
     Returns:
         a PostgreSQL connection string
     """
-    # Get the connection data exposed to the unit through the relation.
-    database = f'{unit_name.split("/")[0].replace("-", "_")}_{relation_name.replace("-", "_")}'
-    username = await get_unit_relation_data(
-        ops_test, unit_name, relation_name, "username", relation_id, relation_alias
+    # Get the connection data exposed to the application through the relation.
+    database = f'{application_name.replace("-", "_")}_{relation_name.replace("-", "_")}'
+    username = await get_application_relation_data(
+        ops_test, application_name, relation_name, "username", relation_id, relation_alias
     )
-    password = await get_unit_relation_data(
-        ops_test, unit_name, relation_name, "password", relation_id, relation_alias
+    password = await get_application_relation_data(
+        ops_test, application_name, relation_name, "password", relation_id, relation_alias
     )
-    endpoints = await get_unit_relation_data(
-        ops_test, unit_name, relation_name, "endpoints", relation_id, relation_alias
+    endpoints = await get_application_relation_data(
+        ops_test, application_name, relation_name, "endpoints", relation_id, relation_alias
     )
     host = endpoints.split(",")[0].split(":")[0]
 
@@ -83,19 +83,19 @@ async def get_alias_from_relation_data(
     return relation_data["alias"]
 
 
-async def get_unit_relation_data(
+async def get_application_relation_data(
     ops_test: OpsTest,
-    unit_name: str,
+    application_name: str,
     relation_name: str,
     key: str,
     relation_id: str = None,
     relation_alias: str = None,
 ) -> Optional[str]:
-    """Get relation data for an unit.
+    """Get relation data for an application.
 
     Args:
         ops_test: The ops test framework instance
-        unit_name: The name of the unit
+        application_name: The name of the application
         relation_name: name of the relation to get connection data from
         key: key of data to be retrieved
         relation_id: id of the relation to get connection data from
@@ -107,10 +107,11 @@ async def get_unit_relation_data(
             if no data in the relation
 
     Raises:
-        ValueError if it's not possible to get unit data
+        ValueError if it's not possible to get application data
             or if there is no data for the particular relation endpoint
             and/or alias.
     """
+    unit_name = f"{application_name}/0"
     raw_data = (await ops_test.juju("show-unit", unit_name))[1]
     if not raw_data:
         raise ValueError(f"no unit info could be grabbed for {unit_name}")
