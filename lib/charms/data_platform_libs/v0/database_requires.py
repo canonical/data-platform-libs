@@ -154,7 +154,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version.
-LIBPATCH = 1
+LIBPATCH = 3
 
 logger = logging.getLogger(__name__)
 
@@ -303,21 +303,20 @@ class DatabaseRequires(Object):
     def _assign_relation_alias(self, relation_id: int) -> None:
         """Assigns an alias to a relation.
 
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
+        This function writes in the unit data bag.
 
         Args:
             relation_id: the identifier for a particular relation.
         """
-        # If this unit isn't the leader or no aliases were provided, return immediately.
-        if not self.local_unit.is_leader() or not self.relations_aliases:
+        # If no aliases were provided, return immediately.
+        if not self.relations_aliases:
             return
 
         # Return if an alias was already assigned to this relation
         # (like when there are more than one unit joining the relation).
         if (
             self.charm.model.get_relation(self.relation_name, relation_id)
-            .data[self.local_app]
+            .data[self.local_unit]
             .get("alias")
         ):
             return
@@ -325,13 +324,14 @@ class DatabaseRequires(Object):
         # Retrieve the available aliases (the ones that weren't assigned to any relation).
         available_aliases = self.relations_aliases[:]
         for relation in self.charm.model.relations[self.relation_name]:
-            alias = relation.data[self.local_app].get("alias")
+            alias = relation.data[self.local_unit].get("alias")
             if alias:
                 logger.debug("Alias %s was already assigned to relation %d", alias, relation.id)
                 available_aliases.remove(alias)
 
-        # Set the alias in the application relation databag of the specific relation.
-        self._update_relation_data(relation_id, {"alias": available_aliases[0]})
+        # Set the alias in the unit relation databag of the specific relation.
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+        relation.data[self.local_unit].update({"alias": available_aliases[0]})
 
     def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
@@ -343,8 +343,8 @@ class DatabaseRequires(Object):
             a Diff instance containing the added, deleted and changed
                 keys from the event relation databag.
         """
-        # Retrieve the old data from the data key in the application relation databag.
-        old_data = json.loads(event.relation.data[self.charm.model.app].get("data", "{}"))
+        # Retrieve the old data from the data key in the local unit relation databag.
+        old_data = json.loads(event.relation.data[self.local_unit].get("data", "{}"))
         # Retrieve the new data from the event relation databag.
         new_data = {
             key: value for key, value in event.relation.data[event.app].items() if key != "data"
@@ -363,21 +363,23 @@ class DatabaseRequires(Object):
         # TODO: evaluate the possibility of losing the diff if some error
         # happens in the charm before the diff is completely checked (DPE-412).
         # Convert the new_data to a serializable format and save it for a next diff check.
-        event.relation.data[self.local_app].update({"data": json.dumps(new_data)})
+        event.relation.data[self.local_unit].update({"data": json.dumps(new_data)})
 
         # Return the diff with all possible changes.
         return Diff(added, changed, deleted)
 
-    def _emit_aliased_event(self, relation: Relation, event_name: str) -> None:
+    def _emit_aliased_event(self, event: RelationChangedEvent, event_name: str) -> None:
         """Emit an aliased event to a particular relation if it has an alias.
 
         Args:
-            relation: a particular relation.
+            event: the relation changed event that was received.
             event_name: the name of the event to emit.
         """
-        alias = self._get_relation_alias(relation.id)
+        alias = self._get_relation_alias(event.relation.id)
         if alias:
-            getattr(self.on, f"{alias}_{event_name}").emit(relation)
+            getattr(self.on, f"{alias}_{event_name}").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
 
     def _get_relation_alias(self, relation_id: int) -> Optional[str]:
         """Returns the relation alias.
@@ -390,7 +392,7 @@ class DatabaseRequires(Object):
         """
         for relation in self.charm.model.relations[self.relation_name]:
             if relation.id == relation_id:
-                return relation.data[self.local_app].get("alias")
+                return relation.data[self.local_unit].get("alias")
         return None
 
     def fetch_relation_data(self) -> dict:
@@ -445,10 +447,6 @@ class DatabaseRequires(Object):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
-        # Only the leader should handle this event.
-        if not self.charm.unit.is_leader():
-            return
-
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
@@ -457,10 +455,10 @@ class DatabaseRequires(Object):
         if "username" in diff.added and "password" in diff.added:
             # Emit the default event (the one without an alias).
             logger.info("database created at %s", datetime.now())
-            self.on.database_created.emit(event.relation)
+            self.on.database_created.emit(event.relation, app=event.app, unit=event.unit)
 
             # Emit the aliased event (if any).
-            self._emit_aliased_event(event.relation, "database_created")
+            self._emit_aliased_event(event, "database_created")
 
             # To avoid unnecessary application restarts do not trigger
             # “endpoints_changed“ event if “database_created“ is triggered.
@@ -471,10 +469,10 @@ class DatabaseRequires(Object):
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("endpoints changed on %s", datetime.now())
-            self.on.endpoints_changed.emit(event.relation)
+            self.on.endpoints_changed.emit(event.relation, app=event.app, unit=event.unit)
 
             # Emit the aliased event (if any).
-            self._emit_aliased_event(event.relation, "endpoints_changed")
+            self._emit_aliased_event(event, "endpoints_changed")
 
             # To avoid unnecessary application restarts do not trigger
             # “read_only_endpoints_changed“ event if “endpoints_changed“ is triggered.
@@ -485,10 +483,12 @@ class DatabaseRequires(Object):
         if "read-only-endpoints" in diff.added or "read-only-endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("read-only-endpoints changed on %s", datetime.now())
-            self.on.read_only_endpoints_changed.emit(event.relation)
+            self.on.read_only_endpoints_changed.emit(
+                event.relation, app=event.app, unit=event.unit
+            )
 
             # Emit the aliased event (if any).
-            self._emit_aliased_event(event.relation, "read_only_endpoints_changed")
+            self._emit_aliased_event(event, "read_only_endpoints_changed")
 
     @property
     def relations(self) -> List[Relation]:

@@ -22,7 +22,7 @@ resources:
 
 provides:
   database:
-    interface: database-client
+    interface: database_client
 
 storage:
   database:

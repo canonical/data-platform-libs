@@ -3,13 +3,18 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from charms.data_platform_libs.v0.database_provides import DatabaseProvides, Diff
+from charms.data_platform_libs.v0.database_provides import (
+    DatabaseProvides,
+    DatabaseRequestedEvent,
+    Diff,
+)
+from charms.harness_extensions.v0.capture_events import capture
 from ops.charm import CharmBase
 from ops.testing import Harness
 
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
-RELATION_INTERFACE = "database-client"
+RELATION_INTERFACE = "database_client"
 RELATION_NAME = "database"
 METADATA = f"""
 name: database
@@ -165,3 +170,19 @@ class TestDatabaseProvides(unittest.TestCase):
         # (the diff/data key should not be present).
         data = self.harness.charm.database.fetch_relation_data()
         assert data == {self.rel_id: {"database": DATABASE}}
+
+    def test_database_requested_event(self):
+        # Test custom event creation
+
+        # Test the event being emitted by the application.
+        with capture(self.harness.charm, DatabaseRequestedEvent) as captured:
+            self.harness.update_relation_data(self.rel_id, "application", {"database": DATABASE})
+        assert captured.event.app.name == "application"
+
+        # Reset the diff data to trigger the event again later.
+        self.harness.update_relation_data(self.rel_id, "database", {"data": "{}"})
+
+        # Test the event being emitted by the unit.
+        with capture(self.harness.charm, DatabaseRequestedEvent) as captured:
+            self.harness.update_relation_data(self.rel_id, "application/0", {"database": DATABASE})
+        assert captured.event.unit.name == "application/0"
