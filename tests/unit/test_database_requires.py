@@ -1,11 +1,12 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 from charms.data_platform_libs.v0.database_requires import (
     DatabaseCreatedEvent,
+    DatabaseDepartedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseEvents,
     DatabaseReadOnlyEndpointsChangedEvent,
@@ -13,7 +14,7 @@ from charms.data_platform_libs.v0.database_requires import (
     Diff,
 )
 from charms.harness_extensions.v0.capture_events import capture_events
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationDepartedEvent
 from ops.testing import Harness
 from parameterized import parameterized
 
@@ -142,6 +143,31 @@ class TestDatabaseRequires(unittest.TestCase):
         event = _on_database_created.call_args[0][0]
         assert event.username == "test-username"
         assert event.password == "test-password"
+
+    def test_on_relation_departed(self):
+        """Test that the right events are emitted and the departing unit field is available."""
+        # Workaround ops.testing not setting `departing_unit` in v1.5.0
+        # ref https://github.com/canonical/operator/pull/790
+        with patch.object(
+            RelationDepartedEvent, "departing_unit", new_callable=PropertyMock
+        ) as mock_departing_unit:
+            # Mock the departing unit.
+            departing_unit = self.harness.model.get_unit("application/0")
+            mock_departing_unit.return_value = departing_unit
+
+            # Add the unit to the relation.
+            self.harness.add_relation_unit(self.rel_id, departing_unit.name)
+
+            # Remove a unit from the relation and capture the emitted event.
+            with capture_events(self.harness.charm, DatabaseDepartedEvent) as captured_events:
+                self.harness.remove_relation_unit(self.rel_id, departing_unit.name)
+
+            # There are two events (one aliased and the other without alias).
+            assert len(captured_events) == 2
+            for captured in captured_events:
+                assert captured.app.name == departing_unit.app.name
+                assert captured.unit.name == departing_unit.name
+                assert captured.departing_unit == departing_unit
 
     @patch.object(ApplicationCharm, "_on_endpoints_changed")
     def test_on_endpoints_changed(self, _on_endpoints_changed):
