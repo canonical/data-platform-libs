@@ -146,8 +146,8 @@ from ops.charm import (
     RelationEvent,
     RelationJoinedEvent,
 )
-from ops.framework import EventSource, Object
-from ops.model import Relation
+from ops.framework import EventSource, Handle, Object
+from ops.model import Application, Relation, Unit
 
 # The unique Charmhub library identifier, never change it
 LIBID = "0241e088ffa9440fb4e3126349b2fb62"
@@ -226,6 +226,42 @@ class DatabaseCreatedEvent(DatabaseEvent):
 
 class DatabaseDepartedEvent(DatabaseEvent):
     """Event emitted when database relation departed."""
+
+    def __init__(
+        self,
+        handle: Handle,
+        relation: Relation,
+        app: Optional[Application] = None,
+        unit: Optional[Unit] = None,
+        departing_unit_name: Optional[str] = None,
+    ):
+        super().__init__(handle, relation, app=app, unit=unit)
+        self._departing_unit_name = departing_unit_name
+
+    def snapshot(self) -> dict:
+        """Used by the framework to serialize the event to disk.
+
+        Not meant to be called by charm code.
+        """
+        snapshot = super().snapshot()
+        if self._departing_unit_name:
+            snapshot["departing_unit"] = self._departing_unit_name
+        return snapshot
+
+    @property
+    def departing_unit(self) -> Optional[Unit]:
+        """The `ops.model.Unit` that is departing, if any."""
+        if not self._departing_unit_name:
+            return None
+        return self.framework.model.get_unit(self._departing_unit_name)
+
+    def restore(self, snapshot: dict) -> None:
+        """Used by the framework to deserialize the event from disk.
+
+        Not meant to be called by charm code.
+        """
+        super().restore(snapshot)
+        self._departing_unit_name = snapshot.get("departing_unit")
 
 
 class DatabaseEndpointsChangedEvent(DatabaseEvent):
@@ -380,7 +416,7 @@ class DatabaseRequires(Object):
         # Return the diff with all possible changes.
         return Diff(added, changed, deleted)
 
-    def _emit_aliased_event(self, event: RelationChangedEvent, event_name: str) -> None:
+    def _emit_aliased_event(self, event: RelationEvent, event_name: str) -> None:
         """Emit an aliased event to a particular relation if it has an alias.
 
         Args:
@@ -388,7 +424,17 @@ class DatabaseRequires(Object):
             event_name: the name of the event to emit.
         """
         alias = self._get_relation_alias(event.relation.id)
-        if alias:
+        if not alias:
+            return
+
+        if isinstance(event, RelationDepartedEvent):
+            getattr(self.on, f"{alias}_{event_name}").emit(
+                event.relation,
+                app=event.app,
+                unit=event.unit,
+                departing_unit_name=event.departing_unit.name,
+            )
+        else:
             getattr(self.on, f"{alias}_{event_name}").emit(
                 event.relation, app=event.app, unit=event.unit
             )
@@ -496,10 +542,15 @@ class DatabaseRequires(Object):
 
     def _on_relation_departed_event(self, event: RelationDepartedEvent) -> None:
         """Event emitted when the database relation has departed."""
-        self.on.database_departed.emit(event.relation)
+        self.on.database_departed.emit(
+            event.relation,
+            app=event.app,
+            unit=event.unit,
+            departing_unit_name=event.departing_unit.name,
+        )
 
         # Emit the aliased event (if any).
-        self._emit_aliased_event(event.relation, "database_departed")
+        self._emit_aliased_event(event, "database_departed")
 
     @property
     def relations(self) -> List[Relation]:
