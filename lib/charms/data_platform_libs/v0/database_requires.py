@@ -420,7 +420,7 @@ class DatabaseRequires(Object):
         """Emit an aliased event to a particular relation if it has an alias.
 
         Args:
-            event: the relation changed event that was received.
+            event: the relation event that was received.
             event_name: the name of the event to emit.
         """
         alias = self._get_relation_alias(event.relation.id)
