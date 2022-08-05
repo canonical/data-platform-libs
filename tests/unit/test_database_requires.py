@@ -373,6 +373,8 @@ class TestDatabaseRequires(unittest.TestCase):
         all_events = [event["event"] for event in events]
 
         for event in events:
+            # Diff stored in the data field of the relation databag in the previous event.
+            # This is important to test the next events in a consistent way.
             previous_event_diff = self.harness.get_relation_data(self.rel_id, "application/0").get(
                 "data"
             )
