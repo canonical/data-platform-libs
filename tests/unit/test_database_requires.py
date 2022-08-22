@@ -366,39 +366,79 @@ class TestDatabaseRequires(unittest.TestCase):
         # and the non-leader units through is_leader parameter.
         self.harness.set_leader(is_leader)
 
+        # Define the events that need to be emitted.
+        # The event key is the event that should have been emitted
+        # and the data key is the data that will be updated in the
+        # relation databag to trigger that event.
         events = [
             {
                 "event": DatabaseCreatedEvent,
-                "data": {"username": "test-username", "password": "test-password"},
+                "data": {
+                    "username": "test-username",
+                    "password": "test-password",
+                    "endpoints": "host1:port",
+                    "read-only-endpoints": "host2:port",
+                },
             },
             {
                 "event": DatabaseEndpointsChangedEvent,
-                "data": {"endpoints": "host1:port,host2:port"},
+                "data": {
+                    "endpoints": "host1:port,host3:port",
+                    "read-only-endpoints": "host2:port,host4:port",
+                },
             },
             {
                 "event": DatabaseReadOnlyEndpointsChangedEvent,
-                "data": {"read-only-endpoints": "host1:port,host2:port"},
+                "data": {
+                    "read-only-endpoints": "host2:port,host4:port,host5:port",
+                },
             },
         ]
 
+        # Define the list of all events that should be checked
+        # when something changes in the relation databag.
+        all_events = [event["event"] for event in events]
+
         for event in events:
+            # Diff stored in the data field of the relation databag in the previous event.
+            # This is important to test the next events in a consistent way.
+            previous_event_diff = self.harness.get_relation_data(self.rel_id, "application/0").get(
+                "data"
+            )
+
             # Test the event being emitted by the application.
-            with capture_events(self.harness.charm, event["event"]) as captured_events:
+            with capture_events(self.harness.charm, *all_events) as captured_events:
                 self.harness.update_relation_data(self.rel_id, "database", event["data"])
 
             # There are two events (one aliased and the other without alias).
             assert len(captured_events) == 2
+
+            # Check that the events that were emitted are the ones that were expected.
+            assert all(
+                isinstance(captured_event, event["event"]) for captured_event in captured_events
+            )
+
+            # Test that the remote app name is available in the event.
             for captured in captured_events:
                 assert captured.app.name == "database"
 
             # Reset the diff data to trigger the event again later.
-            self.harness.update_relation_data(self.rel_id, "application/0", {"data": "{}"})
+            self.harness.update_relation_data(
+                self.rel_id, "application/0", {"data": previous_event_diff}
+            )
 
             # Test the event being emitted by the unit.
-            with capture_events(self.harness.charm, event["event"]) as captured_events:
+            with capture_events(self.harness.charm, *all_events) as captured_events:
                 self.harness.update_relation_data(self.rel_id, "database/0", event["data"])
 
             # There are two events (one aliased and the other without alias).
             assert len(captured_events) == 2
+
+            # Check that the events that were emitted are the ones that were expected.
+            assert all(
+                isinstance(captured_event, event["event"]) for captured_event in captured_events
+            )
+
+            # Test that the remote unit name is available in the event.
             for captured in captured_events:
                 assert captured.unit.name == "database/0"
