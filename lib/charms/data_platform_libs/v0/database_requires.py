@@ -23,7 +23,10 @@ application charm code:
 
 ```python
 
-from charms.data_platform_libs.v0.database_requires import DatabaseRequires
+from charms.data_platform_libs.v0.database_requires import (
+    DatabaseCreatedEvent,
+    DatabaseRequires,
+)
 
 class ApplicationCharm(CharmBase):
     # Application charm that connects to database charms.
@@ -84,7 +87,10 @@ The implementation would be something like the following code:
 
 ```python
 
-from charms.data_platform_libs.v0.database_requires import DatabaseRequires
+from charms.data_platform_libs.v0.database_requires import (
+    DatabaseCreatedEvent,
+    DatabaseRequires,
+)
 
 class ApplicationCharm(CharmBase):
     # Application charm that connects to database charms.
