@@ -9,7 +9,7 @@ the S3 integrator charm and its consumers.
 ### Provider charm
 
 The provider is implemented in the `s3-integrator` charm which is meant to be deployed
-alongside one or more consumer charms. The provider charm is serving the s3 credential and 
+alongside one or more consumer charms. The provider charm is serving the s3 credential and
 metadata needed to communicate and work with an S3 compatible backend.
 
 Example:
@@ -22,9 +22,10 @@ class ExampleProviderCharm(CharmBase):
     def __init__(self, *args) -> None:
         super().__init__(*args)
         self.s3_provider = S3Provider(self, "s3-credentials")
-        
-        self.framework.observe(self.s3_provider.on.credentials_requested, self._on_credential_requested)
-        
+
+        self.framework.observe(self.s3_provider.on.credentials_requested,
+            self._on_credential_requested)
+
     def _on_credential_requested(self, event: CredentialRequestedEvent):
         if not self.unit.is_leader():
             return
@@ -32,13 +33,14 @@ class ExampleProviderCharm(CharmBase):
         # get relation id
         relation_id = event.relation.id
 
-        # S3 configuration parameters 
-        desired_configuration = {"access-key": "your-access-key", "secret-key": "your-secret-key", "bucket": "your-bucket"}
-        
+        # S3 configuration parameters
+        desired_configuration = {"access-key": "your-access-key", "secret-key":
+            "your-secret-key", "bucket": "your-bucket"}
+
         # update the configuration
         self.s3_provider.update_credential_data(relation_id, desired_configuration)
 
-        # or it is possible to set each field independently 
+        # or it is possible to set each field independently
 
         self.s3_provider.set_secret_key(relation_id, "your-secret-key")
 
@@ -49,7 +51,8 @@ if __name__ == "__main__":
 
 ### Requirer charm
 
-The requirer charm is the charm requiring the the S3 credentials. An example of requirer charm is the following: 
+The requirer charm is the charm requiring the the S3 credentials.
+An example of requirer charm is the following:
 
 Example:
 ```python
@@ -59,7 +62,6 @@ from charms.s3_integrator.v0.s3 import (
     CredentialsGoneEvent,
     S3Consumer
 )
-
 
 class ExampleRequirerCharm(CharmBase):
 
@@ -88,38 +90,35 @@ class ExampleRequirerCharm(CharmBase):
 ```
 
 """
-from collections import namedtuple
 import logging
 from typing import Dict, List, Optional
 
 import ops.charm
 import ops.framework
 import ops.model
+from ops.charm import (
+    EventSource,
+    Object,
+    ObjectEvents,
+    RelationBrokenEvent,
+    RelationChangedEvent,
+    RelationEvent,
+)
+from ops.model import Relation
 
 LIBID = "55c4cfd4a8ac45b1b62f2826272a1cf8"
 LIBAPI = 0
 LIBPATCH = 1
 
-from ops.charm import (
-    RelationEvent,
-    ObjectEvents,
-    EventSource,
-    RelationChangedEvent,
-    RelationBrokenEvent,
-    Object
-)
-
-from ops.model import Relation
-
 logger = logging.getLogger(__name__)
-
 
 
 class CredentialRequestedEvent(RelationEvent):
     """Event emitted when a set of credential is requested for use on this relation."""
 
+
 class S3CredentialEvents(ObjectEvents):
-    """Event descriptor for events raised by :class:`S3Provider`"""
+    """Event descriptor for events raised by S3Provider."""
 
     credentials_requested = EventSource(CredentialRequestedEvent)
 
@@ -161,7 +160,7 @@ class S3Provider(Object):
                 for all relation instances (indexed by the relation id).
         """
         data = {}
-        
+
         for relation in self.relations:
             data[relation.id] = {
                 key: value for key, value in relation.data[self.charm.app].items()
@@ -183,20 +182,20 @@ class S3Provider(Object):
         if self.local_unit.is_leader():
             # get relation
             relation = self.charm.model.get_relation(self.relation_name, relation_id)
-            
+
             if not relation:
                 return
 
             need_credential_data = False
             # iterate over the provided data
-            for k,v in data.items():
+            for k, v in data.items():
                 if k in relation.data[self.local_app]:
                     # check if value of a speficied key has been modified
                     if v == relation.data[self.local_app][k]:
                         continue
-                need_credential_data = True 
+                need_credential_data = True
 
-            # update the databag only if some of the fields changed.
+            # update the databag only if some of the fields changed
             if need_credential_data:
                 relation.data[self.local_app].update(data)
                 logger.debug(f"Updated S3 credentials: {data}")
@@ -205,7 +204,7 @@ class S3Provider(Object):
     def relations(self) -> List[Relation]:
         """The list of Relation instances associated with this relation_name."""
         return list(self.charm.model.relations[self.relation_name])
-    
+
     def set_bucket(self, relation_id: int, bucket: str) -> None:
         """Set bucket name.
 
@@ -228,7 +227,7 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             access_key: the access-key value.
         """
-        self.update_credential_data(relation_id,{"access-key": access_key})
+        self.update_credential_data(relation_id, {"access-key": access_key})
 
     def set_secret_key(self, relation_id: int, secret_key: str) -> None:
         """Set the secret key value.
@@ -325,7 +324,7 @@ class S3Provider(Object):
             s3_api_version: the S3 version value.
         """
         self.update_credential_data(relation_id, {"s3-api-version": s3_api_version})
-    
+
     def set_attributes(self, relation_id: int, attributes: str) -> None:
         """Set the connection attributes.
 
@@ -338,81 +337,86 @@ class S3Provider(Object):
         """
         self.update_credential_data(relation_id, {"attributes": attributes})
 
+
 class S3Event(RelationEvent):
     """Base class for S3 storage events."""
 
     @property
     def bucket(self) -> Optional[str]:
         """Returns the bucket name."""
-        return self.relation.data[self.relation.app].get('bucket', default=None)
-    
+        return self.relation.data[self.relation.app].get("bucket", default=None)
+
     @property
     def access_key(self) -> Optional[str]:
         """Returns the access key."""
-        return self.relation.data[self.relation.app].get('access-key', default=None)
+        return self.relation.data[self.relation.app].get("access-key", default=None)
 
     @property
     def secret_key(self) -> Optional[str]:
         """Returns the secret key."""
-        return self.relation.data[self.relation.app].get('secret-key', default=None)
+        return self.relation.data[self.relation.app].get("secret-key", default=None)
 
     @property
     def path(self) -> Optional[str]:
         """Returns the path where data can be stored."""
-        return self.relation.data[self.relation.app].get('path', default=None)
-    
+        return self.relation.data[self.relation.app].get("path", default=None)
+
     @property
     def endpoint(self) -> Optional[str]:
         """Returns the enpoint address."""
-        return self.relation.data[self.relation.app].get('endpoint', default=None)
-    
+        return self.relation.data[self.relation.app].get("endpoint", default=None)
+
     @property
     def region(self) -> Optional[str]:
         """Returns the region."""
-        return self.relation.data[self.relation.app].get('region', default=None)
-    
+        return self.relation.data[self.relation.app].get("region", default=None)
+
     @property
     def s3_uri_style(self) -> Optional[str]:
         """Returns the s3 uri style."""
-        return self.relation.data[self.relation.app].get('s3-uri-style', default=None)
-    
+        return self.relation.data[self.relation.app].get("s3-uri-style", default=None)
+
     @property
     def storage_class(self) -> Optional[str]:
         """Returns the storage class name."""
-        return self.relation.data[self.relation.app].get('storage-class', default=None)
+        return self.relation.data[self.relation.app].get("storage-class", default=None)
 
     @property
     def tls_ca_chain(self) -> Optional[str]:
         """Returns the TLS CA chain."""
-        return self.relation.data[self.relation.app].get('tls-ca-chain', default=None)
-    
+        return self.relation.data[self.relation.app].get("tls-ca-chain", default=None)
+
     @property
     def s3_api_version(self) -> Optional[str]:
         """Returns the S3 API version."""
-        return self.relation.data[self.relation.app].get('s3-api-version', default=None)
+        return self.relation.data[self.relation.app].get("s3-api-version", default=None)
 
     @property
     def attributes(self) -> Optional[str]:
         """Returns the attributes."""
-        return self.relation.data[self.relation.app].get('attributes', default=None)
+        return self.relation.data[self.relation.app].get("attributes", default=None)
 
 
 class CredentialsChangedEvent(S3Event):
-    """Event emitted when S3 credential are used on this relation"""
+    """Event emitted when S3 credential are used on this relation."""
+
 
 class CredentialsGoneEvent(RelationEvent):
-    """Event emitted when S3 credential are removed from this relation"""
+    """Event emitted when S3 credential are removed from this relation."""
+
 
 class S3CredentialRequiresEvents(ObjectEvents):
-    """Event descriptor for events raised by :class:`S3Provider`"""
+    """Event descriptor for events raised by the S3Provider."""
 
     credentials_changed = EventSource(CredentialsChangedEvent)
     credentials_gone = EventSource(CredentialsGoneEvent)
 
+
 S3_REQUIRED_OPTIONS = ["access-key", "secret-key", "bucket"]
 
+
 class S3Consumer(Object):
-    """Requires-side of the s3 relation"""
+    """Requires-side of the s3 relation."""
 
     on = S3CredentialRequiresEvents()
 
@@ -439,7 +443,7 @@ class S3Consumer(Object):
         )
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
-        """Notify the charm about the presence of S3 credentials.""" 
+        """Notify the charm about the presence of S3 credentials."""
         # check if the mandatory options are in the relation data
         contains_required_options = True
         # get current credentials data
@@ -454,7 +458,9 @@ class S3Consumer(Object):
         if contains_required_options:
             self.on.credentials_changed.emit(event.relation, app=event.app, unit=event.unit)
         else:
-            logger.info(f"Some mandatory fields: {missing_options} are not present, do not emit credential change event!")
+            logger.info(
+                f"Some mandatory fields: {missing_options} are not present, do not emit credential change event!"
+            )
 
     def get_s3_credentials(self) -> Dict:
         """Return the s3 credentials as a dictionary."""
@@ -466,7 +472,7 @@ class S3Consumer(Object):
     def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Notify the charm about a broken S3 credential store relation."""
         self.on.credentials_gone.emit(event.relation, app=event.app, unit=event.unit)
-    
+
     @property
     def relations(self) -> List[Relation]:
         """The list of Relation instances associated with this relation_name."""
