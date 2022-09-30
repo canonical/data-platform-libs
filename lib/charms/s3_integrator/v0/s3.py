@@ -1,5 +1,17 @@
 # Copyright 2022 Canonical Ltd.
-# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """A library for communicating with the S3 integrator providers and consumers.
 
 This library provides the relevant interface code implementing the communication
@@ -33,12 +45,15 @@ class ExampleProviderCharm(CharmBase):
         # get relation id
         relation_id = event.relation.id
 
+        # get bucket
+        bucket = event.bucket
+
         # S3 configuration parameters
         desired_configuration = {"access-key": "your-access-key", "secret-key":
             "your-secret-key", "bucket": "your-bucket"}
 
         # update the configuration
-        self.s3_provider.update_credential_data(relation_id, desired_configuration)
+        self.s3_provider.update_connection_info(relation_id, desired_configuration)
 
         # or it is possible to set each field independently
 
@@ -51,7 +66,7 @@ if __name__ == "__main__":
 
 ### Requirer charm
 
-The requirer charm is the charm requiring the the S3 credentials.
+The requirer charm is the charm requiring the S3 credentials.
 An example of requirer charm is the following:
 
 Example:
@@ -60,14 +75,14 @@ Example:
 from charms.s3_integrator.v0.s3 import (
     CredentialsChangedEvent,
     CredentialsGoneEvent,
-    S3Consumer
+    S3Requirer
 )
 
 class ExampleRequirerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.s3_client = S3Consumer(self, "s3-credentials")
+        self.s3_client = S3Requirer(self, "s3-credentials")
 
         self.framework.observe(self.s3_client.on.credentials_changed, self._on_credential_changed)
         self.framework.observe(self.s3_client.on.credentials_gone, self._on_credential_gone)
@@ -90,19 +105,26 @@ class ExampleRequirerCharm(CharmBase):
 ```
 
 """
+import base64
+import json
 import logging
+import re
+from collections import namedtuple
 from typing import Dict, List, Optional
 
 import ops.charm
 import ops.framework
 import ops.model
 from ops.charm import (
+    CharmBase,
+    CharmEvents,
     EventSource,
     Object,
     ObjectEvents,
     RelationBrokenEvent,
     RelationChangedEvent,
     RelationEvent,
+    RelationJoinedEvent,
 )
 from ops.model import Relation
 
@@ -112,12 +134,29 @@ LIBPATCH = 1
 
 logger = logging.getLogger(__name__)
 
+Diff = namedtuple("Diff", "added changed deleted")
+Diff.__doc__ = """
+A tuple for storing the diff between two data mappings.
 
-class CredentialRequestedEvent(RelationEvent):
+added - keys that were added
+changed - keys that still exist but have new values
+deleted - key that were deleted"""
+
+
+class BucketEvent(RelationEvent):
+    """Base class for bucket events."""
+
+    @property
+    def bucket(self) -> Optional[str]:
+        """Returns the bucket was requested."""
+        return self.relation.data[self.relation.app].get("bucket")
+
+
+class CredentialRequestedEvent(BucketEvent):
     """Event emitted when a set of credential is requested for use on this relation."""
 
 
-class S3CredentialEvents(ObjectEvents):
+class S3CredentialEvents(CharmEvents):
     """Event descriptor for events raised by S3Provider."""
 
     credentials_requested = EventSource(CredentialRequestedEvent)
@@ -130,7 +169,7 @@ class S3Provider(Object):
 
     def __init__(
         self,
-        charm: ops.charm.CharmBase,
+        charm: CharmBase,
         relation_name: str,
     ):
         super().__init__(charm, relation_name)
@@ -143,11 +182,95 @@ class S3Provider(Object):
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
-        """React to the relation joined event by consuming data."""
+        """React to the relation changed event by consuming data."""
         if not self.charm.unit.is_leader():
             return
-        # emit on credential request event
-        self.on.credentials_requested.emit(event.relation, app=event.app, unit=event.unit)
+        diff = self._diff(event)
+        # emit on credential requested if bucket is provided by the requirer application
+        if "bucket" in diff.added:
+            self.on.credentials_requested.emit(event.relation, app=event.app, unit=event.unit)
+
+    def _load_relation_data(self, raw_relation_data: dict) -> dict:
+        """Loads relation data from the relation data bag.
+
+        Args:
+            raw_relation_data: Relation data from the databag
+        Returns:
+            dict: Relation data in dict format.
+        """
+        connection_data = dict()
+        for key in raw_relation_data:
+            try:
+                connection_data[key] = json.loads(raw_relation_data[key])
+            except (json.decoder.JSONDecodeError, TypeError):
+                connection_data[key] = raw_relation_data[key]
+        return connection_data
+
+    @staticmethod
+    def parse_tls_file(raw_content: str) -> bytes:
+        """Parse TLS files from both plain text or base64 format."""
+        if re.match(r"(-+(BEGIN|END) [A-Z ]+-+)", raw_content):
+            # retrieve header and footer from private key
+            header = re.search(
+                r"(-+(BEGIN) [A-Z ]+-+)",
+                raw_content,
+            ).group(1)
+            footer = re.search(
+                r"(-+(END) [A-Z ]+-+)",
+                raw_content,
+            ).group(1)
+
+            # get key contents and replace " " with "\n"
+            key_contents = re.sub(
+                r"(-+(BEGIN|END) [A-Z ]+-+)",
+                "",
+                raw_content,
+            )
+            key_contents = re.sub(
+                r" ",
+                "\n",
+                key_contents,
+            )
+
+            private_key = f"{header}{key_contents}{footer}"
+            return private_key.rstrip().encode("utf-8")
+
+        return base64.b64decode(raw_content)
+
+    def _diff(self, event: RelationChangedEvent) -> Diff:
+        """Retrieves the diff of the data in the relation changed databag.
+
+        Args:
+            event: relation changed event.
+
+        Returns:
+            a Diff instance containing the added, deleted and changed
+                keys from the event relation databag.
+        """
+        # Retrieve the old data from the data key in the application relation databag.
+        old_data = json.loads(event.relation.data[self.local_app].get("data", "{}"))
+        # Retrieve the new data from the event relation databag.
+        new_data = {
+            key: value for key, value in event.relation.data[event.app].items() if key != "data"
+        }
+
+        # These are the keys that were added to the databag and triggered this event.
+        added = new_data.keys() - old_data.keys()
+        # These are the keys that were removed from the databag and triggered this event.
+        deleted = old_data.keys() - new_data.keys()
+        # These are the keys that already existed in the databag,
+        # but had their values changed.
+        changed = {
+            key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
+        }
+
+        # TODO: evaluate the possibility of losing the diff if some error
+        # happens in the charm before the diff is completely checked (DPE-412).
+        # Convert the new_data to a serializable format and save it for a next diff check.
+        event.relation.data[self.local_app].update({"data": json.dumps(new_data)})
+
+        # Return the diff with all possible changes.
+        return Diff(added, changed, deleted)
 
     def fetch_relation_data(self) -> dict:
         """Retrieves data from relation.
@@ -162,12 +285,10 @@ class S3Provider(Object):
         data = {}
 
         for relation in self.relations:
-            data[relation.id] = {
-                key: value for key, value in relation.data[self.charm.app].items()
-            }
+            data[relation.id] = self._load_relation_data(relation.data[self.charm.app])
         return data
 
-    def update_credential_data(self, relation_id: int, data: dict) -> None:
+    def update_connection_info(self, relation_id: int, connection_data: dict) -> None:
         """Updates the credential data as set of key-value pairs in the relation.
 
         This function writes in the application data bag, therefore,
@@ -175,30 +296,32 @@ class S3Provider(Object):
 
         Args:
             relation_id: the identifier for a particular relation.
-            data: dict containing the key-value pairs
+            connection_data: dict containing the key-value pairs
                 that should be updated.
         """
         # check and write changes only if you are the leader
-        if self.local_unit.is_leader():
-            # get relation
-            relation = self.charm.model.get_relation(self.relation_name, relation_id)
+        if not self.local_unit.is_leader():
+            return
 
-            if not relation:
-                return
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
 
-            need_credential_data = False
-            # iterate over the provided data
-            for k, v in data.items():
-                if k in relation.data[self.local_app]:
-                    # check if value of a speficied key has been modified
-                    if v == relation.data[self.local_app][k]:
-                        continue
-                need_credential_data = True
+        if not relation:
+            return
 
-            # update the databag only if some of the fields changed
-            if need_credential_data:
-                relation.data[self.local_app].update(data)
-                logger.debug(f"Updated S3 credentials: {data}")
+        # update the databag, if connetion data did not change with respect to before
+        # the relation changed event is not triggered
+        # configuration options that are list
+        s3_list_options = ["attributes", "tls-ca-chain"]
+        updated_connection_data = {}
+        for configuration_option, configuration_value in connection_data.items():
+            logger.info(f"{configuration_option}:{configuration_value}")
+            if configuration_option in s3_list_options:
+                updated_connection_data[configuration_option] = json.dumps(configuration_value)
+            else:
+                updated_connection_data[configuration_option] = configuration_value
+
+        relation.data[self.local_app].update(updated_connection_data)
+        logger.debug(f"Updated S3 credentials: {updated_connection_data}")
 
     @property
     def relations(self) -> List[Relation]:
@@ -206,7 +329,7 @@ class S3Provider(Object):
         return list(self.charm.model.relations[self.relation_name])
 
     def set_bucket(self, relation_id: int, bucket: str) -> None:
-        """Set bucket name.
+        """Sets bucket name in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -215,10 +338,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             bucket: the bucket name.
         """
-        self.update_credential_data(relation_id, {"bucket": bucket})
+        self.update_connection_info(relation_id, {"bucket": bucket})
 
     def set_access_key(self, relation_id: int, access_key: str) -> None:
-        """Set access-key value.
+        """Sets access-key value in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -227,10 +350,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             access_key: the access-key value.
         """
-        self.update_credential_data(relation_id, {"access-key": access_key})
+        self.update_connection_info(relation_id, {"access-key": access_key})
 
     def set_secret_key(self, relation_id: int, secret_key: str) -> None:
-        """Set the secret key value.
+        """Sets the secret key value in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -239,10 +362,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             secret_key: the value of the secret key.
         """
-        self.update_credential_data(relation_id, {"secret-key": secret_key})
+        self.update_connection_info(relation_id, {"secret-key": secret_key})
 
     def set_path(self, relation_id: int, path: str) -> None:
-        """Set the path.
+        """Sets the path value in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -251,10 +374,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             path: the path value.
         """
-        self.update_credential_data(relation_id, {"path": path})
+        self.update_connection_info(relation_id, {"path": path})
 
     def set_endpoint(self, relation_id: int, endpoint: str) -> None:
-        """Set the endpoint address.
+        """Sets the endpoint address in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -263,10 +386,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             endpoint: the endpoint address.
         """
-        self.update_credential_data(relation_id, {"endpoint": endpoint})
+        self.update_connection_info(relation_id, {"endpoint": endpoint})
 
     def set_region(self, relation_id: int, region: str) -> None:
-        """Set the region location.
+        """Sets the region location in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -275,10 +398,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             region: the region address.
         """
-        self.update_credential_data(relation_id, {"region": region})
+        self.update_connection_info(relation_id, {"region": region})
 
     def set_s3_uri_style(self, relation_id: int, s3_uri_style: str) -> None:
-        """Set the S3 URI style.
+        """Sets the S3 URI style in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -287,10 +410,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             s3_uri_style: the s3 URI style.
         """
-        self.update_credential_data(relation_id, {"s3-uri-style": s3_uri_style})
+        self.update_connection_info(relation_id, {"s3-uri-style": s3_uri_style})
 
     def set_storage_class(self, relation_id: int, storage_class: str) -> None:
-        """Set the storage class.
+        """Sets the storage class in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -299,10 +422,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             storage_class: the storage class.
         """
-        self.update_credential_data(relation_id, {"storage-class": storage_class})
+        self.update_connection_info(relation_id, {"storage-class": storage_class})
 
-    def set_tls_ca_chain(self, relation_id: int, tls_ca_chain: str) -> None:
-        """Set the tls_ca_chain value.
+    def set_tls_ca_chain(self, relation_id: int, tls_ca_chain: List[str]) -> None:
+        """Sets the tls_ca_chain value in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -311,10 +434,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             tls_ca_chain: the TLS Chain value.
         """
-        self.update_credential_data(relation_id, {"tls-ca-chain": tls_ca_chain})
+        self.update_connection_info(relation_id, {"tls-ca-chain": tls_ca_chain})
 
     def set_s3_api_version(self, relation_id: int, s3_api_version: str) -> None:
-        """Set the S3 API verion.
+        """Sets the S3 API verion in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -323,10 +446,10 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             s3_api_version: the S3 version value.
         """
-        self.update_credential_data(relation_id, {"s3-api-version": s3_api_version})
+        self.update_connection_info(relation_id, {"s3-api-version": s3_api_version})
 
-    def set_attributes(self, relation_id: int, attributes: str) -> None:
-        """Set the connection attributes.
+    def set_attributes(self, relation_id: int, attributes: List[str]) -> None:
+        """Sets the connection attributes in application databag.
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
@@ -335,7 +458,7 @@ class S3Provider(Object):
             relation_id: the identifier for a particular relation.
             attributes: the attributes value.
         """
-        self.update_credential_data(relation_id, {"attributes": attributes})
+        self.update_connection_info(relation_id, {"attributes": attributes})
 
 
 class S3Event(RelationEvent):
@@ -344,61 +467,67 @@ class S3Event(RelationEvent):
     @property
     def bucket(self) -> Optional[str]:
         """Returns the bucket name."""
-        return self.relation.data[self.relation.app].get("bucket", default=None)
+        return self.relation.data[self.relation.app].get("bucket")
 
     @property
     def access_key(self) -> Optional[str]:
         """Returns the access key."""
-        return self.relation.data[self.relation.app].get("access-key", default=None)
+        return self.relation.data[self.relation.app].get("access-key")
 
     @property
     def secret_key(self) -> Optional[str]:
         """Returns the secret key."""
-        return self.relation.data[self.relation.app].get("secret-key", default=None)
+        return self.relation.data[self.relation.app].get("secret-key")
 
     @property
     def path(self) -> Optional[str]:
         """Returns the path where data can be stored."""
-        return self.relation.data[self.relation.app].get("path", default=None)
+        return self.relation.data[self.relation.app].get("path")
 
     @property
     def endpoint(self) -> Optional[str]:
         """Returns the enpoint address."""
-        return self.relation.data[self.relation.app].get("endpoint", default=None)
+        return self.relation.data[self.relation.app].get("endpoint")
 
     @property
     def region(self) -> Optional[str]:
         """Returns the region."""
-        return self.relation.data[self.relation.app].get("region", default=None)
+        return self.relation.data[self.relation.app].get("region")
 
     @property
     def s3_uri_style(self) -> Optional[str]:
         """Returns the s3 uri style."""
-        return self.relation.data[self.relation.app].get("s3-uri-style", default=None)
+        return self.relation.data[self.relation.app].get("s3-uri-style")
 
     @property
     def storage_class(self) -> Optional[str]:
         """Returns the storage class name."""
-        return self.relation.data[self.relation.app].get("storage-class", default=None)
+        return self.relation.data[self.relation.app].get("storage-class")
 
     @property
-    def tls_ca_chain(self) -> Optional[str]:
+    def tls_ca_chain(self) -> Optional[List[str]]:
         """Returns the TLS CA chain."""
-        return self.relation.data[self.relation.app].get("tls-ca-chain", default=None)
+        tls_ca_chain = self.relation.data[self.relation.app].get("tls-ca-chain")
+        if tls_ca_chain is not None:
+            return json.loads(tls_ca_chain)
+        return None
 
     @property
     def s3_api_version(self) -> Optional[str]:
         """Returns the S3 API version."""
-        return self.relation.data[self.relation.app].get("s3-api-version", default=None)
+        return self.relation.data[self.relation.app].get("s3-api-version")
 
     @property
-    def attributes(self) -> Optional[str]:
+    def attributes(self) -> Optional[List[str]]:
         """Returns the attributes."""
-        return self.relation.data[self.relation.app].get("attributes", default=None)
+        attributes = self.relation.data[self.relation.app].get("attributes")
+        if attributes is not None:
+            return json.loads(attributes)
+        return None
 
 
 class CredentialsChangedEvent(S3Event):
-    """Event emitted when S3 credential are used on this relation."""
+    """Event emitted when S3 credential are changed on this relation."""
 
 
 class CredentialsGoneEvent(RelationEvent):
@@ -412,29 +541,30 @@ class S3CredentialRequiresEvents(ObjectEvents):
     credentials_gone = EventSource(CredentialsGoneEvent)
 
 
-S3_REQUIRED_OPTIONS = ["access-key", "secret-key", "bucket"]
+S3_REQUIRED_OPTIONS = ["access-key", "secret-key"]
 
 
-class S3Consumer(Object):
+class S3Requirer(Object):
     """Requires-side of the s3 relation."""
 
     on = S3CredentialRequiresEvents()
 
-    def __init__(
-        self,
-        charm: ops.charm.CharmBase,
-        relation_name: str,
-    ):
+    def __init__(self, charm: ops.charm.CharmBase, relation_name: str, bucket_name: str = None):
         """Manager of the s3 client relations."""
         super().__init__(charm, relation_name)
 
         self.relation_name = relation_name
         self.charm = charm
-        self.local_app = charm.model.app
+        self.local_app = self.charm.model.app
         self.local_unit = self.charm.unit
+        self.bucket = bucket_name
+
         self.framework.observe(
-            self.charm.on[self.relation_name].relation_changed,
-            self._on_relation_changed,
+            self.charm.on[self.relation_name].relation_changed, self._on_relation_changed
+        )
+
+        self.framework.observe(
+            self.charm.on[self.relation_name].relation_joined, self._on_relation_joined
         )
 
         self.framework.observe(
@@ -442,12 +572,108 @@ class S3Consumer(Object):
             self._on_relation_broken,
         )
 
+    def _generate_bucket_name(self, event: RelationJoinedEvent):
+        return f"relation-{event.relation.id}"
+
+    def _on_relation_joined(self, event: RelationJoinedEvent) -> None:
+        """Event emitted when the application joins the s3 relation."""
+        if self.bucket is None:
+            self.bucket = self._generate_bucket_name(event)
+        self.update_connection_info(event.relation.id, {"bucket": self.bucket})
+
+    def update_connection_info(self, relation_id: int, connection_data: dict) -> None:
+        """Updates the credential data as set of key-value pairs in the relation.
+
+        This function writes in the application data bag, therefore,
+        only the leader unit can call it.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            connection_data: dict containing the key-value pairs
+                that should be updated.
+        """
+        # check and write changes only if you are the leader
+        if not self.local_unit.is_leader():
+            return
+
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+
+        if not relation:
+            return
+
+        # update the databag, if connetion data did not change with respect to before
+        # the relation changed event is not triggered
+        # configuration options that are list
+        s3_list_options = ["attributes", "tls-ca-chain"]
+        updated_connection_data = {}
+        for configuration_option, configuration_value in connection_data.items():
+            if configuration_option in s3_list_options:
+                updated_connection_data[configuration_option] = json.dumps(configuration_value)
+            else:
+                updated_connection_data[configuration_option] = configuration_value
+
+        relation.data[self.local_app].update(updated_connection_data)
+        logger.debug(f"S3Requirer -> Updated S3 credentials: {updated_connection_data}")
+
+    def _load_relation_data(self, raw_relation_data: dict) -> dict:
+        """Loads relation data from the relation data bag.
+
+        Args:
+            raw_relation_data: Relation data from the databag
+        Returns:
+            dict: Relation data in dict format.
+        """
+        connection_data = dict()
+        for key in raw_relation_data:
+            try:
+                connection_data[key] = json.loads(raw_relation_data[key])
+            except (json.decoder.JSONDecodeError, TypeError):
+                connection_data[key] = raw_relation_data[key]
+        return connection_data
+
+    def _diff(self, event: RelationChangedEvent) -> Diff:
+        """Retrieves the diff of the data in the relation changed databag.
+
+        Args:
+            event: relation changed event.
+
+        Returns:
+            a Diff instance containing the added, deleted and changed
+                keys from the event relation databag.
+        """
+        # Retrieve the old data from the data key in the local unit relation databag.
+        old_data = json.loads(event.relation.data[self.local_unit].get("data", "{}"))
+        # Retrieve the new data from the event relation databag.
+        new_data = {
+            key: value for key, value in event.relation.data[event.app].items() if key != "data"
+        }
+
+        # These are the keys that were added to the databag and triggered this event.
+        added = new_data.keys() - old_data.keys()
+        # These are the keys that were removed from the databag and triggered this event.
+        deleted = old_data.keys() - new_data.keys()
+        # These are the keys that already existed in the databag,
+        # but had their values changed.
+        changed = {
+            key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
+        }
+
+        # TODO: evaluate the possibility of losing the diff if some error
+        # happens in the charm before the diff is completely checked (DPE-412).
+        # Convert the new_data to a serializable format and save it for a next diff check.
+        event.relation.data[self.local_unit].update({"data": json.dumps(new_data)})
+
+        # Return the diff with all possible changes.
+        return Diff(added, changed, deleted)
+
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Notify the charm about the presence of S3 credentials."""
         # check if the mandatory options are in the relation data
+        diff = self._diff(event)
+        logger.info(f"S3 Requirer -> Diff: {diff}")
         contains_required_options = True
         # get current credentials data
-        credentials = self.get_s3_credentials()
+        credentials = self.get_s3_connection_info()
         # records missing options
         missing_options = []
         for configuration_option in S3_REQUIRED_OPTIONS:
@@ -458,16 +684,16 @@ class S3Consumer(Object):
         if contains_required_options:
             self.on.credentials_changed.emit(event.relation, app=event.app, unit=event.unit)
         else:
-            logger.info(
+            logger.warning(
                 f"Some mandatory fields: {missing_options} are not present, do not emit credential change event!"
             )
 
-    def get_s3_credentials(self) -> Dict:
+    def get_s3_connection_info(self) -> Dict:
         """Return the s3 credentials as a dictionary."""
         relation = self.charm.model.get_relation(self.relation_name)
         if not relation:
             return {}
-        return relation.data[relation.app]
+        return self._load_relation_data(relation.data[relation.app])
 
     def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Notify the charm about a broken S3 credential store relation."""
