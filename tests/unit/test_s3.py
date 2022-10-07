@@ -241,7 +241,6 @@ class TestS3Provider(unittest.TestCase):
         assert event.bucket == BUCKET_NAME
 
     def test_set_connection_info(self):
-        # TODO
         """Asserts that the s3 connection fields are in the relation databag when they are set."""
         # Set the connection info fields in the relation using the provides charm library.
         # Mandatory fields
@@ -263,7 +262,6 @@ class TestS3Provider(unittest.TestCase):
         self.harness.charm.s3_provider.set_attributes(self.rel_id, ["a1", "a2", "a3"])
 
         # Check that the additional fields are present in the relation.
-        logger.info(f"relation data 2: {self.harness.get_relation_data(self.rel_id, 's3_app')}")
         assert self.harness.get_relation_data(self.rel_id, "s3_app") == {
             "data": "{}",  # Data is the diff stored between multiple relation changed events.
             "access-key": "test-access-key",
@@ -282,11 +280,9 @@ class TestS3Provider(unittest.TestCase):
     def test_fetch_relation_data(self):
         # Set some data in the relation.
         self.harness.update_relation_data(self.rel_id, "application", {"bucket": BUCKET_NAME})
-
         # Check the data using the charm library function
         # (the diff/data key should not be present).
         data = self.harness.charm.s3_provider.fetch_relation_data()
-        logger.info(f"Data: {data}")
         assert data == {self.rel_id: {"bucket": BUCKET_NAME}}
 
     def test_credential_requested_event(self):
