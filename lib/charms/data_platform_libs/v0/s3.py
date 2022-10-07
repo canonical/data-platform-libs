@@ -27,7 +27,7 @@ metadata needed to communicate and work with an S3 compatible backend.
 Example:
 ```python
 
-from charms.s3_integrator.v0.s3 import CredentialRequestedEvent, S3Provider
+from charms.data_platform_libs.v0.s3 import CredentialRequestedEvent, S3Provider
 
 
 class ExampleProviderCharm(CharmBase):
@@ -72,7 +72,7 @@ An example of requirer charm is the following:
 Example:
 ```python
 
-from charms.s3_integrator.v0.s3 import (
+from charms.data_platform_libs.v0.s3 import (
     CredentialsChangedEvent,
     CredentialsGoneEvent,
     S3Requirer
@@ -82,7 +82,12 @@ class ExampleRequirerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.s3_client = S3Requirer(self, "s3-credentials")
+
+         bucket_name = "test-bucket"
+        # if bucket name is not provided the bucket name will be generated
+        # e.g., ('relation-{relation.id}')
+
+        self.s3_client = S3Requirer(self, "s3-credentials", bucket_name)
 
         self.framework.observe(self.s3_client.on.credentials_changed, self._on_credential_changed)
         self.framework.observe(self.s3_client.on.credentials_gone, self._on_credential_gone)
@@ -130,7 +135,7 @@ from ops.model import Relation
 
 LIBID = "55c4cfd4a8ac45b1b62f2826272a1cf8"
 LIBAPI = 0
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -205,37 +210,6 @@ class S3Provider(Object):
             except (json.decoder.JSONDecodeError, TypeError):
                 connection_data[key] = raw_relation_data[key]
         return connection_data
-
-    @staticmethod
-    def parse_tls_file(raw_content: str) -> bytes:
-        """Parse TLS files from both plain text or base64 format."""
-        if re.match(r"(-+(BEGIN|END) [A-Z ]+-+)", raw_content):
-            # retrieve header and footer from private key
-            header = re.search(
-                r"(-+(BEGIN) [A-Z ]+-+)",
-                raw_content,
-            ).group(1)
-            footer = re.search(
-                r"(-+(END) [A-Z ]+-+)",
-                raw_content,
-            ).group(1)
-
-            # get key contents and replace " " with "\n"
-            key_contents = re.sub(
-                r"(-+(BEGIN|END) [A-Z ]+-+)",
-                "",
-                raw_content,
-            )
-            key_contents = re.sub(
-                r" ",
-                "\n",
-                key_contents,
-            )
-
-            private_key = f"{header}{key_contents}{footer}"
-            return private_key.rstrip().encode("utf-8")
-
-        return base64.b64decode(raw_content)
 
     def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
