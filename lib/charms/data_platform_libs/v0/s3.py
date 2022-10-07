@@ -110,10 +110,8 @@ class ExampleRequirerCharm(CharmBase):
 ```
 
 """
-import base64
 import json
 import logging
-import re
 from collections import namedtuple
 from typing import Dict, List, Optional
 
