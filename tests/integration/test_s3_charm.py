@@ -62,7 +62,7 @@ async def test_two_applications_doesnt_share_the_same_relation_data(
 ):
     """Test that two applications connect to the s3 provider with different credentials."""
     # Set some variables to use in this test.
-    another_application_app_name = "another-application"
+    another_application_app_name = "another-app"
     all_app_names = [another_application_app_name]
     all_app_names.extend(APP_NAMES)
 
