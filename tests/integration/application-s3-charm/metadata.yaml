@@ -1,6 +1,6 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-name: application
+name: app
 description: |
   Data platform libs application charm used in integration tests.
 summary: |

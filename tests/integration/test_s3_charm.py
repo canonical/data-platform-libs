@@ -11,7 +11,7 @@ from tests.integration.helpers import get_connection_info
 
 logger = logging.getLogger(__name__)
 
-APPLICATION_APP_NAME = "application"
+APPLICATION_APP_NAME = "app"
 S3_APP_NAME = "s3-provider-app"
 APP_NAMES = [APPLICATION_APP_NAME, S3_APP_NAME]
 FIRST_S3_RELATION_NAME = "first-s3-credentials"
