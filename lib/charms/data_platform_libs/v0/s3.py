@@ -45,7 +45,7 @@ class ExampleProviderCharm(CharmBase):
         # get relation id
         relation_id = event.relation.id
 
-        # get bucket
+        # get bucket name
         bucket = event.bucket
 
         # S3 configuration parameters
@@ -287,14 +287,13 @@ class S3Provider(Object):
         s3_list_options = ["attributes", "tls-ca-chain"]
         updated_connection_data = {}
         for configuration_option, configuration_value in connection_data.items():
-            logger.info(f"{configuration_option}:{configuration_value}")
             if configuration_option in s3_list_options:
                 updated_connection_data[configuration_option] = json.dumps(configuration_value)
             else:
                 updated_connection_data[configuration_option] = configuration_value
 
         relation.data[self.local_app].update(updated_connection_data)
-        logger.debug(f"Updated S3 credentials: {updated_connection_data}")
+        logger.debug(f"Updated S3 connection info: {updated_connection_data}")
 
     @property
     def relations(self) -> List[Relation]:
@@ -546,6 +545,7 @@ class S3Requirer(Object):
         )
 
     def _generate_bucket_name(self, event: RelationJoinedEvent):
+        """Returns the bucket name generated from relation id."""
         return f"relation-{event.relation.id}"
 
     def _on_relation_joined(self, event: RelationJoinedEvent) -> None:
@@ -602,7 +602,7 @@ class S3Requirer(Object):
                 updated_connection_data[configuration_option] = configuration_value
 
         relation.data[self.local_app].update(updated_connection_data)
-        logger.debug(f"S3Requirer -> Updated S3 credentials: {updated_connection_data}")
+        logger.debug(f"Updated S3 credentials: {updated_connection_data}")
 
     def _load_relation_data(self, raw_relation_data: dict) -> dict:
         """Loads relation data from the relation data bag.
@@ -658,8 +658,6 @@ class S3Requirer(Object):
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Notify the charm about the presence of S3 credentials."""
         # check if the mandatory options are in the relation data
-        diff = self._diff(event)
-        logger.info(f"S3 Requirer -> Diff: {diff}")
         contains_required_options = True
         # get current credentials data
         credentials = self.get_s3_connection_info()

@@ -80,7 +80,7 @@ async def test_two_applications_doesnt_share_the_same_relation_data(
     )
     await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
 
-    # Assert the two application have different relation (connection) data.
+    # Assert the two applications have different relation (connection) data.
     application_connection_info = await get_connection_info(
         ops_test, APPLICATION_APP_NAME, FIRST_S3_RELATION_NAME
     )
@@ -107,5 +107,5 @@ async def test_an_application_can_request_multiple_s3_providers(ops_test: OpsTes
         ops_test, APPLICATION_APP_NAME, SECOND_S3_RELATION_NAME
     )
 
-    # Assert the two application have different relation (connection) data.
+    # Assert the two applications have different relation (connection) data.
     assert first_s3_connection_info != second_s3_connection_info

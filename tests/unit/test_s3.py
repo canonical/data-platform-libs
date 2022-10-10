@@ -141,7 +141,6 @@ class TestS3Requirer(unittest.TestCase):
 
         # Check that the fields are present in the relation
         # using the requires charm library.
-        logger.info(f"Credential info: {self.harness.charm.s3_requirer.get_s3_connection_info()}")
         connection_info = self.harness.charm.s3_requirer.get_s3_connection_info()
 
         assert connection_info["bucket"] == "test-bucket"
@@ -247,7 +246,6 @@ class TestS3Provider(unittest.TestCase):
         self.harness.charm.s3_provider.update_connection_info(
             self.rel_id, {"access-key": "test-access-key", "secret-key": "test-secret-key"}
         )
-        logger.info(f"relation data 1: {self.harness.get_relation_data(self.rel_id, 's3_app')}")
         # Add extra fields
         self.harness.charm.s3_provider.set_access_key(self.rel_id, "test-access-key")
         self.harness.charm.s3_provider.set_secret_key(self.rel_id, "test-secret-key")
