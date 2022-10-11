@@ -30,6 +30,9 @@ jobs:
 
   integration-test:
     name: Integration tests (microk8s)
+    needs:
+      - lint
+      - unit-test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
