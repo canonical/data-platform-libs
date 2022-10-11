@@ -284,7 +284,7 @@ class TestDatabaseRequires(unittest.TestCase):
     def test_assign_relation_alias(self):
         """Asserts the correct relation alias is assigned to the relation."""
         # Reset the alias.
-        self.harness.update_relation_data(self.rel_id, "application/0", {"alias": None})
+        self.harness.update_relation_data(self.rel_id, "application/0", {"alias": ""})
 
         # Call the function and check the alias.
         self.harness.charm.database._assign_relation_alias(self.rel_id)
@@ -294,7 +294,7 @@ class TestDatabaseRequires(unittest.TestCase):
         )
 
         # Add another relation and check that the second cluster alias was assigned to it.
-        second_rel_id = self.harness.add_relation(RELATION_NAME, "database")
+        second_rel_id = self.harness.add_relation(RELATION_NAME, "another-database")
         self.harness.add_relation_unit(second_rel_id, "another-database/0")
         assert (
             self.harness.get_relation_data(second_rel_id, "application/0")["alias"]
@@ -302,7 +302,7 @@ class TestDatabaseRequires(unittest.TestCase):
         )
 
         # Reset the alias and test again using the function call.
-        self.harness.update_relation_data(second_rel_id, "application/0", {"alias": None})
+        self.harness.update_relation_data(second_rel_id, "application/0", {"alias": ""})
         self.harness.charm.database._assign_relation_alias(second_rel_id)
         assert (
             self.harness.get_relation_data(second_rel_id, "application/0")["alias"]
