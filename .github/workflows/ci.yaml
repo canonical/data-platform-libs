@@ -38,9 +38,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          # Juju 2.9.35 is enforcing series on metadata.yaml,
-          # which doesn't work for Kubernetes charms.
-          # (issue: https://bugs.launchpad.net/juju/+bug/1992833).
+          # This is needed until https://bugs.launchpad.net/juju/+bug/1992833 is fixed.
           bootstrap-options: "--agent-version 2.9.34"
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
