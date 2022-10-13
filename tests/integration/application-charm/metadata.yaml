@@ -19,4 +19,4 @@ requires:
     limit: 2
 
 series:
-  - kubernetes
+  - focal
