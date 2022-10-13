@@ -28,6 +28,11 @@ provides:
   database:
     interface: database_client
 
+requires:
+  certificates:
+    interface: tls-certificates
+    limit: 1
+
 storage:
   database:
     type: filesystem
