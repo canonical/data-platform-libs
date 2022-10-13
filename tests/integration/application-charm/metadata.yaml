@@ -17,3 +17,6 @@ requires:
   aliased-multiple-database-clusters:
     interface: database_client
     limit: 2
+
+series:
+  - kubernetes
