@@ -38,6 +38,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
+          bootstrap-options: "--agent-version 2.9.34"
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run: tox -e integration -- --model testing
