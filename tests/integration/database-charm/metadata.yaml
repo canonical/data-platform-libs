@@ -24,6 +24,9 @@ provides:
   database:
     interface: database_client
 
+series:
+  - kubernetes
+
 storage:
   database:
     type: filesystem
