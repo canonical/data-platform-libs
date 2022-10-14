@@ -43,7 +43,9 @@ class ApplicationS3Charm(CharmBase):
         self.framework.observe(
             self.first_s3_requirer.on.credentials_gone, self._on_first_credential_gone
         )
-        self.framework.observe(self.on[FIRST_RELATION].relation_joined, self._on_first_relation_joined)
+        self.framework.observe(
+            self.on[FIRST_RELATION].relation_joined, self._on_first_relation_joined
+        )
 
         # Events related to the second s3 relation that is requested
         # (these events are defined in the s3 requires charm library).
@@ -54,7 +56,9 @@ class ApplicationS3Charm(CharmBase):
         self.framework.observe(
             self.second_s3_requirer.on.credentials_gone, self._on_second_credential_gone
         )
-        self.framework.observe(self.on[SECOND_RELATION].relation_joined, self._on_second_relation_joined)
+        self.framework.observe(
+            self.on[SECOND_RELATION].relation_joined, self._on_second_relation_joined
+        )
 
     def _on_first_relation_joined(self, _: RelationJoinedEvent):
         """On first s3 credential relation joined."""

@@ -36,7 +36,9 @@ async def test_deploy_charms(ops_test: OpsTest, application_s3_charm, s3_charm):
         ),
     )
     await ops_test.model.wait_for_idle(apps=[S3_APP_NAME], status="active", wait_for_units=1)
-    await ops_test.model.wait_for_idle(apps=[APPLICATION_APP_NAME], status="waiting", wait_for_units=1)
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_APP_NAME], status="waiting", wait_for_units=1
+    )
 
 
 @pytest.mark.abort_on_fail
