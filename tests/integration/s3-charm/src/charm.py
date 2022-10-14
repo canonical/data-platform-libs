@@ -24,13 +24,19 @@ class S3Charm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
+        # Default charm events.
+        self.framework.observe(self.on.start, self._on_start)
+
         # Charm events defined in the s3 provides charm library.
         self.s3_provider = S3Provider(self, relation_name="s3-credentials")
         self.framework.observe(
             self.s3_provider.on.credentials_requested, self._on_credential_requested
         )
-        # set active status
-        self.unit.status = ActiveStatus()
+
+    def _on_start(self, _) -> None:
+        """Only sets an waiting status."""
+        # self.unit.status = WaitingStatus("Waiting for relation")
+        self.unit.status = ActiveStatus("HERE")
 
     def _on_credential_requested(self, event: CredentialRequestedEvent):
         self.unit.status = MaintenanceStatus("Creating credentials")

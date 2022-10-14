@@ -15,11 +15,13 @@ from charms.data_platform_libs.v0.s3 import (
     CredentialsGoneEvent,
     S3Requirer,
 )
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationJoinedEvent
 from ops.main import main
-from ops.model import ActiveStatus
+from ops.model import ActiveStatus, WaitingStatus
 
 logger = logging.getLogger(__name__)
+FIRST_RELATION = "first-s3-credentials"
+SECOND_RELATION = "second-s3-credentials"
 
 
 class ApplicationS3Charm(CharmBase):
@@ -34,27 +36,38 @@ class ApplicationS3Charm(CharmBase):
         # Events related to the first s3 relation that is requested
         # (these events are defined in the s3 requires charm library).
         first_bucket_name = f'{self.app.name.replace("-", "_")}_first_bucket'
-        self.first_s3_requirer = S3Requirer(self, "first-s3-credentials", first_bucket_name)
+        self.first_s3_requirer = S3Requirer(self, FIRST_RELATION, first_bucket_name)
         self.framework.observe(
             self.first_s3_requirer.on.credentials_changed, self._on_first_credential_created
         )
         self.framework.observe(
             self.first_s3_requirer.on.credentials_gone, self._on_first_credential_gone
         )
+        self.framework.observe(self.on[FIRST_RELATION].relation_joined, self._on_first_relation_joined)
 
         # Events related to the second s3 relation that is requested
         # (these events are defined in the s3 requires charm library).
-        self.second_s3_requirer = S3Requirer(self, "second-s3-credentials")
+        self.second_s3_requirer = S3Requirer(self, SECOND_RELATION)
         self.framework.observe(
             self.second_s3_requirer.on.credentials_changed, self._on_second_credential_created
         )
         self.framework.observe(
             self.second_s3_requirer.on.credentials_gone, self._on_second_credential_gone
         )
+        self.framework.observe(self.on[SECOND_RELATION].relation_joined, self._on_second_relation_joined)
+
+    def _on_first_relation_joined(self, _: RelationJoinedEvent):
+        """On first s3 credential relation joined."""
+        self.unit.status = ActiveStatus()
+
+    def _on_second_relation_joined(self, _: RelationJoinedEvent):
+        """On second s3 credential relation joined."""
+        self.unit.status = ActiveStatus()
 
     def _on_start(self, _) -> None:
-        """Only sets an Active status."""
-        self.unit.status = ActiveStatus()
+        """Only sets an waiting status."""
+        # self.unit.status = WaitingStatus("Waiting for relation")
+        self.unit.status = WaitingStatus("Waiting for relation")
 
     # First credential changed events observers.
     def _on_first_credential_created(self, event: CredentialsChangedEvent) -> None:

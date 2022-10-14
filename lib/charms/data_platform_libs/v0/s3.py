@@ -146,6 +146,41 @@ changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
 
+def diff(event: RelationChangedEvent, bucket: str) -> Diff:
+    """Retrieves the diff of the data in the relation changed databag.
+
+    Args:
+        event: relation changed event.
+        bucket: bucket of the databag (app or unit)
+
+    Returns:
+        a Diff instance containing the added, deleted and changed
+            keys from the event relation databag.
+    """
+    # Retrieve the old data from the data key in the application relation databag.
+    old_data = json.loads(event.relation.data[bucket].get("data", "{}"))
+    # Retrieve the new data from the event relation databag.
+    new_data = {
+        key: value for key, value in event.relation.data[event.app].items() if key != "data"
+    }
+
+    # These are the keys that were added to the databag and triggered this event.
+    added = new_data.keys() - old_data.keys()
+    # These are the keys that were removed from the databag and triggered this event.
+    deleted = old_data.keys() - new_data.keys()
+    # These are the keys that already existed in the databag,
+    # but had their values changed.
+    changed = {key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]}
+
+    # TODO: evaluate the possibility of losing the diff if some error
+    # happens in the charm before the diff is completely checked (DPE-412).
+    # Convert the new_data to a serializable format and save it for a next diff check.
+    event.relation.data[bucket].update({"data": json.dumps(new_data)})
+
+    # Return the diff with all possible changes.
+    return Diff(added, changed, deleted)
+
+
 class BucketEvent(RelationEvent):
     """Base class for bucket events."""
 
@@ -209,6 +244,41 @@ class S3Provider(Object):
                 connection_data[key] = raw_relation_data[key]
         return connection_data
 
+    # def _diff(self, event: RelationChangedEvent) -> Diff:
+    #     """Retrieves the diff of the data in the relation changed databag.
+
+    #     Args:
+    #         event: relation changed event.
+
+    #     Returns:
+    #         a Diff instance containing the added, deleted and changed
+    #             keys from the event relation databag.
+    #     """
+    #     # Retrieve the old data from the data key in the application relation databag.
+    #     old_data = json.loads(event.relation.data[self.local_app].get("data", "{}"))
+    #     # Retrieve the new data from the event relation databag.
+    #     new_data = {
+    #         key: value for key, value in event.relation.data[event.app].items() if key != "data"
+    #     }
+
+    #     # These are the keys that were added to the databag and triggered this event.
+    #     added = new_data.keys() - old_data.keys()
+    #     # These are the keys that were removed from the databag and triggered this event.
+    #     deleted = old_data.keys() - new_data.keys()
+    #     # These are the keys that already existed in the databag,
+    #     # but had their values changed.
+    #     changed = {
+    #         key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
+    #     }
+
+    #     # TODO: evaluate the possibility of losing the diff if some error
+    #     # happens in the charm before the diff is completely checked (DPE-412).
+    #     # Convert the new_data to a serializable format and save it for a next diff check.
+    #     event.relation.data[self.local_app].update({"data": json.dumps(new_data)})
+
+    #     # Return the diff with all possible changes.
+    #     return Diff(added, changed, deleted)
+
     def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
 
@@ -219,30 +289,7 @@ class S3Provider(Object):
             a Diff instance containing the added, deleted and changed
                 keys from the event relation databag.
         """
-        # Retrieve the old data from the data key in the application relation databag.
-        old_data = json.loads(event.relation.data[self.local_app].get("data", "{}"))
-        # Retrieve the new data from the event relation databag.
-        new_data = {
-            key: value for key, value in event.relation.data[event.app].items() if key != "data"
-        }
-
-        # These are the keys that were added to the databag and triggered this event.
-        added = new_data.keys() - old_data.keys()
-        # These are the keys that were removed from the databag and triggered this event.
-        deleted = old_data.keys() - new_data.keys()
-        # These are the keys that already existed in the databag,
-        # but had their values changed.
-        changed = {
-            key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
-        }
-
-        # TODO: evaluate the possibility of losing the diff if some error
-        # happens in the charm before the diff is completely checked (DPE-412).
-        # Convert the new_data to a serializable format and save it for a next diff check.
-        event.relation.data[self.local_app].update({"data": json.dumps(new_data)})
-
-        # Return the diff with all possible changes.
-        return Diff(added, changed, deleted)
+        return diff(event, self.local_app)
 
     def fetch_relation_data(self) -> dict:
         """Retrieves data from relation.
@@ -281,10 +328,11 @@ class S3Provider(Object):
         if not relation:
             return
 
-        # update the databag, if connection data did not change with respect to before
-        # the relation changed event is not triggered
         # configuration options that are list
         s3_list_options = ["attributes", "tls-ca-chain"]
+
+        # update the databag, if connection data did not change with respect to before
+        # the relation changed event is not triggered
         updated_connection_data = {}
         for configuration_option, configuration_value in connection_data.items():
             if configuration_option in s3_list_options:
@@ -620,6 +668,41 @@ class S3Requirer(Object):
                 connection_data[key] = raw_relation_data[key]
         return connection_data
 
+    # def _diff(self, event: RelationChangedEvent) -> Diff:
+    #     """Retrieves the diff of the data in the relation changed databag.
+
+    #     Args:
+    #         event: relation changed event.
+
+    #     Returns:
+    #         a Diff instance containing the added, deleted and changed
+    #             keys from the event relation databag.
+    #     """
+    #     # Retrieve the old data from the data key in the local unit relation databag.
+    #     old_data = json.loads(event.relation.data[self.local_unit].get("data", "{}"))
+    #     # Retrieve the new data from the event relation databag.
+    #     new_data = {
+    #         key: value for key, value in event.relation.data[event.app].items() if key != "data"
+    #     }
+
+    #     # These are the keys that were added to the databag and triggered this event.
+    #     added = new_data.keys() - old_data.keys()
+    #     # These are the keys that were removed from the databag and triggered this event.
+    #     deleted = old_data.keys() - new_data.keys()
+    #     # These are the keys that already existed in the databag,
+    #     # but had their values changed.
+    #     changed = {
+    #         key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
+    #     }
+
+    #     # TODO: evaluate the possibility of losing the diff if some error
+    #     # happens in the charm before the diff is completely checked (DPE-412).
+    #     # Convert the new_data to a serializable format and save it for a next diff check.
+    #     event.relation.data[self.local_unit].update({"data": json.dumps(new_data)})
+
+    #     # Return the diff with all possible changes.
+    #     return Diff(added, changed, deleted)
+
     def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
 
@@ -630,30 +713,7 @@ class S3Requirer(Object):
             a Diff instance containing the added, deleted and changed
                 keys from the event relation databag.
         """
-        # Retrieve the old data from the data key in the local unit relation databag.
-        old_data = json.loads(event.relation.data[self.local_unit].get("data", "{}"))
-        # Retrieve the new data from the event relation databag.
-        new_data = {
-            key: value for key, value in event.relation.data[event.app].items() if key != "data"
-        }
-
-        # These are the keys that were added to the databag and triggered this event.
-        added = new_data.keys() - old_data.keys()
-        # These are the keys that were removed from the databag and triggered this event.
-        deleted = old_data.keys() - new_data.keys()
-        # These are the keys that already existed in the databag,
-        # but had their values changed.
-        changed = {
-            key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
-        }
-
-        # TODO: evaluate the possibility of losing the diff if some error
-        # happens in the charm before the diff is completely checked (DPE-412).
-        # Convert the new_data to a serializable format and save it for a next diff check.
-        event.relation.data[self.local_unit].update({"data": json.dumps(new_data)})
-
-        # Return the diff with all possible changes.
-        return Diff(added, changed, deleted)
+        return diff(event, self.local_unit)
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Notify the charm about the presence of S3 credentials."""

@@ -112,7 +112,7 @@ class TestS3Requirer(unittest.TestCase):
         # Assert the correct hook is called.
         _on_credential_changed.assert_called_once()
 
-        # Check that the username and the password are present in the relation
+        # Check that the access-kety and the secret-key are present in the relation
         # using the requires charm library event.
         event = _on_credential_changed.call_args[0][0]
         assert event.access_key == "test-access-key"

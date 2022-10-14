@@ -35,7 +35,8 @@ async def test_deploy_charms(ops_test: OpsTest, application_s3_charm, s3_charm):
             num_units=2,
         ),
     )
-    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active", wait_for_units=1)
+    await ops_test.model.wait_for_idle(apps=[S3_APP_NAME], status="active", wait_for_units=1)
+    await ops_test.model.wait_for_idle(apps=[APPLICATION_APP_NAME], status="waiting", wait_for_units=1)
 
 
 @pytest.mark.abort_on_fail
@@ -51,7 +52,7 @@ async def test_s3_relation_with_charm_libraries(ops_test: OpsTest):
     connection_info = await get_connection_info(
         ops_test, APPLICATION_APP_NAME, FIRST_S3_RELATION_NAME
     )
-    # test that some of the fields
+    # Get connection info from relation and check their correctness.
     assert connection_info["access-key"] == "test-access-key"
     assert connection_info["secret-key"] == "test-secret-key"
     assert connection_info["bucket"] == f"{APPLICATION_APP_NAME}_first_bucket"
@@ -71,8 +72,8 @@ async def test_two_applications_doesnt_share_the_same_relation_data(
         application_s3_charm,
         application_name=another_application_app_name,
     )
-    await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
-
+    await ops_test.model.wait_for_idle(apps=[S3_APP_NAME, APPLICATION_APP_NAME], status="active")
+    await ops_test.model.wait_for_idle(apps=[another_application_app_name], status="waiting")
     # Relate the new application with the s3 provider
     # and wait for them exchanging some connection data.
     await ops_test.model.add_relation(
