@@ -38,6 +38,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
+          juju-channel: 2.9/edge
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run: tox -e integration -- --model testing
