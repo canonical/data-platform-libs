@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A library for communicating with the S3 integrator providers and consumers.
+"""A library for communicating with the S3 credentials providers and consumers.
 
 This library provides the relevant interface code implementing the communication
 specification for fetching, retrieving, triggering, and responding to events related to
-the S3 integrator charm and its consumers.
+the S3 provider charm and its consumers.
 
 ### Provider charm
 
-The provider is implemented in the `s3-integrator` charm which is meant to be deployed
-alongside one or more consumer charms. The provider charm is serving the s3 credential and
+The provider is implemented in the `s3-provider` charm which is meant to be deployed
+alongside one or more consumer charms. The provider charm is serving the s3 credentials and
 metadata needed to communicate and work with an S3 compatible backend.
 
 Example:
@@ -131,9 +131,15 @@ from ops.charm import (
 )
 from ops.model import Relation
 
-LIBID = "55c4cfd4a8ac45b1b62f2826272a1cf8"
+# The unique Charmhub library identifier, never change it
+LIBID = "fca396f6254246c9bfa565b1f85ab528"
+
+# Increment this major API version when introducing breaking changes
 LIBAPI = 0
-LIBPATCH = 2
+
+# Increment this PATCH version before using `charmcraft publish-lib` or reset
+# to 0 if you are raising the major API version
+LIBPATCH = 1
 
 logger = logging.getLogger(__name__)
 
@@ -667,41 +673,6 @@ class S3Requirer(Object):
             except (json.decoder.JSONDecodeError, TypeError):
                 connection_data[key] = raw_relation_data[key]
         return connection_data
-
-    # def _diff(self, event: RelationChangedEvent) -> Diff:
-    #     """Retrieves the diff of the data in the relation changed databag.
-
-    #     Args:
-    #         event: relation changed event.
-
-    #     Returns:
-    #         a Diff instance containing the added, deleted and changed
-    #             keys from the event relation databag.
-    #     """
-    #     # Retrieve the old data from the data key in the local unit relation databag.
-    #     old_data = json.loads(event.relation.data[self.local_unit].get("data", "{}"))
-    #     # Retrieve the new data from the event relation databag.
-    #     new_data = {
-    #         key: value for key, value in event.relation.data[event.app].items() if key != "data"
-    #     }
-
-    #     # These are the keys that were added to the databag and triggered this event.
-    #     added = new_data.keys() - old_data.keys()
-    #     # These are the keys that were removed from the databag and triggered this event.
-    #     deleted = old_data.keys() - new_data.keys()
-    #     # These are the keys that already existed in the databag,
-    #     # but had their values changed.
-    #     changed = {
-    #         key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
-    #     }
-
-    #     # TODO: evaluate the possibility of losing the diff if some error
-    #     # happens in the charm before the diff is completely checked (DPE-412).
-    #     # Convert the new_data to a serializable format and save it for a next diff check.
-    #     event.relation.data[self.local_unit].update({"data": json.dumps(new_data)})
-
-    #     # Return the diff with all possible changes.
-    #     return Diff(added, changed, deleted)
 
     def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
