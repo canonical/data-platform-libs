@@ -45,6 +45,76 @@ async def build_connection_string(
     return f"dbname='{database}' user='{username}' host='{host}' password='{password}' connect_timeout=10"
 
 
+async def get_connection_info(
+    ops_test: OpsTest,
+    application_name: str,
+    relation_name: str,
+    relation_id: str = None,
+) -> str:
+    """Build a dictionary that contains the connection info.
+
+    Args:
+        ops_test: The ops test framework instance
+        application_name: The name of the application
+        relation_name: name of the relation to get connection data from
+        relation_id: id of the relation to get connection data from
+
+    Returns:
+        a dictionary that contains connection info fields
+    """
+    # Get the connection data exposed to the application through the relation.
+
+    access_key = await get_application_relation_data(
+        ops_test, application_name, relation_name, "access-key", relation_id
+    )
+    secret_key = await get_application_relation_data(
+        ops_test, application_name, relation_name, "secret-key", relation_id
+    )
+    endpoint = await get_application_relation_data(
+        ops_test, application_name, relation_name, "endpoint", relation_id
+    )
+    bucket = await get_application_relation_data(
+        ops_test, application_name, relation_name, "bucket", relation_id
+    )
+    path = await get_application_relation_data(
+        ops_test, application_name, relation_name, "path", relation_id
+    )
+    region = await get_application_relation_data(
+        ops_test, application_name, relation_name, "region", relation_id
+    )
+    s3_uri_style = await get_application_relation_data(
+        ops_test, application_name, relation_name, "s3-uri-style", relation_id
+    )
+    storage_class = await get_application_relation_data(
+        ops_test, application_name, relation_name, "storage-class", relation_id
+    )
+    tls_ca_chain = await get_application_relation_data(
+        ops_test, application_name, relation_name, "tls-ca-chain", relation_id
+    )
+    s3_api_version = await get_application_relation_data(
+        ops_test, application_name, relation_name, "s3-api-version", relation_id
+    )
+    attributes = await get_application_relation_data(
+        ops_test, application_name, relation_name, "attributes", relation_id
+    )
+
+    connection_info = {
+        "access-key": access_key,
+        "secret-key": secret_key,
+        "endpoint": endpoint,
+        "bucket": bucket,
+        "path": path,
+        "region": region,
+        "s3-uri-style": s3_uri_style,
+        "storage-class": storage_class,
+        "tls-ca-chain": tls_ca_chain,
+        "s3-api-version": s3_api_version,
+        "attributes": attributes,
+    }
+    # Return the connection info extracted from the relation.
+    return connection_info
+
+
 async def get_alias_from_relation_data(
     ops_test: OpsTest, unit_name: str, related_unit_name: str
 ) -> Optional[str]:
