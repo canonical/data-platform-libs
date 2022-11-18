@@ -65,6 +65,7 @@ exchanged in the relation databag.
 """
 import json
 import logging
+from abc import ABC, abstractmethod
 from collections import namedtuple
 from typing import List, Optional
 
@@ -85,6 +86,18 @@ LIBPATCH = 2
 logger = logging.getLogger(__name__)
 
 
+class ExtraRoleEvent(RelationEvent):
+    """Base class for data events."""
+
+    @property
+    def extra_user_roles(self) -> Optional[str]:
+        """Returns the extra user roles that were requested."""
+        return self.relation.data[self.relation.app].get("extra-user-roles")
+
+
+# Database related events and fields
+
+
 class DatabaseEvent(RelationEvent):
     """Base class for database events."""
 
@@ -93,13 +106,8 @@ class DatabaseEvent(RelationEvent):
         """Returns the database that was requested."""
         return self.relation.data[self.relation.app].get("database")
 
-    @property
-    def extra_user_roles(self) -> Optional[str]:
-        """Returns the extra user roles that were requested."""
-        return self.relation.data[self.relation.app].get("extra-user-roles")
 
-
-class DatabaseRequestedEvent(DatabaseEvent):
+class DatabaseRequestedEvent(DatabaseEvent, ExtraRoleEvent):
     """Event emitted when a new database is requested for use on this relation."""
 
 
@@ -112,6 +120,56 @@ class DatabaseEvents(CharmEvents):
     database_requested = EventSource(DatabaseRequestedEvent)
 
 
+# Kafka related events
+
+
+class KafkaEvent(RelationEvent):
+    """Base class for Kafka events."""
+
+    @property
+    def topic(self) -> Optional[str]:
+        """Returns the topic that was requested."""
+        return self.relation.data[self.relation.app].get("topic")
+
+
+class TopicRequestedEvent(KafkaEvent, ExtraRoleEvent):
+    """Event emitted when a new topic is requested for use on this relation."""
+
+
+class KafkaEvents(CharmEvents):
+    """Kafka events.
+
+    This class defines the events that the Kafka can emit.
+    """
+
+    topic_requested = EventSource(TopicRequestedEvent)
+
+
+# Zookeeper related events
+
+
+class ZookeeperEvent(RelationEvent):
+    """Base class for Zookeeper events."""
+
+    @property
+    def chroot(self) -> Optional[str]:
+        """Returns the chroot that was requested."""
+        return self.relation.data[self.relation.app].get("chroot")
+
+
+class ChrootRequestedEvent(ZookeeperEvent, ExtraRoleEvent):
+    """Event emitted when a new chtoot is requested for use on this relation."""
+
+
+class ZookeeperEvents(CharmEvents):
+    """Zookeeper events.
+
+    This class defines the events that the Zookeeper can emit.
+    """
+
+    chroot_requested = EventSource(ChrootRequestedEvent)
+
+
 Diff = namedtuple("Diff", "added changed deleted")
 Diff.__doc__ = """
 A tuple for storing the diff between two data mappings.
@@ -121,10 +179,14 @@ changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
 
-class DatabaseProvides(Object):
-    """Provides-side of the database relation."""
+class DataProvidesMeta(type(Object), type(ABC)):
+    """Meta class."""
 
-    on = DatabaseEvents()
+    pass
+
+
+class DataProvides(Object, ABC, metaclass=DataProvidesMeta):
+    """Base provides-side of the data products relation."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         super().__init__(charm, relation_name)
@@ -172,19 +234,10 @@ class DatabaseProvides(Object):
         # Return the diff with all possible changes.
         return Diff(added, changed, deleted)
 
+    @abstractmethod
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
-        # Only the leader should handle this event.
-        if not self.local_unit.is_leader():
-            return
-
-        # Check which data has changed to emit customs events.
-        diff = self._diff(event)
-
-        # Emit a database requested event if the setup key (database name and optional
-        # extra user roles) was added to the relation databag by the application.
-        if "database" in diff.added:
-            self.on.database_requested.emit(event.relation, app=event.app, unit=event.unit)
+        raise NotImplementedError
 
     def fetch_relation_data(self) -> dict:
         """Retrieves data from relation.
@@ -254,6 +307,56 @@ class DatabaseProvides(Object):
         """
         self._update_relation_data(relation_id, {"endpoints": connection_strings})
 
+    def set_tls(self, relation_id: int, tls: str) -> None:
+        """Set whether TLS is enabled.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            tls: whether tls is enabled (True or False).
+        """
+        self._update_relation_data(relation_id, {"tls": tls})
+
+    def set_tls_ca(self, relation_id: int, tls_ca: str) -> None:
+        """Set the TLS CA in the application relation databag.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            tls_ca: TLS certification authority.
+        """
+        self._update_relation_data(relation_id, {"tls_ca": tls_ca})
+
+    def set_version(self, relation_id: int, version: str) -> None:
+        """Set the database version in the application relation databag.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            version: database version.
+        """
+        self._update_relation_data(relation_id, {"version": version})
+
+
+class DatabaseProvides(DataProvides):
+    """Provider-side of the database relations."""
+
+    on = DatabaseEvents()
+
+    def __init__(self, charm: CharmBase, relation_name: str) -> None:
+        super().__init__(charm, relation_name)
+
+    def _on_relation_changed(self, event: RelationChangedEvent) -> None:
+        """Event emitted when the relation has changed."""
+        # Only the leader should handle this event.
+        if not self.local_unit.is_leader():
+            return
+
+        # Check which data has changed to emit customs events.
+        diff = self._diff(event)
+
+        # Emit a database requested event if the setup key (database name and optional
+        # extra user roles) was added to the relation databag by the application.
+        if "database" in diff.added:
+            self.on.database_requested.emit(event.relation, app=event.app, unit=event.unit)
+
     def set_read_only_endpoints(self, relation_id: int, connection_strings: str) -> None:
         """Set database replicas connection strings.
 
@@ -277,24 +380,6 @@ class DatabaseProvides(Object):
         """
         self._update_relation_data(relation_id, {"replset": replset})
 
-    def set_tls(self, relation_id: int, tls: str) -> None:
-        """Set whether TLS is enabled.
-
-        Args:
-            relation_id: the identifier for a particular relation.
-            tls: whether tls is enabled (True or False).
-        """
-        self._update_relation_data(relation_id, {"tls": tls})
-
-    def set_tls_ca(self, relation_id: int, tls_ca: str) -> None:
-        """Set the TLS CA in the application relation databag.
-
-        Args:
-            relation_id: the identifier for a particular relation.
-            tls_ca: TLS certification authority.
-        """
-        self._update_relation_data(relation_id, {"tls_ca": tls_ca})
-
     def set_uris(self, relation_id: int, uris: str) -> None:
         """Set the database connection URIs in the application relation databag.
 
@@ -306,11 +391,86 @@ class DatabaseProvides(Object):
         """
         self._update_relation_data(relation_id, {"uris": uris})
 
-    def set_version(self, relation_id: int, version: str) -> None:
-        """Set the database version in the application relation databag.
+
+class KafkaProvides(DataProvides):
+    """Provider-side of the Kafka relation."""
+
+    on = KafkaEvents()
+
+    def __init__(self, charm: CharmBase, relation_name: str) -> None:
+        super().__init__(charm, relation_name)
+
+    def _on_relation_changed(self, event: RelationChangedEvent) -> None:
+        """Event emitted when the relation has changed."""
+        # Only the leader should handle this event.
+        if not self.local_unit.is_leader():
+            return
+
+        # Check which data has changed to emit customs events.
+        diff = self._diff(event)
+
+        # Emit a database requested event if the setup key (database name and optional
+        # extra user roles) was added to the relation databag by the application.
+        if "topic" in diff.added:
+            self.on.topic_requested.emit(event.relation, app=event.app, unit=event.unit)
+
+    def set_bootstrap_server(self, relation_id: int, bootstrap_server: str) -> None:
+        """Set the bootstrap server in the application relation databag.
 
         Args:
             relation_id: the identifier for a particular relation.
-            version: database version.
+            bootstrap_server: the bootstrap server address.
         """
-        self._update_relation_data(relation_id, {"version": version})
+        self._update_relation_data(relation_id, {"bootstrap-server": bootstrap_server})
+
+    def set_endpoints(self, relation_id: int, endpoints: str) -> None:
+        """Set the bootstrap server in the application relation databag.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            endpoints: hosts and ports comma separated list.
+        """
+        self._update_relation_data(relation_id, {"endpoints": endpoints})
+
+    def set_consumer_group_prefix(self, relation_id: int, consumer_group_prefix: str) -> None:
+        """Set the bootstrap server in the application relation databag.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            consumer_group_prefix: the consumer group prefix string.
+        """
+        self._update_relation_data(relation_id, {"consumer-group-prefix": consumer_group_prefix})
+
+    def set_zookeeper_uris(self, relation_id: int, zookeeper_uris: str) -> None:
+        """Set the bootstrap server in the application relation databag.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            zookeeper_uris: comma-seperated list of ZooKeeper server uris.
+        """
+        self._update_relation_data(relation_id, {"zookeeper-uris": zookeeper_uris})
+
+
+class ZookeeperProvides(DataProvides):
+    """Provider-side of the Zookeeper relation."""
+
+    on = ZookeeperEvents()
+
+    def __init__(self, charm: CharmBase, relation_name: str) -> None:
+        super().__init__(charm, relation_name)
+
+    def _on_relation_changed(self, event: RelationChangedEvent) -> None:
+        """Event emitted when the relation has changed."""
+        # Only the leader should handle this event.
+        if not self.local_unit.is_leader():
+            return
+
+        # Check which data has changed to emit customs events.
+        diff = self._diff(event)
+
+        # Emit a database requested event if the setup key (database name and optional
+        # extra user roles) was added to the relation databag by the application.
+        if "chroot" in diff.added:
+            self.on.chroot_requested.emit(event.relation, app=event.app, unit=event.unit)
+
+    # TODO add extra fields
