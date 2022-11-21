@@ -126,7 +126,6 @@ class TestDataProvides(unittest.TestCase):
 
 
 class TestDatabaseProvides(TestDataProvides):
-
     @patch.object(DatabaseCharm, "_on_database_requested")
     def emit_database_requested_event(self, _on_database_requested):
         # Emit the database requested event.
