@@ -295,18 +295,6 @@ class DataProvides(Object, ABC, metaclass=DataProvidesMeta):
             },
         )
 
-    def set_endpoints(self, relation_id: int, connection_strings: str) -> None:
-        """Set database primary connections.
-
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
-
-        Args:
-            relation_id: the identifier for a particular relation.
-            connection_strings: database hosts and ports comma separated list.
-        """
-        self._update_relation_data(relation_id, {"endpoints": connection_strings})
-
     def set_tls(self, relation_id: int, tls: str) -> None:
         """Set whether TLS is enabled.
 
@@ -356,6 +344,18 @@ class DatabaseProvides(DataProvides):
         # extra user roles) was added to the relation databag by the application.
         if "database" in diff.added:
             self.on.database_requested.emit(event.relation, app=event.app, unit=event.unit)
+
+    def set_endpoints(self, relation_id: int, connection_strings: str) -> None:
+        """Set database primary connections.
+
+        This function writes in the application data bag, therefore,
+        only the leader unit can call it.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            connection_strings: database hosts and ports comma separated list.
+        """
+        self._update_relation_data(relation_id, {"endpoints": connection_strings})
 
     def set_read_only_endpoints(self, relation_id: int, connection_strings: str) -> None:
         """Set database replicas connection strings.
@@ -421,16 +421,7 @@ class KafkaProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             bootstrap_server: the bootstrap server address.
         """
-        self._update_relation_data(relation_id, {"bootstrap-server": bootstrap_server})
-
-    def set_endpoints(self, relation_id: int, endpoints: str) -> None:
-        """Set the bootstrap server in the application relation databag.
-
-        Args:
-            relation_id: the identifier for a particular relation.
-            endpoints: hosts and ports comma separated list.
-        """
-        self._update_relation_data(relation_id, {"endpoints": endpoints})
+        self._update_relation_data(relation_id, {"endpoints": bootstrap_server})
 
     def set_consumer_group_prefix(self, relation_id: int, consumer_group_prefix: str) -> None:
         """Set the bootstrap server in the application relation databag.
@@ -473,4 +464,14 @@ class ZookeeperProvides(DataProvides):
         if "chroot" in diff.added:
             self.on.chroot_requested.emit(event.relation, app=event.app, unit=event.unit)
 
-    # TODO add extra fields
+    def set_endpoints(self, relation_id: int, connection_strings: str) -> None:
+        """Set database primary connections.
+
+        This function writes in the application data bag, therefore,
+        only the leader unit can call it.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            connection_strings: database hosts and ports comma separated list.
+        """
+        self._update_relation_data(relation_id, {"endpoints": connection_strings})

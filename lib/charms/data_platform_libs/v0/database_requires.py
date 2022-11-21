@@ -263,11 +263,6 @@ class KafkaEvent(RelationEvent):
     @property
     def bootstrap_server(self) -> Optional[str]:
         """Returns a a comma-seperated list of broker uris."""
-        return self.relation.data[self.relation.app].get("bootstrap-server")
-
-    @property
-    def endpoints(self) -> Optional[str]:
-        """Returns a comma separated list of read/write endpoints."""
         return self.relation.data[self.relation.app].get("endpoints")
 
     @property
@@ -289,8 +284,8 @@ class BootstrapServerChangedEvent(BaseEvent, KafkaEvent):
     """Event emitted when the bootstrap server is changed."""
 
 
-class KakfaEndpointsChangedEvent(BaseEvent, KafkaEvent):
-    """Event emitted when the endpoints are changed."""
+# class KakfaEndpointsChangedEvent(BaseEvent, KafkaEvent):
+#     """Event emitted when the endpoints are changed."""
 
 
 class KakfaCredentialsChangedEvent(BaseEvent, KafkaEvent):
@@ -305,7 +300,6 @@ class KafkaEvents(CharmEvents):
 
     topic_created = EventSource(TopicCreatedEvent)
     bootstrap_server_changed = EventSource(BootstrapServerChangedEvent)
-    endpoints_changed = EventSource(KakfaEndpointsChangedEvent)
     credentials_changed = EventSource(KakfaCredentialsChangedEvent)
 
 
@@ -647,16 +641,15 @@ class KafkaRequires(BaseRequires):
         """Event emitted when the application joins the Kafka relation."""
         # Sets both topic and extra user roles in the relation
         # if the roles are provided. Otherwise, sets only the topic.
-        if self.extra_user_roles:
-            self._update_relation_data(
-                event.relation.id,
-                {
-                    "topic": self.topic,
-                    "extra-user-roles": self.extra_user_roles,
-                },
-            )
-        else:
-            self._update_relation_data(event.relation.id, {"topic": self.topic})
+        self._update_relation_data(
+            event.relation.id,
+            {
+                "topic": self.topic,
+                "extra-user-roles": self.extra_user_roles,
+            }
+            if self.extra_user_roles is not None
+            else {"topic": self.topic},
+        )
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the Kafka relation has changed."""
@@ -674,19 +667,14 @@ class KafkaRequires(BaseRequires):
             # “endpoints_changed“ event if “topic_created“ is triggered.
             return
 
-        # Emit an endpoints changed event if the Kakfa endpoints
+        # Emit an endpoints (bootstap-server) changed event if the Kakfa endpoints
         # added or changed this info in the relation databag.
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("endpoints changed on %s", datetime.now())
-            self.on.endpoints_changed.emit(event.relation, app=event.app, unit=event.unit)
-            return
-
-        # Emit an boostrap-server changed event if the Kakfa bootstrap-server
-        # added or changed this info in the relation databag.
-        if "bootstrap-sever" in diff.added or "bootstrap-sever" in diff.changed:
-            logger.info("bootstrap-server changed on %s", datetime.now())
-            self.on.bootstrap_server_changed.emit(event.relation, app=event.app, unit=event.unit)
+            self.on.bootstrap_server_changed.emit(
+                event.relation, app=event.app, unit=event.unit
+            )  # here check if this is the right design
             return
 
         # Emit a read only credential changed event if the kafka credentials
@@ -714,16 +702,16 @@ class ZookeeperRequires(BaseRequires):
         """Event emitted when the application joins the zookeeper relation."""
         # Sets both Zookeeper and extra user roles in the relation
         # if the roles are provided. Otherwise, sets only the chroot.
-        if self.extra_user_roles:
-            self._update_relation_data(
-                event.relation.id,
-                {
-                    "chroot": self.chroot,
-                    "extra-user-roles": self.extra_user_roles,
-                },
-            )
-        else:
-            self._update_relation_data(event.relation.id, {"chroot": self.chroot})
+
+        self._update_relation_data(
+            event.relation.id,
+            {
+                "chroot": self.chroot,
+                "extra-user-roles": self.extra_user_roles,
+            }
+            if self.extra_user_roles is not None
+            else {"topic": self.chroot},
+        )
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the Zookeeper relation has changed."""

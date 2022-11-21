@@ -7,6 +7,7 @@ from charms.data_platform_libs.v0.database_provides import (
     DatabaseProvides,
     DatabaseRequestedEvent,
     Diff,
+    KafkaProvides,
 )
 from charms.harness_extensions.v0.capture_events import capture
 from ops.charm import CharmBase
@@ -14,13 +15,22 @@ from ops.testing import Harness
 
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
-RELATION_INTERFACE = "database_client"
-RELATION_NAME = "database"
-METADATA = f"""
+DATABASE_RELATION_INTERFACE = "database_client"
+DATABASE_RELATION_NAME = "database"
+DATABASE_METADATA = f"""
 name: database
 provides:
-  {RELATION_NAME}:
-    interface: {RELATION_INTERFACE}
+  {DATABASE_RELATION_NAME}:
+    interface: {DATABASE_RELATION_INTERFACE}
+"""
+TOPIC = ""
+KAFKA_RELATION_INTERFACE = "kafka_client"
+KAFKA_RELATION_NAME = "kafka"
+KAFKA_METADATA = f"""
+name: kafka
+provides:
+  {KAFKA_RELATION_NAME}:
+    interface: {KAFKA_RELATION_INTERFACE}
 """
 
 
@@ -31,7 +41,7 @@ class DatabaseCharm(CharmBase):
         super().__init__(*args)
         self.database = DatabaseProvides(
             self,
-            RELATION_NAME,
+            DATABASE_RELATION_NAME,
         )
         self.framework.observe(self.database.on.database_requested, self._on_database_requested)
 
@@ -39,31 +49,43 @@ class DatabaseCharm(CharmBase):
         pass
 
 
-class TestDatabaseProvides(unittest.TestCase):
+class KafkaCharm(CharmBase):
+    """Mock Kafka charm to use in units tests."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.kafka = KafkaProvides(
+            self,
+            KAFKA_RELATION_NAME,
+        )
+        self.framework.observe(self.kafka.on.database_requested, self._on_topic_requested)
+
+    def _on_topic_requested(self, _) -> None:
+        pass
+
+
+class TestDataProvides(unittest.TestCase):
+    charm = DatabaseCharm
+    metadata = DATABASE_METADATA
+    relation_name = DATABASE_RELATION_NAME
+    app = "database"
+
     def setUp(self):
-        self.harness = Harness(DatabaseCharm, meta=METADATA)
+        self.harness = Harness(self.charm, meta=self.metadata)
         self.addCleanup(self.harness.cleanup)
 
         # Set up the initial relation and hooks.
-        self.rel_id = self.harness.add_relation(RELATION_NAME, "application")
+        self.rel_id = self.harness.add_relation(self.relation_name, "application")
         self.harness.add_relation_unit(self.rel_id, "application/0")
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
-
-    @patch.object(DatabaseCharm, "_on_database_requested")
-    def emit_database_requested_event(self, _on_database_requested):
-        # Emit the database requested event.
-        relation = self.harness.charm.model.get_relation(RELATION_NAME, self.rel_id)
-        application = self.harness.charm.model.get_app("database")
-        self.harness.charm.database.on.database_requested.emit(relation, application)
-        return _on_database_requested.call_args[0][0]
 
     def test_diff(self):
         """Asserts that the charm library correctly returns a diff of the relation data."""
         # Define a mock relation changed event to be used in the subsequent diff calls.
         mock_event = Mock()
         # Set the app, id and the initial data for the relation.
-        mock_event.app = self.harness.charm.model.get_app("database")
+        mock_event.app = self.harness.charm.model.get_app(self.app)
         mock_event.relation.id = self.rel_id
         mock_event.relation.data = {
             mock_event.app: {"username": "test-username", "password": "test-password"}
@@ -89,6 +111,27 @@ class TestDatabaseProvides(unittest.TestCase):
         del data["password"]
         result = self.harness.charm.database._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
+
+
+class TestDatabaseProvides(unittest.TestCase):
+
+    # def setUp(self):
+    #     self.harness = Harness(DatabaseCharm, meta=DATABASE_METADATA)
+    #     self.addCleanup(self.harness.cleanup)
+
+    #     # Set up the initial relation and hooks.
+    #     self.rel_id = self.harness.add_relation(DATABASE_RELATION_NAME, "application")
+    #     self.harness.add_relation_unit(self.rel_id, "application/0")
+    #     self.harness.set_leader(True)
+    #     self.harness.begin_with_initial_hooks()
+
+    @patch.object(DatabaseCharm, "_on_database_requested")
+    def emit_database_requested_event(self, _on_database_requested):
+        # Emit the database requested event.
+        relation = self.harness.charm.model.get_relation(DATABASE_RELATION_NAME, self.rel_id)
+        application = self.harness.charm.model.get_app("database")
+        self.harness.charm.database.on.database_requested.emit(relation, application)
+        return _on_database_requested.call_args[0][0]
 
     @patch.object(DatabaseCharm, "_on_database_requested")
     def test_on_database_requested(self, _on_database_requested):
