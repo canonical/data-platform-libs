@@ -65,12 +65,12 @@ exchanged in the relation databag.
 """
 import json
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple
 from typing import List, Optional
 
 from ops.charm import CharmBase, CharmEvents, RelationChangedEvent, RelationEvent
-from ops.framework import EventSource, Object
+from ops.framework import EventSource, Object, _Metaclass
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
@@ -179,13 +179,13 @@ changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
 
-class DataProvidesMeta(type(Object), type(ABC)):
+class _AbstractMetaclass(ABCMeta, _Metaclass):
     """Meta class."""
 
     pass
 
 
-class DataProvides(Object, ABC, metaclass=DataProvidesMeta):
+class DataProvides(Object, ABC, metaclass=_AbstractMetaclass):
     """Base provides-side of the data products relation."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:

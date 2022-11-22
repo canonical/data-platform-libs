@@ -139,7 +139,7 @@ class ApplicationCharm(CharmBase):
 
 import json
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple
 from datetime import datetime
 from typing import List, Optional
@@ -150,7 +150,7 @@ from ops.charm import (
     RelationEvent,
     RelationJoinedEvent,
 )
-from ops.framework import EventSource, Object
+from ops.framework import EventSource, Object, _Metaclass
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
@@ -284,10 +284,6 @@ class BootstrapServerChangedEvent(BaseEvent, KafkaEvent):
     """Event emitted when the bootstrap server is changed."""
 
 
-# class KakfaEndpointsChangedEvent(BaseEvent, KafkaEvent):
-#     """Event emitted when the endpoints are changed."""
-
-
 class KakfaCredentialsChangedEvent(BaseEvent, KafkaEvent):
     """Event emitted when the Kafka credentials(username or password) are changed."""
 
@@ -348,13 +344,11 @@ A tuple for storing the diff between two data mappings.
 """
 
 
-class DataRequiresMeta(type(Object), type(ABC)):
-    """Meta class."""
-
+class _AbstractMetaclass(ABCMeta, _Metaclass):
     pass
 
 
-class BaseRequires(Object, ABC, metaclass=DataRequiresMeta):
+class BaseRequires(Object, ABC, metaclass=_AbstractMetaclass):
     """Requires-side of the database relation."""
 
     def __init__(
