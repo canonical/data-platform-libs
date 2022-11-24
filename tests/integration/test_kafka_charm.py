@@ -195,8 +195,10 @@ async def test_kafka_bootstrap_server_changed(ops_test: OpsTest):
 
 
 # async def test_an_application_can_request_multiple_s3_providers(ops_test: OpsTest):
-#     """Test that an application can request additional s3 credentials using the same interface."""
-#     # Relate the charms using another relation and wait for them exchanging some connection data.
+#     """Test that an application can request additional s3
+# credentials using the same interface."""
+#     # Relate the charms using another relation and wait for
+#  them exchanging some connection data.
 #     await ops_test.model.add_relation(
 #         f"{APPLICATION_APP_NAME}:{SECOND_S3_RELATION_NAME}", S3_APP_NAME
 #     )

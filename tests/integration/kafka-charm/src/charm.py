@@ -42,12 +42,12 @@ class KafkaCharm(CharmBase):
         # self.framework.observe(self.on.sync_password_action, self._on_sync_password)
         self.framework.observe(getattr(self.on, "sync_password_action"), self._on_sync_password)
 
-
         self.framework.observe(self.on.sync_username_action, self._on_sync_username)
         self.framework.observe(
             self.on.sync_bootstrap_server_action, self._on_sync_bootstrap_server
         )
-    def _on_peer_relation_changed(self,_):
+
+    def _on_peer_relation_changed(self, _):
         pass
 
     @property
@@ -107,8 +107,8 @@ class KafkaCharm(CharmBase):
         username = "admin"
         password = "password"
         bootstrap_server = "host1:port,host2:port"
-        self.set_secret("app","username", username)
-        self.set_secret("app","password", password)
+        self.set_secret("app", "username", username)
+        self.set_secret("app", "password", password)
         self.set_secret("app", "bootstrap-server", bootstrap_server)
         # set connection info in the databag relation
         self.kafka_provider.set_bootstrap_server(relation_id, bootstrap_server)
@@ -132,21 +132,25 @@ class KafkaCharm(CharmBase):
             for relation in self.kafka_provider.relations:
                 logger.info("here 1")
                 self.kafka_provider.set_credentials(
-                    relation.id, username=self.get_secret("app","username"), password=self.get_secret("app", "password")
+                    relation.id,
+                    username=self.get_secret("app", "username"),
+                    password=self.get_secret("app", "password"),
                 )
         event.set_results({"password": self.get_secret("app", "password")})
 
     def _on_sync_username(self, event: ActionEvent):
         username = event.params["username"]
-        self.set_secret("app", "username",  username)
+        self.set_secret("app", "username", username)
         # set parameters in the secrets
         # update relation data if the relation is present
         if len(self.kafka_provider.relations) > 0:
             for relation in self.kafka_provider.relations:
                 self.kafka_provider.set_credentials(
-                    relation.id, username=self.get_secret("app","username"), password=self.get_secret("app", "password")
+                    relation.id,
+                    username=self.get_secret("app", "username"),
+                    password=self.get_secret("app", "password"),
                 )
-        event.set_results({"username": self.get_secret("app","username")})
+        event.set_results({"username": self.get_secret("app", "username")})
 
     def _on_sync_bootstrap_server(self, event: ActionEvent):
         bootstrap_server = event.params["bootstrap-server"]
