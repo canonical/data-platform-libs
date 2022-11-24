@@ -35,6 +35,7 @@ class KafkaCharm(CharmBase):
 
         # Charm events defined in the s3 provides charm library.
         self.kafka_provider = KafkaProvides(self, relation_name="kafka_client")
+        self.framework.observe(self.on[PEER].relation_created, self._on_peer_relation_changed)
         self.framework.observe(self.kafka_provider.on.topic_requested, self._on_topic_requested)
 
         # actions
@@ -46,6 +47,8 @@ class KafkaCharm(CharmBase):
         self.framework.observe(
             self.on.sync_bootstrap_server_action, self._on_sync_bootstrap_server
         )
+    def _on_peer_relation_changed(self,_):
+        pass
 
     @property
     def app_peer_data(self) -> Dict:

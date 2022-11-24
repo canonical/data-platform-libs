@@ -6,8 +6,6 @@ description: |
 summary: |
   Charm used to mimic the Kakfa charm for test purpose only.
 
-series:
-  - focal
 
 peers:
   kafka-peers:

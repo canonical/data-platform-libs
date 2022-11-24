@@ -92,6 +92,7 @@ async def test_kafka_credential_changed(ops_test: OpsTest):
         ops_test, APPLICATION_APP_NAME, RELATION_NAME, "password"
     )
     assert password == "new-password"
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # check that the credential_changed event is triggered
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
@@ -99,12 +100,14 @@ async def test_kafka_credential_changed(ops_test: OpsTest):
     # reset unit message
     action = await app_unit.run_action(action_name="reset-unit-status")
     result = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
     # check if the message is empty
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
         assert unit.workload_status_message == ""
     # configure the same password
     action = await kafka_unit.run_action(action_name="sync-password", **parameters)
     result = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
     assert result.results["password"] == "new-password"
     password = await get_application_relation_data(
         ops_test, APPLICATION_APP_NAME, RELATION_NAME, "password"
@@ -118,6 +121,7 @@ async def test_kafka_credential_changed(ops_test: OpsTest):
     parameters = {"username": "new-username"}
     action = await kafka_unit.run_action(action_name="sync-username", **parameters)
     result = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
     assert result.results["username"] == "new-username"
 
     # check that the new password is in the databag
@@ -132,12 +136,14 @@ async def test_kafka_credential_changed(ops_test: OpsTest):
     # reset unit message
     action = await app_unit.run_action(action_name="reset-unit-status")
     result = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
     # check if the message is empty
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
         assert unit.workload_status_message == ""
 
     action = await kafka_unit.run_action(action_name="sync-username", **parameters)
     result = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
     assert result.results["username"] == "new-username"
 
     # check that the new password is in the databag
