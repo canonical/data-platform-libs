@@ -292,7 +292,6 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         # Set the additional fields in the relation using the provides charm library.
         self.harness.charm.provider.set_tls(self.rel_id, "True")
         self.harness.charm.provider.set_tls_ca(self.rel_id, "Canonical")
-        self.harness.charm.provider.set_version(self.rel_id, "1.0")
         self.harness.charm.provider.set_consumer_group_prefix(self.rel_id, "pr1,pr2")
         self.harness.charm.provider.set_zookeeper_uris(self.rel_id, "host1:port,host2:port")
 
@@ -301,7 +300,6 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
             "data": "{}",  # Data is the diff stored between multiple relation changed events.
             "tls": "True",
             "tls_ca": "Canonical",
-            "version": "1.0",
             "zookeeper-uris": "host1:port,host2:port",
             "consumer-group-prefix": "pr1,pr2",
         }
