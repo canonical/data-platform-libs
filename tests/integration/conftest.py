@@ -14,6 +14,8 @@ def copy_provides_library_into_charm(ops_test: OpsTest):
     library_path = "lib/charms/data_platform_libs/v0/database_provides.py"
     install_path = "tests/integration/database-charm/" + library_path
     shutil.copyfile(library_path, install_path)
+    install_path = "tests/integration/kafka-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -62,5 +64,13 @@ async def application_s3_charm(ops_test: OpsTest):
 async def s3_charm(ops_test: OpsTest):
     """Build the S3 charm."""
     charm_path = "tests/integration/s3-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def kafka_charm(ops_test: OpsTest):
+    """Build the Kafka charm."""
+    charm_path = "tests/integration/kafka-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm

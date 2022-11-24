@@ -1,0 +1,18 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: kafka
+description: |
+  Toy charm used to emulate Kafka in integration tests.
+summary: |
+  Charm used to mimic the Kakfa charm for test purpose only.
+
+series:
+  - focal
+
+peers:
+  kafka-peers:
+    interface: kafka-peers
+
+provides:
+  kafka_client:
+    interface: kafka_client
