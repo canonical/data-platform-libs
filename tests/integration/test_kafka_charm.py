@@ -164,13 +164,13 @@ async def test_kafka_bootstrap_server_changed(ops_test: OpsTest):
     parameters = {"bootstrap-server": "host1:port,host2:port,host3:port"}
     action = await kafka_unit.run_action(action_name="sync-bootstrap-server", **parameters)
     result = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
     assert result.results["bootstrap-server"] == "host1:port,host2:port,host3:port"
     # check that the new bootstrap-server is in the databag
     bootstrap_server = await get_application_relation_data(
         ops_test, APPLICATION_APP_NAME, RELATION_NAME, "endpoints"
     )
     assert bootstrap_server == "host1:port,host2:port,host3:port"
-    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # check that the bootstrap_server_changed event is triggered
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:

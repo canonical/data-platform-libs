@@ -162,7 +162,7 @@ class KafkaCharm(CharmBase):
                 self.kafka_provider.set_bootstrap_server(
                     relation.id, self.get_secret("app", "bootstrap-server")
                 )
-        event.set_results({"boostrap-server": self.get_secret("app", "bootstrap-server")})
+        event.set_results({"bootstrap-server": self.get_secret("app", "bootstrap-server")})
 
     def _on_reset_unit_status(self, event: ActionEvent):
 
