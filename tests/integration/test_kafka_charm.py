@@ -11,7 +11,7 @@ from tests.integration.helpers import get_application_relation_data
 
 logger = logging.getLogger(__name__)
 
-APPLICATION_APP_NAME = "app"
+APPLICATION_APP_NAME = "app-2"
 KAFKA_APP_NAME = "kafka"
 APP_NAMES = [APPLICATION_APP_NAME, KAFKA_APP_NAME]
 RELATION_NAME = "kafka_client"
