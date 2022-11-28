@@ -6,12 +6,12 @@ from typing import Tuple
 from unittest.mock import Mock, patch
 
 import pytest
-from charms.data_platform_libs.v0.database_requires import (
+from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
-    DatabaseEvents,
     DatabaseReadOnlyEndpointsChangedEvent,
     DatabaseRequires,
+    DatabaseRequiresEvents,
     Diff,
     KafkaRequires,
 )
@@ -100,9 +100,9 @@ def reset_aliases():
     """
     for cluster_alias in CLUSTER_ALIASES:
         try:
-            delattr(DatabaseEvents, f"{cluster_alias}_database_created")
-            delattr(DatabaseEvents, f"{cluster_alias}_endpoints_changed")
-            delattr(DatabaseEvents, f"{cluster_alias}_read_only_endpoints_changed")
+            delattr(DatabaseRequiresEvents, f"{cluster_alias}_database_created")
+            delattr(DatabaseRequiresEvents, f"{cluster_alias}_endpoints_changed")
+            delattr(DatabaseRequiresEvents, f"{cluster_alias}_read_only_endpoints_changed")
         except AttributeError:
             # Ignore the events not existing before the first test.
             pass

@@ -11,7 +11,7 @@ of the libraries in this repository.
 import logging
 from typing import Dict, Optional
 
-from charms.data_platform_libs.v0.database_provides import (
+from charms.data_platform_libs.v0.data_interfaces import (
     KafkaProvides,
     TopicRequestedEvent,
 )

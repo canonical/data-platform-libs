@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Tuple
 from unittest.mock import Mock, patch
 
-from charms.data_platform_libs.v0.database_provides import (
+from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseProvides,
     DatabaseRequestedEvent,
     Diff,

@@ -9,19 +9,13 @@ from pytest_operator.plugin import OpsTest
 
 
 @pytest.fixture(scope="module", autouse=True)
-def copy_provides_library_into_charm(ops_test: OpsTest):
-    """Copy the provides library to the database charm folder."""
-    library_path = "lib/charms/data_platform_libs/v0/database_provides.py"
+def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
+    """Copy the data-interfaces library to the database charm folder."""
+    library_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"
     install_path = "tests/integration/database-charm/" + library_path
     shutil.copyfile(library_path, install_path)
     install_path = "tests/integration/kafka-charm/" + library_path
     shutil.copyfile(library_path, install_path)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def copy_requires_library_into_charm(ops_test: OpsTest):
-    """Copy the requires library to the application charm folder."""
-    library_path = "lib/charms/data_platform_libs/v0/database_requires.py"
     install_path = "tests/integration/application-charm/" + library_path
     shutil.copyfile(library_path, install_path)
 
