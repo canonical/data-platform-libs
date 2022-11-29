@@ -139,7 +139,6 @@ class ApplicationCharm(CharmBase):
 
 import json
 import logging
-from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple
 from datetime import datetime
 from typing import List, Optional
@@ -150,7 +149,7 @@ from ops.charm import (
     RelationEvent,
     RelationJoinedEvent,
 )
-from ops.framework import EventSource, Object, _Metaclass
+from ops.framework import EventSource, Object
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
@@ -166,33 +165,6 @@ LIBPATCH = 4
 logger = logging.getLogger(__name__)
 
 
-class BaseEvent(RelationEvent):
-    """Base class for events."""
-
-    @property
-    def username(self) -> Optional[str]:
-        """Returns the created username."""
-        return self.relation.data[self.relation.app].get("username")
-
-    @property
-    def password(self) -> Optional[str]:
-        """Returns the password for the created user."""
-        return self.relation.data[self.relation.app].get("password")
-
-    @property
-    def tls(self) -> Optional[str]:
-        """Returns whether TLS is configured."""
-        return self.relation.data[self.relation.app].get("tls")
-
-    @property
-    def tls_ca(self) -> Optional[str]:
-        """Returns TLS CA."""
-        return self.relation.data[self.relation.app].get("tls-ca")
-
-
-# Database events
-
-
 class DatabaseEvent(RelationEvent):
     """Base class for database events."""
 
@@ -200,6 +172,11 @@ class DatabaseEvent(RelationEvent):
     def endpoints(self) -> Optional[str]:
         """Returns a comma separated list of read/write endpoints."""
         return self.relation.data[self.relation.app].get("endpoints")
+
+    @property
+    def password(self) -> Optional[str]:
+        """Returns the password for the created user."""
+        return self.relation.data[self.relation.app].get("password")
 
     @property
     def read_only_endpoints(self) -> Optional[str]:
@@ -215,12 +192,27 @@ class DatabaseEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("replset")
 
     @property
+    def tls(self) -> Optional[str]:
+        """Returns whether TLS is configured."""
+        return self.relation.data[self.relation.app].get("tls")
+
+    @property
+    def tls_ca(self) -> Optional[str]:
+        """Returns TLS CA."""
+        return self.relation.data[self.relation.app].get("tls-ca")
+
+    @property
     def uris(self) -> Optional[str]:
         """Returns the connection URIs.
 
-        MongoDB, Redis, OpenSearch.
+        MongoDB, Redis, OpenSearch and Kafka only.
         """
         return self.relation.data[self.relation.app].get("uris")
+
+    @property
+    def username(self) -> Optional[str]:
+        """Returns the created username."""
+        return self.relation.data[self.relation.app].get("username")
 
     @property
     def version(self) -> Optional[str]:
@@ -231,15 +223,15 @@ class DatabaseEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("version")
 
 
-class DatabaseCreatedEvent(BaseEvent, DatabaseEvent):
+class DatabaseCreatedEvent(DatabaseEvent):
     """Event emitted when a new database is created for use on this relation."""
 
 
-class DatabaseEndpointsChangedEvent(BaseEvent, DatabaseEvent):
+class DatabaseEndpointsChangedEvent(DatabaseEvent):
     """Event emitted when the read/write endpoints are changed."""
 
 
-class DatabaseReadOnlyEndpointsChangedEvent(BaseEvent, DatabaseEvent):
+class DatabaseReadOnlyEndpointsChangedEvent(DatabaseEvent):
     """Event emitted when the read only endpoints are changed."""
 
 
@@ -254,86 +246,6 @@ class DatabaseEvents(CharmEvents):
     read_only_endpoints_changed = EventSource(DatabaseReadOnlyEndpointsChangedEvent)
 
 
-# Kafka events
-
-
-class KafkaEvent(RelationEvent):
-    """Base class for Kafka events."""
-
-    @property
-    def bootstrap_server(self) -> Optional[str]:
-        """Returns a a comma-seperated list of broker uris."""
-        return self.relation.data[self.relation.app].get("endpoints")
-
-    @property
-    def consumer_group_prefix(self) -> Optional[str]:
-        """Returns the consumer-group-prefix."""
-        return self.relation.data[self.relation.app].get("consumer-group-prefix")
-
-    @property
-    def zookeeper_uris(self) -> Optional[str]:
-        """Returns a comma separated list of Zookeeper uris."""
-        return self.relation.data[self.relation.app].get("zookeeper-uris")
-
-
-class TopicCreatedEvent(BaseEvent, KafkaEvent):
-    """Event emitted when a new topic is created for use on this relation."""
-
-
-class BootstrapServerChangedEvent(BaseEvent, KafkaEvent):
-    """Event emitted when the bootstrap server is changed."""
-
-
-class KakfaCredentialsChangedEvent(BaseEvent, KafkaEvent):
-    """Event emitted when the Kafka credentials(username or password) are changed."""
-
-
-class KafkaEvents(CharmEvents):
-    """Kafka events.
-
-    This class defines the events that the Kafka can emit.
-    """
-
-    topic_created = EventSource(TopicCreatedEvent)
-    bootstrap_server_changed = EventSource(BootstrapServerChangedEvent)
-    credentials_changed = EventSource(KakfaCredentialsChangedEvent)
-
-
-# Zookeeper events
-
-
-class ZookeeperEvent(RelationEvent):
-    """Base class for Zookeeper events."""
-
-    @property
-    def endpoints(self) -> Optional[str]:
-        """Returns a comma separated list of read/write endpoints."""
-        return self.relation.data[self.relation.app].get("endpoints")
-
-
-class ChrootCreatedEvent(BaseEvent, ZookeeperEvent):
-    """Event emitted when a new chroot is created for use on this relation."""
-
-
-class ZookeeperEndpointsChangedEvent(BaseEvent, ZookeeperEvent):
-    """Event emitted when the endpoints are changed."""
-
-
-class ZookeeperCredentialsChangedEvent(BaseEvent, ZookeeperEvent):
-    """Event emitted when the Kafka credentials(username or password) are changed."""
-
-
-class ZookeeperEvents(CharmEvents):
-    """Zookeeper events.
-
-    This class defines the events that the Zookeeper can emit.
-    """
-
-    chroot_created = EventSource(ChrootCreatedEvent)
-    endpoints_changed = EventSource(ZookeeperEndpointsChangedEvent)
-    credentials_changed = EventSource(ZookeeperCredentialsChangedEvent)
-
-
 Diff = namedtuple("Diff", "added changed deleted")
 Diff.__doc__ = """
 A tuple for storing the diff between two data mappings.
@@ -344,119 +256,7 @@ A tuple for storing the diff between two data mappings.
 """
 
 
-class _AbstractMetaclass(ABCMeta, _Metaclass):
-    pass
-
-
-class BaseRequires(Object, ABC, metaclass=_AbstractMetaclass):
-    """Requires-side of the database relation."""
-
-    def __init__(
-        self,
-        charm,
-        relation_name: str,
-        extra_user_roles: str = None,
-    ):
-        """Manager of base client relations."""
-        super().__init__(charm, relation_name)
-        self.charm = charm
-        self.extra_user_roles = extra_user_roles
-        self.local_app = self.charm.model.app
-        self.local_unit = self.charm.unit
-        self.relation_name = relation_name
-        self.framework.observe(
-            self.charm.on[relation_name].relation_joined, self._on_relation_joined_event
-        )
-        self.framework.observe(
-            self.charm.on[relation_name].relation_changed, self._on_relation_changed_event
-        )
-
-    @abstractmethod
-    def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
-        """Event emitted when the application joins the database relation."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
-        raise NotImplementedError
-
-    def fetch_relation_data(self) -> dict:
-        """Retrieves data from relation.
-
-        This function can be used to retrieve data from a relation
-        in the charm code when outside an event callback.
-
-        Returns:
-            a dict of the values stored in the relation data bag
-                for all relation instances (indexed by the relation ID).
-        """
-        data = {}
-        for relation in self.relations:
-            data[relation.id] = {
-                key: value for key, value in relation.data[relation.app].items() if key != "data"
-            }
-        return data
-
-    def _update_relation_data(self, relation_id: int, data: dict) -> None:
-        """Updates a set of key-value pairs in the relation.
-
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
-
-        Args:
-            relation_id: the identifier for a particular relation.
-            data: dict containing the key-value pairs
-                that should be updated in the relation.
-        """
-        if self.local_unit.is_leader():
-            relation = self.charm.model.get_relation(self.relation_name, relation_id)
-            relation.data[self.local_app].update(data)
-
-    def _diff(self, event: RelationChangedEvent) -> Diff:
-        """Retrieves the diff of the data in the relation changed databag.
-
-        Args:
-            event: relation changed event.
-
-        Returns:
-            a Diff instance containing the added, deleted and changed
-                keys from the event relation databag.
-        """
-        # Retrieve the old data from the data key in the local unit relation databag.
-        old_data = json.loads(event.relation.data[self.local_unit].get("data", "{}"))
-        # Retrieve the new data from the event relation databag.
-        new_data = {
-            key: value for key, value in event.relation.data[event.app].items() if key != "data"
-        }
-
-        # These are the keys that were added to the databag and triggered this event.
-        added = new_data.keys() - old_data.keys()
-        # These are the keys that were removed from the databag and triggered this event.
-        deleted = old_data.keys() - new_data.keys()
-        # These are the keys that already existed in the databag,
-        # but had their values changed.
-        changed = {
-            key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
-        }
-
-        # TODO: evaluate the possibility of losing the diff if some error
-        # happens in the charm before the diff is completely checked (DPE-412).
-        # Convert the new_data to a serializable format and save it for a next diff check.
-        event.relation.data[self.local_unit].update({"data": json.dumps(new_data)})
-
-        # Return the diff with all possible changes.
-        return Diff(added, changed, deleted)
-
-    @property
-    def relations(self) -> List[Relation]:
-        """The list of Relation instances associated with this relation_name."""
-        return list(self.charm.model.relations[self.relation_name])
-
-
-# Database Requires
-
-
-class DatabaseRequires(BaseRequires):
+class DatabaseRequires(Object):
     """Requires-side of the database relation."""
 
     on = DatabaseEvents()
@@ -470,9 +270,20 @@ class DatabaseRequires(BaseRequires):
         relations_aliases: List[str] = None,
     ):
         """Manager of database client relations."""
-        super().__init__(charm, relation_name, extra_user_roles)
+        super().__init__(charm, relation_name)
+        self.charm = charm
         self.database = database_name
+        self.extra_user_roles = extra_user_roles
+        self.local_app = self.charm.model.app
+        self.local_unit = self.charm.unit
+        self.relation_name = relation_name
         self.relations_aliases = relations_aliases
+        self.framework.observe(
+            self.charm.on[relation_name].relation_joined, self._on_relation_joined_event
+        )
+        self.framework.observe(
+            self.charm.on[relation_name].relation_changed, self._on_relation_changed_event
+        )
 
         # Define custom event names for each alias.
         if relations_aliases:
@@ -528,6 +339,41 @@ class DatabaseRequires(BaseRequires):
         relation = self.charm.model.get_relation(self.relation_name, relation_id)
         relation.data[self.local_unit].update({"alias": available_aliases[0]})
 
+    def _diff(self, event: RelationChangedEvent) -> Diff:
+        """Retrieves the diff of the data in the relation changed databag.
+
+        Args:
+            event: relation changed event.
+
+        Returns:
+            a Diff instance containing the added, deleted and changed
+                keys from the event relation databag.
+        """
+        # Retrieve the old data from the data key in the local unit relation databag.
+        old_data = json.loads(event.relation.data[self.local_unit].get("data", "{}"))
+        # Retrieve the new data from the event relation databag.
+        new_data = {
+            key: value for key, value in event.relation.data[event.app].items() if key != "data"
+        }
+
+        # These are the keys that were added to the databag and triggered this event.
+        added = new_data.keys() - old_data.keys()
+        # These are the keys that were removed from the databag and triggered this event.
+        deleted = old_data.keys() - new_data.keys()
+        # These are the keys that already existed in the databag,
+        # but had their values changed.
+        changed = {
+            key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]
+        }
+
+        # TODO: evaluate the possibility of losing the diff if some error
+        # happens in the charm before the diff is completely checked (DPE-412).
+        # Convert the new_data to a serializable format and save it for a next diff check.
+        event.relation.data[self.local_unit].update({"data": json.dumps(new_data)})
+
+        # Return the diff with all possible changes.
+        return Diff(added, changed, deleted)
+
     def _emit_aliased_event(self, event: RelationChangedEvent, event_name: str) -> None:
         """Emit an aliased event to a particular relation if it has an alias.
 
@@ -554,6 +400,38 @@ class DatabaseRequires(BaseRequires):
             if relation.id == relation_id:
                 return relation.data[self.local_unit].get("alias")
         return None
+
+    def fetch_relation_data(self) -> dict:
+        """Retrieves data from relation.
+
+        This function can be used to retrieve data from a relation
+        in the charm code when outside an event callback.
+
+        Returns:
+            a dict of the values stored in the relation data bag
+                for all relation instances (indexed by the relation ID).
+        """
+        data = {}
+        for relation in self.relations:
+            data[relation.id] = {
+                key: value for key, value in relation.data[relation.app].items() if key != "data"
+            }
+        return data
+
+    def _update_relation_data(self, relation_id: int, data: dict) -> None:
+        """Updates a set of key-value pairs in the relation.
+
+        This function writes in the application data bag, therefore,
+        only the leader unit can call it.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            data: dict containing the key-value pairs
+                that should be updated in the relation.
+        """
+        if self.local_unit.is_leader():
+            relation = self.charm.model.get_relation(self.relation_name, relation_id)
+            relation.data[self.local_app].update(data)
 
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
         """Event emitted when the application joins the database relation."""
@@ -618,123 +496,7 @@ class DatabaseRequires(BaseRequires):
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "read_only_endpoints_changed")
 
-
-class KafkaRequires(BaseRequires):
-    """Requires-side of the Kafka relation."""
-
-    on = KafkaEvents()
-
-    def __init__(self, charm, relation_name: str, topic: str, extra_user_roles: str = None):
-        """Manager of Kafka client relations."""
-        # super().__init__(charm, relation_name)
-        super().__init__(charm, relation_name, extra_user_roles)
-        self.charm = charm
-        self.topic = topic
-
-    def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
-        """Event emitted when the application joins the Kafka relation."""
-        # Sets both topic and extra user roles in the relation
-        # if the roles are provided. Otherwise, sets only the topic.
-        self._update_relation_data(
-            event.relation.id,
-            {
-                "topic": self.topic,
-                "extra-user-roles": self.extra_user_roles,
-            }
-            if self.extra_user_roles is not None
-            else {"topic": self.topic},
-        )
-
-    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
-        """Event emitted when the Kafka relation has changed."""
-        # Check which data has changed to emit customs events.
-        diff = self._diff(event)
-
-        # Check if the topic is created
-        # (the Kafka charm shared the credentials).
-        if "username" in diff.added and "password" in diff.added:
-            # Emit the default event (the one without an alias).
-            logger.info("topic created at %s", datetime.now())
-            self.on.topic_created.emit(event.relation, app=event.app, unit=event.unit)
-
-            # To avoid unnecessary application restarts do not trigger
-            # “endpoints_changed“ event if “topic_created“ is triggered.
-            return
-
-        # Emit an endpoints (bootstap-server) changed event if the Kakfa endpoints
-        # added or changed this info in the relation databag.
-        if "endpoints" in diff.added or "endpoints" in diff.changed:
-            # Emit the default event (the one without an alias).
-            logger.info("endpoints changed on %s", datetime.now())
-            self.on.bootstrap_server_changed.emit(
-                event.relation, app=event.app, unit=event.unit
-            )  # here check if this is the right design
-            return
-
-        # Emit a read only credential changed event if the kafka credentials
-        # changed this info in the relation databag.
-        if "username" in diff.changed or "password" in diff.changed:
-
-            logger.info("credential changed on %s", datetime.now())
-            self.on.credentials_changed.emit(event.relation, app=event.app, unit=event.unit)
-            return
-
-
-class ZookeeperRequires(BaseRequires):
-    """Requires-side of the Kafka relation."""
-
-    on = ZookeeperEvents()
-
-    def __init__(self, charm, relation_name: str, chroot: str, extra_user_roles: str = None):
-        """Manager of Kafka client relations."""
-        # super().__init__(charm, relation_name)
-        super().__init__(charm, relation_name, extra_user_roles)
-        self.charm = charm
-        self.chroot = chroot
-
-    def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
-        """Event emitted when the application joins the zookeeper relation."""
-        # Sets both Zookeeper and extra user roles in the relation
-        # if the roles are provided. Otherwise, sets only the chroot.
-
-        self._update_relation_data(
-            event.relation.id,
-            {
-                "chroot": self.chroot,
-                "extra-user-roles": self.extra_user_roles,
-            }
-            if self.extra_user_roles is not None
-            else {"topic": self.chroot},
-        )
-
-    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
-        """Event emitted when the Zookeeper relation has changed."""
-        # Check which data has changed to emit customs events.
-        diff = self._diff(event)
-
-        # Check if the topic is created
-        # (the Zookeeper charm shared the credentials).
-        if "username" in diff.added and "password" in diff.added:
-            # Emit the default event (the one without an alias).
-            logger.info("chroot created at %s", datetime.now())
-            self.on.chroot_created.emit(event.relation, app=event.app, unit=event.unit)
-
-            # To avoid unnecessary application restarts do not trigger
-            # “endpoints_changed“ event if “chroot_created“ is triggered.
-            return
-
-        # Emit an endpoints changed event if the Zookeeper endpoints
-        # added or changed this info in the relation databag.
-        if "endpoints" in diff.added or "endpoints" in diff.changed:
-            # Emit the default event (the one without an alias).
-            logger.info("endpoints changed on %s", datetime.now())
-            self.on.endpoints_changed.emit(event.relation, app=event.app, unit=event.unit)
-            return
-
-        # Emit a read only credential changed event if the Zookeeper credentials
-        # changed this info in the relation databag.
-        if "username" in diff.changed or "password" in diff.changed:
-
-            logger.info("credential changed on %s", datetime.now())
-            self.on.credentials_changed.emit(event.relation, app=event.app, unit=event.unit)
-            return
+    @property
+    def relations(self) -> List[Relation]:
+        """The list of Relation instances associated with this relation_name."""
+        return list(self.charm.model.relations[self.relation_name])
