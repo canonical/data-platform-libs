@@ -10,7 +10,7 @@ from pytest_operator.plugin import OpsTest
 
 @pytest.fixture(scope="module", autouse=True)
 def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
-    """Copy the data-interfaces library to the database charm folder."""
+    """Copy the data-interfaces library to the different charm folder."""
     library_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"
     install_path = "tests/integration/database-charm/" + library_path
     shutil.copyfile(library_path, install_path)

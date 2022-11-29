@@ -5,12 +5,10 @@ from abc import ABC, abstractmethod
 from typing import Tuple
 from unittest.mock import Mock, patch
 
-from charms.data_platform_libs.v0.data_interfaces import (
+from charms.data_platform_libs.v0.database_provides import (
     DatabaseProvides,
     DatabaseRequestedEvent,
     Diff,
-    KafkaProvides,
-    TopicRequestedEvent,
 )
 from charms.harness_extensions.v0.capture_events import capture
 from ops.charm import CharmBase
@@ -26,15 +24,6 @@ provides:
   {DATABASE_RELATION_NAME}:
     interface: {DATABASE_RELATION_INTERFACE}
 """
-TOPIC = "data_platform_topic"
-KAFKA_RELATION_INTERFACE = "kafka_client"
-KAFKA_RELATION_NAME = "kafka"
-KAFKA_METADATA = f"""
-name: kafka
-provides:
-  {KAFKA_RELATION_NAME}:
-    interface: {KAFKA_RELATION_INTERFACE}
-"""
 
 
 class DatabaseCharm(CharmBase):
@@ -49,21 +38,6 @@ class DatabaseCharm(CharmBase):
         self.framework.observe(self.provider.on.database_requested, self._on_database_requested)
 
     def _on_database_requested(self, _) -> None:
-        pass
-
-
-class KafkaCharm(CharmBase):
-    """Mock Kafka charm to use in units tests."""
-
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.provider = KafkaProvides(
-            self,
-            KAFKA_RELATION_NAME,
-        )
-        self.framework.observe(self.provider.on.topic_requested, self._on_topic_requested)
-
-    def _on_topic_requested(self, _) -> None:
         pass
 
 
@@ -230,101 +204,4 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         # Test the event being emitted by the unit.
         with capture(self.harness.charm, DatabaseRequestedEvent) as captured:
             self.harness.update_relation_data(self.rel_id, "application/0", {"database": DATABASE})
-        assert captured.event.unit.name == "application/0"
-
-
-class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
-
-    metadata = KAFKA_METADATA
-    relation_name = KAFKA_RELATION_NAME
-    app_name = "kafka"
-    charm = KafkaCharm
-
-    def get_harness(self) -> Tuple[Harness, int]:
-        harness = Harness(self.charm, meta=self.metadata)
-        # Set up the initial relation and hooks.
-        rel_id = harness.add_relation(self.relation_name, "application")
-        harness.add_relation_unit(rel_id, "application/0")
-        harness.set_leader(True)
-        harness.begin_with_initial_hooks()
-        return harness, rel_id
-
-    @patch.object(KafkaCharm, "_on_topic_requested")
-    def emit_topic_requested_event(self, _on_topic_requested):
-        # Emit the topic requested event.
-        relation = self.harness.charm.model.get_relation(self.relation_name, self.rel_id)
-        application = self.harness.charm.model.get_app(self.app_name)
-        self.harness.charm.provider.on.topic_requested.emit(relation, application)
-        return _on_topic_requested.call_args[0][0]
-
-    @patch.object(KafkaCharm, "_on_topic_requested")
-    def test_on_topic_requested(self, _on_topic_requested):
-        """Asserts that the correct hook is called when a new topic is requested."""
-        # Simulate the request of a new topic plus extra user roles.
-        self.harness.update_relation_data(
-            self.rel_id,
-            "application",
-            {"topic": TOPIC, "extra-user-roles": EXTRA_USER_ROLES},
-        )
-
-        # Assert the correct hook is called.
-        _on_topic_requested.assert_called_once()
-
-        # Assert the topic name and the extra user roles
-        # are accessible in the providers charm library event.
-        event = _on_topic_requested.call_args[0][0]
-        assert event.topic == TOPIC
-        assert event.extra_user_roles == EXTRA_USER_ROLES
-
-    def test_set_bootstrap_server(self):
-        """Asserts that the bootstrap-server are in the relation databag when they change."""
-        # Set the bootstrap-server in the relation using the provides charm library.
-        self.harness.charm.provider.set_bootstrap_server(self.rel_id, "host1:port,host2:port")
-
-        # Check that the bootstrap-server is present in the relation.
-        assert (
-            self.harness.get_relation_data(self.rel_id, self.app_name)["endpoints"]
-            == "host1:port,host2:port"
-        )
-
-    def test_set_additional_fields(self):
-        """Asserts that the additional fields are in the relation databag when they are set."""
-        # Set the additional fields in the relation using the provides charm library.
-        self.harness.charm.provider.set_tls(self.rel_id, "True")
-        self.harness.charm.provider.set_tls_ca(self.rel_id, "Canonical")
-        self.harness.charm.provider.set_consumer_group_prefix(self.rel_id, "pr1,pr2")
-        self.harness.charm.provider.set_zookeeper_uris(self.rel_id, "host1:port,host2:port")
-
-        # Check that the additional fields are present in the relation.
-        assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
-            "data": "{}",  # Data is the diff stored between multiple relation changed events.
-            "tls": "True",
-            "tls_ca": "Canonical",
-            "zookeeper-uris": "host1:port,host2:port",
-            "consumer-group-prefix": "pr1,pr2",
-        }
-
-    def test_fetch_relation_data(self):
-        # Set some data in the relation.
-        self.harness.update_relation_data(self.rel_id, "application", {"topic": TOPIC})
-
-        # Check the data using the charm library function
-        # (the diff/data key should not be present).
-        data = self.harness.charm.provider.fetch_relation_data()
-        assert data == {self.rel_id: {"topic": TOPIC}}
-
-    def test_topic_requested_event(self):
-        # Test custom event creation
-
-        # Test the event being emitted by the application.
-        with capture(self.harness.charm, TopicRequestedEvent) as captured:
-            self.harness.update_relation_data(self.rel_id, "application", {"topic": TOPIC})
-        assert captured.event.app.name == "application"
-
-        # Reset the diff data to trigger the event again later.
-        self.harness.update_relation_data(self.rel_id, self.app_name, {"data": "{}"})
-
-        # Test the event being emitted by the unit.
-        with capture(self.harness.charm, TopicRequestedEvent) as captured:
-            self.harness.update_relation_data(self.rel_id, "application/0", {"topic": TOPIC})
         assert captured.event.unit.name == "application/0"

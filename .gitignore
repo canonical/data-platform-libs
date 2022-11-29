@@ -7,3 +7,8 @@ __pycache__/
 *.py[cod]
 tests/integration/application-charm/lib/charms/data_platform_libs/v0/database_requires.py
 tests/integration/database-charm/lib/charms/data_platform_libs/v0/database_provides.py
+tests/integration/application-charm/lib/charms/data_platform_libs/v0/data_interfaces.py
+tests/integration/application-s3-charm/lib/charms/data_platform_libs/v0/s3.py
+tests/integration/database-charm/lib/charms/data_platform_libs/v0/data_interfaces.py
+tests/integration/kafka-charm/lib/charms/data_platform_libs/v0/data_interfaces.py
+tests/integration/s3-charm/lib/charms/data_platform_libs/v0/s3.py'
