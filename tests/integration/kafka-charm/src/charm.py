@@ -33,15 +33,13 @@ class KafkaCharm(CharmBase):
         # Default charm events.
         self.framework.observe(self.on.start, self._on_start)
 
-        # Charm events defined in the s3 provides charm library.
+        # Charm events defined in the Kafka Provides charm library.
         self.kafka_provider = KafkaProvides(self, relation_name="kafka_client")
         self.framework.observe(self.on[PEER].relation_created, self._on_peer_relation_changed)
         self.framework.observe(self.kafka_provider.on.topic_requested, self._on_topic_requested)
 
         # actions
-        # self.framework.observe(self.on.sync_password_action, self._on_sync_password)
-        self.framework.observe(getattr(self.on, "sync_password_action"), self._on_sync_password)
-
+        self.framework.observe(self.on.sync_password_action, self._on_sync_password)
         self.framework.observe(self.on.sync_username_action, self._on_sync_username)
         self.framework.observe(
             self.on.sync_bootstrap_server_action, self._on_sync_bootstrap_server
@@ -98,6 +96,7 @@ class KafkaCharm(CharmBase):
         self.unit.status = ActiveStatus("Kakfa Ready!")
 
     def _on_topic_requested(self, event: TopicRequestedEvent):
+        """Handle the on_topic_requested event."""
         self.unit.status = MaintenanceStatus("Creating connection")
         # retrieve bucket name from the requirer side
         topic = event.topic
@@ -121,6 +120,7 @@ class KafkaCharm(CharmBase):
         self.unit.status = ActiveStatus(f"Topic: {topic} granted!")
 
     def _on_sync_password(self, event: ActionEvent):
+        """Set the password in the data relation databag."""
         logger.info("On sync password")
         password = event.params["password"]
         self.set_secret("app", "password", password)
@@ -139,6 +139,7 @@ class KafkaCharm(CharmBase):
         event.set_results({"password": self.get_secret("app", "password")})
 
     def _on_sync_username(self, event: ActionEvent):
+        """Set the username in the data relation databag."""
         username = event.params["username"]
         self.set_secret("app", "username", username)
         # set parameters in the secrets
@@ -153,6 +154,7 @@ class KafkaCharm(CharmBase):
         event.set_results({"username": self.get_secret("app", "username")})
 
     def _on_sync_bootstrap_server(self, event: ActionEvent):
+        """Set the bootstrap server in the data relation databag."""
         bootstrap_server = event.params["bootstrap-server"]
         self.set_secret("app", "bootstrap-server", bootstrap_server)
         # set parameters in the secrets
@@ -165,7 +167,7 @@ class KafkaCharm(CharmBase):
         event.set_results({"bootstrap-server": self.get_secret("app", "bootstrap-server")})
 
     def _on_reset_unit_status(self, event: ActionEvent):
-
+        """Reset the status message of the unit."""
         self.unit.status = ActiveStatus()
         event.set_results({"Status": "Reset unit status message"})
 

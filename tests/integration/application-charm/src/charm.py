@@ -15,8 +15,8 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseRequires,
+    KafkaCredentialsChangedEvent,
     KafkaRequires,
-    KakfaCredentialsChangedEvent,
     TopicCreatedEvent,
 )
 from ops.charm import ActionEvent, CharmBase
@@ -108,7 +108,7 @@ class ApplicationCharm(CharmBase):
             self._on_cluster2_endpoints_changed,
         )
 
-        # Kafka
+        # Kafka events
 
         self.kafka = KafkaRequires(self, "kafka_client", "test-topic", EXTRA_USER_ROLES_KAFKA)
 
@@ -188,23 +188,27 @@ class ApplicationCharm(CharmBase):
         """Event triggered when the read/write endpoints of the database change."""
         logger.info(f"cluster2 endpoints have been changed to: {event.endpoints}")
 
-    def _on_kafka_credentials_changed(self, event: KakfaCredentialsChangedEvent):
+    def _on_kafka_credentials_changed(self, event: KafkaCredentialsChangedEvent):
+        """Event triggered when a credentials was changed for this application."""
         logger.info(
             f"On kafka credentials changed: username: {event.username} - password: {event.password}"
         )
         self.unit.status = ActiveStatus("kafka_credentials_changed")
 
     def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
+        """Event triggered when a bootstrap server was changed for this application."""
         logger.info(
             f"On kafka boostrap-server changed: bootstrap-server: {event.bootstrap_server}"
         )
         self.unit.status = ActiveStatus("kafka_bootstrap_server_changed")
 
     def _on_kafka_topic_created(self, _: TopicCreatedEvent):
+        """Event triggered when a topic was created for this application."""
         logger.info("On kafka topic created")
         self.unit.status = ActiveStatus("kafka_topic_created")
 
     def _on_reset_unit_status(self, _: ActionEvent):
+        """Handle the reset of status message for the unit."""
         self.unit.status = ActiveStatus()
 
 

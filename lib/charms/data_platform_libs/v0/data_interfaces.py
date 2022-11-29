@@ -12,25 +12,282 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""TODO: Add a proper docstring here.
+"""Library to manage the relation for the data-platform products.
 
-This is a placeholder docstring for this charm library. Docstrings are
-presented on Charmhub and updated whenever you push a new version of the
-library.
+This library contains the Requires and Provides classes for handling the relation
+between an application and multiple managed application supported by the data-team:
+MySQL, Postgresql, MongoDB, Redis, Kakfa and Zookeeper.
 
-Complete documentation about creating and documenting libraries can be found
-in the SDK docs at https://juju.is/docs/sdk/libraries.
+### Database (MySQL, Postgresql, MongoDB, and Redis)
 
-See `charmcraft publish-lib` and `charmcraft fetch-lib` for details of how to
-share and consume charm libraries. They serve to enhance collaboration
-between charmers. Use a charmer's libraries for classes that handle
-integration with their charm.
+#### Requires Charm
+This library is a uniform interface to a selection of common database
+metadata, with added custom events that add convenience to database management,
+and methods to consume the application related data.
 
-Bear in mind that new revisions of the different major API versions (v0, v1,
-v2 etc) are maintained independently.  You can continue to update v0 and v1
-after you have pushed v3.
 
-Markdown is supported, following the CommonMark specification.
+Following an example of using the DatabaseCreatedEvent, in the context of the
+application charm code:
+
+```python
+
+from charms.data_platform_libs.v0.data_interfaces import (
+    DatabaseCreatedEvent,
+    DatabaseRequires,
+)
+
+class ApplicationCharm(CharmBase):
+    # Application charm that connects to database charms.
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        # Charm events defined in the database requires charm library.
+        self.database = DatabaseRequires(self, relation_name="database", database_name="database")
+        self.framework.observe(self.database.on.database_created, self._on_database_created)
+
+    def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
+        # Handle the created database
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            event.username,
+            event.password,
+            event.endpoints,
+        )
+
+        # Start application with rendered configuration
+        self._start_application(config_file)
+
+        # Set active status
+        self.unit.status = ActiveStatus("received database credentials")
+```
+
+As shown above, the library provides some custom events to handle specific situations,
+which are listed below:
+
+-  database_created: event emitted when the requested database is created.
+-  endpoints_changed: event emitted when the read/write endpoints of the database have changed.
+-  read_only_endpoints_changed: event emitted when the read-only endpoints of the database
+  have changed. Event is not triggered if read/write endpoints changed too.
+
+If it is needed to connect multiple database clusters to the same relation endpoint
+the application charm can implement the same code as if it would connect to only
+one database cluster (like the above code example).
+
+To differentiate multiple clusters connected to the same relation endpoint
+the application charm can use the name of the remote application:
+
+```python
+
+def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
+    # Get the remote app name of the cluster that triggered this event
+    cluster = event.relation.app.name
+```
+
+It is also possible to provide an alias for each different database cluster/relation.
+
+So, it is possible to differentiate the clusters in two ways.
+The first is to use the remote application name, i.e., `event.relation.app.name`, as above.
+
+The second way is to use different event handlers to handle each cluster events.
+The implementation would be something like the following code:
+
+```python
+
+from charms.data_platform_libs.v0.database_requires import (
+    DatabaseCreatedEvent,
+    DatabaseRequires,
+)
+
+class ApplicationCharm(CharmBase):
+    # Application charm that connects to database charms.
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        # Define the cluster aliases and one handler for each cluster database created event.
+        self.database = DatabaseRequires(
+            self,
+            relation_name="database",
+            database_name="database",
+            relations_aliases = ["cluster1", "cluster2"],
+        )
+        self.framework.observe(
+            self.database.on.cluster1_database_created, self._on_cluster1_database_created
+        )
+        self.framework.observe(
+            self.database.on.cluster2_database_created, self._on_cluster2_database_created
+        )
+
+    def _on_cluster1_database_created(self, event: DatabaseCreatedEvent) -> None:
+        # Handle the created database on the cluster named cluster1
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            event.username,
+            event.password,
+            event.endpoints,
+        )
+        ...
+
+    def _on_cluster2_database_created(self, event: DatabaseCreatedEvent) -> None:
+        # Handle the created database on the cluster named cluster2
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            event.username,
+            event.password,
+            event.endpoints,
+        )
+        ...
+
+```
+
+### Provider Charm
+
+Following an example of using the DatabaseRequestedEvent, in the context of the
+database charm code:
+
+```python
+from charms.data_platform_libs.v0.data_interfaces import DatabaseProvides
+
+class SampleCharm(CharmBase):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        # Charm events defined in the database provides charm library.
+        self.provided_database = DatabaseProvides(self, relation_name="database")
+        self.framework.observe(self.provided_database.on.database_requested,
+            self._on_database_requested)
+        # Database generic helper
+        self.database = DatabaseHelper()
+
+    def _on_database_requested(self, event: DatabaseRequestedEvent) -> None:
+        # Handle the event triggered by a new database requested in the relation
+        # Retrieve the database name using the charm library.
+        db_name = event.database
+        # generate a new user credential
+        username = self.database.generate_user()
+        password = self.database.generate_password()
+        # set the credentials for the relation
+        self.provided_database.set_credentials(event.relation.id, username, password)
+        # set other variables for the relation event.set_tls("False")
+```
+As shown above, the library provides a custom event (database_requested) to handle
+the situation when an application charm requests a new database to be created.
+It's preferred to subscribe to this event instead of relation changed event to avoid
+creating a new database when other information other than a database name is
+exchanged in the relation databag.
+
+### Kafka
+
+This library is the interface to use and interact with the Kafka charm. This library contains
+custom events that add convenience to manage Kafka, and provides methods to consume the
+application related data.
+
+#### Requirer Charm
+
+```python
+
+from charms.data_platform_libs.v0.data_interfaces import (
+    BootstrapServerChangedEvent,
+    KafkaRequires,
+    KafkaCredentialsChangedEvent,
+    TopicCreatedEvent,
+)
+
+class ApplicationCharm(CharmBase):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.kafka = KafkaRequires(self, "kafka_client", "test-topic")
+        self.framework.observe(
+            self.kafka.on.credentials_changed, self._on_kafka_credentials_changed
+        )
+        self.framework.observe(
+            self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
+        )
+        self.framework.observe(
+            self.kafka.on.topic_created, self._on_kafka_topic_created
+        )
+
+
+    def _on_kafka_credentials_changed(self, event: KafkaCredentialsChangedEvent):
+        # Event triggered when a credentials was changed for this application
+
+        new_username = event.username
+        new_password = event.password
+        ...
+
+    def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
+        # Event triggered when a bootstrap server was changed for this application
+
+        new_bootstrap_server = event.bootstrap_server
+        ...
+
+    def _on_kafka_topic_created(self, event: TopicCreatedEvent):
+        # Event triggered when a topic was created for this application
+        username = event.username
+        password = event.password
+        tls = event.tls
+        tls_ca= event.tls_ca
+        bootstrap_server event.bootstrap_server
+        consumer_group_prefic = event.consumer_group_prefix
+        zookeeper_uris = event.zookeeper_uris
+        ...
+
+```
+
+As shown above, the library provides some custom events to handle specific situations,
+which are listed below:
+
+- topic_created: event emitted when the requested topic is created.
+- bootstrap_server_changed: event emitted when the bootstrap server have changed.
+- credential_changed: event emitted when the credentials of Kafka changed.
+
+### Provider Charm
+
+Following the previous example, this is an example of the provider charm.
+
+```python
+class SampleCharm(CharmBase):
+
+from charms.data_platform_libs.v0.data_interfaces import (
+    KafkaProvides,
+    TopicRequestedEvent,
+)
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        # Default charm events.
+        self.framework.observe(self.on.start, self._on_start)
+
+        # Charm events defined in the Kafka Provides charm library.
+        self.kafka_provider = KafkaProvides(self, relation_name="kafka_client")
+        self.framework.observe(self.kafka_provider.on.topic_requested, self._on_topic_requested)
+        # Kafka generic helper
+        self.kafka = KafkaHelper()
+
+    def _on_topic_requested(self, event: TopicRequestedEvent):
+        # Handle the on_topic_requested event.
+
+        topic = event.topic
+        relation_id = event.relation.id
+        # set connection info in the databag relation
+        self.kafka_provider.set_bootstrap_server(relation_id, self.kafka.get_bootstrap_server())
+        self.kafka_provider.set_credentials(relation_id, username=username, password=password)
+        self.kafka_provider.set_consumer_group_prefix(relation_id, ...)
+        self.kafka_provider.set_tls(relation_id, "False")
+        self.kafka_provider.set_zookeeper_uris(relation_id, ...)
+
+```
+As shown above, the library provides a custom event (topic_requested) to handle
+the situation when an application charm requests a new topic to be created.
+It is preferred to subscribe to this event instead of relation changed event to avoid
+creating a new topic when other information other than a topic name is
+exchanged in the relation databag.
 """
 
 import json
@@ -581,7 +838,7 @@ class BootstrapServerChangedEvent(BaseRequiresEvent, KafkaRequiresEvent):
     """Event emitted when the bootstrap server is changed."""
 
 
-class KakfaCredentialsChangedEvent(BaseRequiresEvent, KafkaRequiresEvent):
+class KafkaCredentialsChangedEvent(BaseRequiresEvent, KafkaRequiresEvent):
     """Event emitted when the Kafka credentials(username or password) are changed."""
 
 
@@ -593,7 +850,7 @@ class KafkaRequiresEvents(CharmEvents):
 
     topic_created = EventSource(TopicCreatedEvent)
     bootstrap_server_changed = EventSource(BootstrapServerChangedEvent)
-    credentials_changed = EventSource(KakfaCredentialsChangedEvent)
+    credentials_changed = EventSource(KafkaCredentialsChangedEvent)
 
 
 # Zookeeper events
