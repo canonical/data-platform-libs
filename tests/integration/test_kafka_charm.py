@@ -17,11 +17,10 @@ APP_NAMES = [APPLICATION_APP_NAME, KAFKA_APP_NAME]
 RELATION_NAME = "kafka_client"
 
 
-@pytest.mark.kafka_tests
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(ops_test: OpsTest, application_charm, kafka_charm):
-    """Deploy both charms (application and s3 provider app) to use in the tests."""
-    # Deploy both charms (2 units for each application to test that later they correctly
+    """Deploy both charms (application and the testing kafka app) to use in the tests."""
+    # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
@@ -41,7 +40,6 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, kafka_charm):
     )
 
 
-@pytest.mark.kafka_tests
 @pytest.mark.abort_on_fail
 async def test_kafka_relation_with_charm_libraries(ops_test: OpsTest):
     """Test basic functionality of kafka relation interface."""
@@ -76,10 +74,9 @@ async def test_kafka_relation_with_charm_libraries(ops_test: OpsTest):
     assert consumer_group_prefix == "group1,group2"
 
 
-@pytest.mark.kafka_tests
 @pytest.mark.abort_on_fail
 async def test_kafka_credential_changed(ops_test: OpsTest):
-
+    """Test that the credential changed event is correctly triggered."""
     app_unit = ops_test.model.applications[APPLICATION_APP_NAME].units[0]
     kafka_unit = ops_test.model.applications[KAFKA_APP_NAME].units[0]
     # set new password
@@ -157,7 +154,7 @@ async def test_kafka_credential_changed(ops_test: OpsTest):
 
 
 async def test_kafka_bootstrap_server_changed(ops_test: OpsTest):
-
+    """Test that the bootstrap server changed event is correctly triggered."""
     app_unit = ops_test.model.applications[APPLICATION_APP_NAME].units[0]
     kafka_unit = ops_test.model.applications[KAFKA_APP_NAME].units[0]
     # set new bootstrap

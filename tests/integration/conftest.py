@@ -10,7 +10,7 @@ from pytest_operator.plugin import OpsTest
 
 @pytest.fixture(scope="module", autouse=True)
 def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
-    """Copy the data-interfaces library to the different charm folder."""
+    """Copy the data_interfaces library to the different charm folder."""
     library_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"
     install_path = "tests/integration/database-charm/" + library_path
     shutil.copyfile(library_path, install_path)
@@ -48,7 +48,7 @@ async def database_charm(ops_test: OpsTest):
 
 @pytest.fixture(scope="module")
 async def application_s3_charm(ops_test: OpsTest):
-    """Build the application charm."""
+    """Build the application-s3 charm."""
     charm_path = "tests/integration/application-s3-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm

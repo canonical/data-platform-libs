@@ -1,8 +1,6 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 import unittest
-from abc import ABC, abstractmethod
-from typing import Tuple
 from unittest.mock import Mock, patch
 
 import pytest
@@ -22,32 +20,32 @@ from parameterized import parameterized
 CLUSTER_ALIASES = ["cluster1", "cluster2"]
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
-DATABASE_RELATION_INTERFACE = "database_client"
-DATABASE_RELATION_NAME = "database"
+RELATION_INTERFACE = "database_client"
+RELATION_NAME = "database"
 METADATA = f"""
 name: application
 requires:
-  {DATABASE_RELATION_NAME}:
-    interface: {DATABASE_RELATION_INTERFACE}
+  {RELATION_NAME}:
+    interface: {RELATION_INTERFACE}
     limit: {len(CLUSTER_ALIASES)}
 """
 
 
-class ApplicationCharmDatabase(CharmBase):
+class ApplicationCharm(CharmBase):
     """Mock application charm to use in units tests."""
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.requirer = DatabaseRequires(
-            self, DATABASE_RELATION_NAME, DATABASE, EXTRA_USER_ROLES, CLUSTER_ALIASES[:]
+        self.database = DatabaseRequires(
+            self, RELATION_NAME, DATABASE, EXTRA_USER_ROLES, CLUSTER_ALIASES[:]
         )
-        self.framework.observe(self.requirer.on.database_created, self._on_database_created)
-        self.framework.observe(self.requirer.on.endpoints_changed, self._on_endpoints_changed)
+        self.framework.observe(self.database.on.database_created, self._on_database_created)
+        self.framework.observe(self.database.on.endpoints_changed, self._on_endpoints_changed)
         self.framework.observe(
-            self.requirer.on.read_only_endpoints_changed, self._on_read_only_endpoints_changed
+            self.database.on.read_only_endpoints_changed, self._on_read_only_endpoints_changed
         )
         self.framework.observe(
-            self.requirer.on.cluster1_database_created, self._on_cluster1_database_created
+            self.database.on.cluster1_database_created, self._on_cluster1_database_created
         )
 
     def _on_database_created(self, _) -> None:
@@ -80,23 +78,23 @@ def reset_aliases():
             pass
 
 
-class DataRequirerBaseTests(ABC):
-    @abstractmethod
-    def get_harness(self) -> Tuple[Harness, int]:
-        pass
-
+class TestDatabaseRequires(unittest.TestCase):
     def setUp(self):
-        self.harness, self.rel_id = self.get_harness()
+        self.harness = Harness(ApplicationCharm, meta=METADATA)
+        self.addCleanup(self.harness.cleanup)
 
-    def tearDown(self) -> None:
-        self.harness.cleanup()
+        # Set up the initial relation and hooks.
+        self.rel_id = self.harness.add_relation(RELATION_NAME, "database")
+        self.harness.add_relation_unit(self.rel_id, "database/0")
+        self.harness.set_leader(True)
+        self.harness.begin_with_initial_hooks()
 
     def test_diff(self):
         """Asserts that the charm library correctly returns a diff of the relation data."""
         # Define a mock relation changed event to be used in the subsequent diff calls.
         mock_event = Mock()
         # Set the app, id and the initial data for the relation.
-        mock_event.app = self.harness.charm.model.get_app(self.app_name)
+        mock_event.app = self.harness.charm.model.get_app("database")
         local_unit = self.harness.charm.model.get_unit("application/0")
         mock_event.relation.id = self.rel_id
         mock_event.relation.data = {
@@ -107,46 +105,31 @@ class DataRequirerBaseTests(ABC):
         data = mock_event.relation.data[mock_event.app]
 
         # Test with new data added to the relation databag.
-        result = self.harness.charm.requirer._diff(mock_event)
+        result = self.harness.charm.database._diff(mock_event)
         assert result == Diff({"username", "password"}, set(), set())
 
         # Test with the same data.
-        result = self.harness.charm.requirer._diff(mock_event)
+        result = self.harness.charm.database._diff(mock_event)
         assert result == Diff(set(), set(), set())
 
         # Test with changed data.
         data["username"] = "test-username-1"
-        result = self.harness.charm.requirer._diff(mock_event)
+        result = self.harness.charm.database._diff(mock_event)
         assert result == Diff(set(), {"username"}, set())
 
         # Test with deleted data.
         del data["username"]
         del data["password"]
-        result = self.harness.charm.requirer._diff(mock_event)
+        result = self.harness.charm.database._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
 
-
-class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
-    metadata = METADATA
-    relation_name = DATABASE_RELATION_NAME
-    app_name = "database"
-    charm = ApplicationCharmDatabase
-
-    def get_harness(self) -> Tuple[Harness, int]:
-        harness = Harness(self.charm, meta=self.metadata)
-        rel_id = harness.add_relation(DATABASE_RELATION_NAME, "database")
-        harness.add_relation_unit(rel_id, "database/0")
-        harness.set_leader(True)
-        harness.begin_with_initial_hooks()
-        return harness, rel_id
-
-    @patch.object(charm, "_on_database_created")
+    @patch.object(ApplicationCharm, "_on_database_created")
     def test_on_database_created(self, _on_database_created):
         """Asserts on_database_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created database.
         self.harness.update_relation_data(
             self.rel_id,
-            self.app_name,
+            "database",
             {"username": "test-username", "password": "test-password"},
         )
 
@@ -159,13 +142,13 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.username == "test-username"
         assert event.password == "test-password"
 
-    @patch.object(charm, "_on_endpoints_changed")
+    @patch.object(ApplicationCharm, "_on_endpoints_changed")
     def test_on_endpoints_changed(self, _on_endpoints_changed):
         """Asserts the correct call to on_endpoints_changed."""
         # Simulate adding endpoints to the relation.
         self.harness.update_relation_data(
             self.rel_id,
-            self.app_name,
+            "database",
             {"endpoints": "host1:port,host2:port"},
         )
 
@@ -183,7 +166,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Set the same data in the relation (no change in the endpoints).
         self.harness.update_relation_data(
             self.rel_id,
-            self.app_name,
+            "database",
             {"endpoints": "host1:port,host2:port"},
         )
 
@@ -193,20 +176,20 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Then, change the endpoints in the relation.
         self.harness.update_relation_data(
             self.rel_id,
-            self.app_name,
+            "database",
             {"endpoints": "host1:port,host2:port,host3:port"},
         )
 
         # Assert the hook is called now.
         _on_endpoints_changed.assert_called_once()
 
-    @patch.object(charm, "_on_read_only_endpoints_changed")
+    @patch.object(ApplicationCharm, "_on_read_only_endpoints_changed")
     def test_on_read_only_endpoints_changed(self, _on_read_only_endpoints_changed):
         """Asserts the correct call to on_read_only_endpoints_changed."""
         # Simulate adding endpoints to the relation.
         self.harness.update_relation_data(
             self.rel_id,
-            self.app_name,
+            "database",
             {"read-only-endpoints": "host1:port,host2:port"},
         )
 
@@ -224,7 +207,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Set the same data in the relation (no change in the endpoints).
         self.harness.update_relation_data(
             self.rel_id,
-            self.app_name,
+            "database",
             {"read-only-endpoints": "host1:port,host2:port"},
         )
 
@@ -234,7 +217,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Then, change the endpoints in the relation.
         self.harness.update_relation_data(
             self.rel_id,
-            self.app_name,
+            "database",
             {"read-only-endpoints": "host1:port,host2:port,host3:port"},
         )
 
@@ -246,7 +229,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Simulate setting the additional fields.
         self.harness.update_relation_data(
             self.rel_id,
-            self.app_name,
+            "database",
             {
                 "replset": "rs0",
                 "tls": "True",
@@ -258,20 +241,20 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
 
         # Check that the fields are present in the relation
         # using the requires charm library.
-        relation_data = self.harness.charm.requirer.fetch_relation_data()[self.rel_id]
+        relation_data = self.harness.charm.database.fetch_relation_data()[self.rel_id]
         assert relation_data["replset"] == "rs0"
         assert relation_data["tls"] == "True"
         assert relation_data["tls-ca"] == "Canonical"
         assert relation_data["uris"] == "host1:port,host2:port"
         assert relation_data["version"] == "1.0"
 
-    @patch.object(charm, "_on_database_created")
+    @patch.object(ApplicationCharm, "_on_database_created")
     def test_fields_are_accessible_through_event(self, _on_database_created):
         """Asserts fields are accessible through the requires charm library event."""
         # Simulate setting the additional fields.
         self.harness.update_relation_data(
             self.rel_id,
-            self.app_name,
+            "database",
             {
                 "username": "test-username",
                 "password": "test-password",
@@ -304,14 +287,14 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.update_relation_data(self.rel_id, "application/0", {"alias": ""})
 
         # Call the function and check the alias.
-        self.harness.charm.requirer._assign_relation_alias(self.rel_id)
+        self.harness.charm.database._assign_relation_alias(self.rel_id)
         assert (
             self.harness.get_relation_data(self.rel_id, "application/0")["alias"]
             == CLUSTER_ALIASES[0]
         )
 
         # Add another relation and check that the second cluster alias was assigned to it.
-        second_rel_id = self.harness.add_relation(DATABASE_RELATION_NAME, "another-database")
+        second_rel_id = self.harness.add_relation(RELATION_NAME, "another-database")
         self.harness.add_relation_unit(second_rel_id, "another-database/0")
         assert (
             self.harness.get_relation_data(second_rel_id, "application/0")["alias"]
@@ -320,13 +303,13 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
 
         # Reset the alias and test again using the function call.
         self.harness.update_relation_data(second_rel_id, "application/0", {"alias": ""})
-        self.harness.charm.requirer._assign_relation_alias(second_rel_id)
+        self.harness.charm.database._assign_relation_alias(second_rel_id)
         assert (
             self.harness.get_relation_data(second_rel_id, "application/0")["alias"]
             == CLUSTER_ALIASES[1]
         )
 
-    @patch.object(charm, "_on_cluster1_database_created")
+    @patch.object(ApplicationCharm, "_on_cluster1_database_created")
     def test_emit_aliased_event(self, _on_cluster1_database_created):
         """Asserts the correct custom event is triggered."""
         # Reset the diff/data key in the relation to correctly emit the event.
@@ -336,18 +319,18 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         _on_cluster1_database_created.assert_not_called()
 
         # Call the emit function and assert the desired event is triggered.
-        relation = self.harness.charm.model.get_relation(DATABASE_RELATION_NAME, self.rel_id)
+        relation = self.harness.charm.model.get_relation(RELATION_NAME, self.rel_id)
         mock_event = Mock()
         mock_event.app = self.harness.charm.model.get_app("application")
         mock_event.unit = self.harness.charm.model.get_unit("application/0")
         mock_event.relation = relation
-        self.harness.charm.requirer._emit_aliased_event(mock_event, "database_created")
+        self.harness.charm.database._emit_aliased_event(mock_event, "database_created")
         _on_cluster1_database_created.assert_called_once()
 
     def test_get_relation_alias(self):
         """Asserts the correct relation alias is returned."""
         # Assert the relation got the first cluster alias.
-        assert self.harness.charm.requirer._get_relation_alias(self.rel_id) == CLUSTER_ALIASES[0]
+        assert self.harness.charm.database._get_relation_alias(self.rel_id) == CLUSTER_ALIASES[0]
 
     @parameterized.expand([(True,), (False,)])
     def test_database_events(self, is_leader: bool):
