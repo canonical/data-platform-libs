@@ -343,7 +343,7 @@ DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 DATABASE_RELATION_INTERFACE = "database_client"
 DATABASE_RELATION_NAME = "database"
-KAFKA_RELATION_INTERFACE = "database_client"
+KAFKA_RELATION_INTERFACE = "kafka_client"
 KAFKA_RELATION_NAME = "kafka"
 METADATA = f"""
 name: application
@@ -397,15 +397,11 @@ class ApplicationCharmKafka(CharmBase):
         self.framework.observe(
             self.requirer.on.bootstrap_server_changed, self._on_bootstrap_server_changed
         )
-        self.framework.observe(self.requirer.on.credentials_changed, self._on_credentials_changed)
 
     def _on_topic_created(self, _) -> None:
         pass
 
     def _on_bootstrap_server_changed(self, _) -> None:
-        pass
-
-    def _on_credentials_changed(self, _) -> None:
         pass
 
 
@@ -853,53 +849,6 @@ class TestKakfaRequires(DataRequirerBaseTests, unittest.TestCase):
 
         # Assert the hook is called now.
         _on_bootstrap_server_changed.assert_called_once()
-
-    @patch.object(charm, "_on_credentials_changed")
-    def test_on_credentials_changed(self, _on_credentials_changed):
-        """Asserts the correct call to on_credentials_changed."""
-        # Setup initial username and password
-        self.harness.update_relation_data(
-            self.rel_id,
-            self.app_name,
-            {"username": "username", "password": "password"},
-        )
-        # Simulate changing password with the relation data.
-        self.harness.update_relation_data(
-            self.rel_id,
-            self.app_name,
-            {"password": "new_password"},
-        )
-
-        # Assert the correct hook is called.
-        _on_credentials_changed.assert_called_once()
-
-        # Check that the password is present in the relation
-        # using the requires charm library event.
-        event = _on_credentials_changed.call_args[0][0]
-        assert event.password == "new_password"
-
-        # Reset the mock call count.
-        _on_credentials_changed.reset_mock()
-
-        # Set the same data in the relation (no change in the password).
-        self.harness.update_relation_data(
-            self.rel_id,
-            self.app_name,
-            {"password": "new_password"},
-        )
-
-        # Assert the hook was not called again.
-        _on_credentials_changed.assert_not_called()
-
-        # Then, change the password in the relation.
-        self.harness.update_relation_data(
-            self.rel_id,
-            self.app_name,
-            {"password": "new_password-2"},
-        )
-
-        # Assert the hook is called now.
-        _on_credentials_changed.assert_called_once()
 
     def test_additional_fields_are_accessible(self):
         """Asserts additional fields are accessible using the charm library after being set."""

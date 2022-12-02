@@ -21,7 +21,8 @@ from ops.model import ActiveStatus, MaintenanceStatus
 
 logger = logging.getLogger(__name__)
 
-PEER = "kafka-peers"
+PEER = "kafka_peers"
+REL = "kafka_client"
 
 
 class KafkaCharm(CharmBase):
@@ -34,8 +35,7 @@ class KafkaCharm(CharmBase):
         self.framework.observe(self.on.start, self._on_start)
 
         # Charm events defined in the Kafka Provides charm library.
-        self.kafka_provider = KafkaProvides(self, relation_name="kafka_client")
-        self.framework.observe(self.on[PEER].relation_created, self._on_peer_relation_changed)
+        self.kafka_provider = KafkaProvides(self, relation_name=REL)
         self.framework.observe(self.kafka_provider.on.topic_requested, self._on_topic_requested)
 
         # actions
@@ -44,9 +44,6 @@ class KafkaCharm(CharmBase):
         self.framework.observe(
             self.on.sync_bootstrap_server_action, self._on_sync_bootstrap_server
         )
-
-    def _on_peer_relation_changed(self, _):
-        pass
 
     @property
     def app_peer_data(self) -> Dict:
@@ -57,32 +54,16 @@ class KafkaCharm(CharmBase):
 
         return relation.data[self.app]
 
-    @property
-    def unit_peer_data(self) -> Dict:
-        """Peer relation data object."""
-        relation = self.model.get_relation(PEER)
-        if relation is None:
-            return {}
-
-        return relation.data[self.unit]
-
     def get_secret(self, scope: str, key: str) -> Optional[str]:
         """Get secret from the secret storage."""
-        if scope == "unit":
-            return self.unit_peer_data.get(key, None)
-        elif scope == "app":
+        if scope == "app":
             return self.app_peer_data.get(key, None)
         else:
             raise RuntimeError("Unknown secret scope.")
 
     def set_secret(self, scope: str, key: str, value: Optional[str]) -> None:
         """Set secret in the secret storage."""
-        if scope == "unit":
-            if not value:
-                del self.unit_peer_data[key]
-                return
-            self.unit_peer_data.update({key: value})
-        elif scope == "app":
+        if scope == "app":
             if not value:
                 del self.app_peer_data[key]
                 return
@@ -91,14 +72,13 @@ class KafkaCharm(CharmBase):
             raise RuntimeError("Unknown secret scope.")
 
     def _on_start(self, _) -> None:
-        """Only sets an waiting status."""
-        # self.unit.status = WaitingStatus("Waiting for relation")
+        """Only sets an active status."""
         self.unit.status = ActiveStatus("Kakfa Ready!")
 
     def _on_topic_requested(self, event: TopicRequestedEvent):
         """Handle the on_topic_requested event."""
         self.unit.status = MaintenanceStatus("Creating connection")
-        # retrieve bucket name from the requirer side
+        # retrieve topic name from the requirer side
         topic = event.topic
 
         relation_id = event.relation.id
@@ -128,9 +108,7 @@ class KafkaCharm(CharmBase):
         # set parameters in the secrets
         # update relation data if the relation is present
         if len(self.kafka_provider.relations) > 0:
-            logger.info("here")
             for relation in self.kafka_provider.relations:
-                logger.info("here 1")
                 self.kafka_provider.set_credentials(
                     relation.id,
                     username=self.get_secret("app", "username"),

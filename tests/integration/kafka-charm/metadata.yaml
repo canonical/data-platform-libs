@@ -9,8 +9,8 @@ summary: |
 
 peers:
   kafka-peers:
-    interface: kafka-peers
+    interface: kafka_peers
 
 provides:
-  kafka_client:
+  kafka-client:
     interface: kafka_client
