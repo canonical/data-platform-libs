@@ -193,7 +193,6 @@ application related data.
 from charms.data_platform_libs.v0.data_interfaces import (
     BootstrapServerChangedEvent,
     KafkaRequires,
-    KafkaCredentialsChangedEvent,
     TopicCreatedEvent,
 )
 

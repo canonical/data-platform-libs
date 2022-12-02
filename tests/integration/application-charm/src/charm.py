@@ -15,7 +15,6 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseRequires,
-    KafkaCredentialsChangedEvent,
     KafkaRequires,
     TopicCreatedEvent,
 )
@@ -113,9 +112,6 @@ class ApplicationCharm(CharmBase):
         self.kafka = KafkaRequires(self, "kafka_client", "test-topic", EXTRA_USER_ROLES_KAFKA)
 
         self.framework.observe(
-            self.kafka.on.credentials_changed, self._on_kafka_credentials_changed
-        )
-        self.framework.observe(
             self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
         )
         self.framework.observe(self.kafka.on.topic_created, self._on_kafka_topic_created)
@@ -187,13 +183,6 @@ class ApplicationCharm(CharmBase):
     def _on_cluster2_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Event triggered when the read/write endpoints of the database change."""
         logger.info(f"cluster2 endpoints have been changed to: {event.endpoints}")
-
-    def _on_kafka_credentials_changed(self, event: KafkaCredentialsChangedEvent):
-        """Event triggered when a credentials was changed for this application."""
-        logger.info(
-            f"On kafka credentials changed: username: {event.username} - password: {event.password}"
-        )
-        self.unit.status = ActiveStatus("kafka_credentials_changed")
 
     def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
         """Event triggered when a bootstrap server was changed for this application."""
