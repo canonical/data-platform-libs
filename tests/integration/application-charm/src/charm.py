@@ -109,7 +109,7 @@ class ApplicationCharm(CharmBase):
 
         # Kafka events
 
-        self.kafka = KafkaRequires(self, "kafka_client", "test-topic", EXTRA_USER_ROLES_KAFKA)
+        self.kafka = KafkaRequires(self, "kafka-client", "test-topic", EXTRA_USER_ROLES_KAFKA)
 
         self.framework.observe(
             self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
