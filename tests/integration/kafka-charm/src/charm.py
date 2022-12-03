@@ -21,8 +21,8 @@ from ops.model import ActiveStatus, MaintenanceStatus
 
 logger = logging.getLogger(__name__)
 
-PEER = "kafka_peers"
-REL = "kafka_client"
+PEER = "kafka-peers"
+REL = "kafka-client"
 
 
 class KafkaCharm(CharmBase):
@@ -37,6 +37,7 @@ class KafkaCharm(CharmBase):
         # Charm events defined in the Kafka Provides charm library.
         self.kafka_provider = KafkaProvides(self, relation_name=REL)
         self.framework.observe(self.kafka_provider.on.topic_requested, self._on_topic_requested)
+        self.framework.observe(self.on[PEER].relation_joined, self._on_peer_relation_joined)
 
         # actions
         self.framework.observe(self.on.sync_password_action, self._on_sync_password)
@@ -44,6 +45,9 @@ class KafkaCharm(CharmBase):
         self.framework.observe(
             self.on.sync_bootstrap_server_action, self._on_sync_bootstrap_server
         )
+
+    def _on_peer_relation_joined(self, _):
+        pass
 
     @property
     def app_peer_data(self) -> Dict:
