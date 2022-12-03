@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 APPLICATION_APP_NAME = "requirer-app"
 KAFKA_APP_NAME = "kafka"
 APP_NAMES = [APPLICATION_APP_NAME, KAFKA_APP_NAME]
-RELATION_NAME = "kafka_client"
+RELATION_NAME = "kafka-client"
 
 
 @pytest.mark.abort_on_fail
