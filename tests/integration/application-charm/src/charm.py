@@ -10,12 +10,15 @@ of the libraries in this repository.
 
 import logging
 
-from charms.data_platform_libs.v0.database_requires import (
+from charms.data_platform_libs.v0.data_interfaces import (
+    BootstrapServerChangedEvent,
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseRequires,
+    KafkaRequires,
+    TopicCreatedEvent,
 )
-from ops.charm import CharmBase
+from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 
@@ -23,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Extra roles that this application needs when interacting with the database.
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
+EXTRA_USER_ROLES_KAFKA = "producer,consumer"
 
 
 class ApplicationCharm(CharmBase):
@@ -103,6 +107,19 @@ class ApplicationCharm(CharmBase):
             self._on_cluster2_endpoints_changed,
         )
 
+        # Kafka events
+
+        self.kafka = KafkaRequires(self, "kafka-client", "test-topic", EXTRA_USER_ROLES_KAFKA)
+
+        self.framework.observe(
+            self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
+        )
+        self.framework.observe(self.kafka.on.topic_created, self._on_kafka_topic_created)
+
+        # actions
+
+        self.framework.observe(self.on.reset_unit_status_action, self._on_reset_unit_status)
+
     def _on_start(self, _) -> None:
         """Only sets an Active status."""
         self.unit.status = ActiveStatus()
@@ -166,6 +183,22 @@ class ApplicationCharm(CharmBase):
     def _on_cluster2_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Event triggered when the read/write endpoints of the database change."""
         logger.info(f"cluster2 endpoints have been changed to: {event.endpoints}")
+
+    def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
+        """Event triggered when a bootstrap server was changed for this application."""
+        logger.info(
+            f"On kafka boostrap-server changed: bootstrap-server: {event.bootstrap_server}"
+        )
+        self.unit.status = ActiveStatus("kafka_bootstrap_server_changed")
+
+    def _on_kafka_topic_created(self, _: TopicCreatedEvent):
+        """Event triggered when a topic was created for this application."""
+        logger.info("On kafka topic created")
+        self.unit.status = ActiveStatus("kafka_topic_created")
+
+    def _on_reset_unit_status(self, _: ActionEvent):
+        """Handle the reset of status message for the unit."""
+        self.unit.status = ActiveStatus()
 
 
 if __name__ == "__main__":

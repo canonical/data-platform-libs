@@ -17,3 +17,5 @@ requires:
   aliased-multiple-database-clusters:
     interface: database_client
     limit: 2
+  kafka-client:
+    interface: kafka_client

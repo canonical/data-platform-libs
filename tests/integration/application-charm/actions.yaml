@@ -1,0 +1,2 @@
+reset-unit-status:
+  description: Set empty status message (ActiveStatus)
