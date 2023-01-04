@@ -57,7 +57,6 @@ for hosting libraries only.
 
 ## Canonical Contributor Agreement
 
-
 Canonical welcomes contributions to the Charmed Template Operator. Please check
 out our [contributor agreement](https://ubuntu.com/legal/contributors) if you're
 interested in contributing to the solution.
