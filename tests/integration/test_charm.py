@@ -50,6 +50,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
             },
             application_name=DATABASE_APP_NAME,
             num_units=2,
+            series="jammy",
         ),
         ops_test.model.deploy(
             database_charm,
@@ -59,6 +60,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
                 ]
             },
             application_name=ANOTHER_DATABASE_APP_NAME,
+            series="jammy",
         ),
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active", wait_for_units=1)
