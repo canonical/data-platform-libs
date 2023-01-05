@@ -8,7 +8,7 @@ summary: |
   only for testing of the libs in this repository.
 
 series:
-  - jammy
+  - focal
 
 provides:
   s3-credentials:
