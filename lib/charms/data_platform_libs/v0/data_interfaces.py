@@ -280,6 +280,7 @@ exchanged in the relation databag.
 
 import json
 import logging
+import os
 from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple
 from datetime import datetime
@@ -303,7 +304,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -501,11 +502,18 @@ class DataRequires(Object, ABC, metaclass=_AbstractMetaclass):
 
         This function can be used to retrieve data from a relation
         in the charm code when outside an event callback.
+        Function cannot be used in `*-relation-broken` events and will raise an exception.
 
         Returns:
             a dict of the values stored in the relation data bag
                 for all relation instances (indexed by the relation ID).
         """
+        if "-relation-broken" in os.environ.get("JUJU_HOOK_NAME", ""):
+            # read more in https://bugs.launchpad.net/juju/+bug/1960934
+            raise RuntimeError(
+                "`fetch_relation_data` cannot be used in `*-relation-broken` events"
+            )
+
         data = {}
         for relation in self.relations:
             data[relation.id] = {
