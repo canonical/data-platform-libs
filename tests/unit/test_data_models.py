@@ -157,7 +157,7 @@ class TestCharm(unittest.TestCase):
         mock_event.params = {"host": "my-host"}
         with self.assertLogs(level="INFO") as logger:
             self.assertTrue(self.harness.charm._set_server_action(mock_event))
-        self.assertEqual(sorted(logger.output), ["INFO:tests.unit.test_data_models:my-host:80"])
+        self.assertEqual(sorted(logger.output), ["INFO:test_data_models:my-host:80"])
 
     def test_action_params_parsing_ko(self):
         mock_event = Mock()
@@ -180,7 +180,7 @@ class TestCharm(unittest.TestCase):
 
         with self.assertLogs(level="INFO") as logger:
             self.harness.update_relation_data(relation_id, "mongodb", {"key": "1.0"})
-        self.assertEqual(logger.output, ["INFO:tests.unit.test_data_models:<class 'float'>"])
+        self.assertEqual(logger.output, ["INFO:test_data_models:<class 'float'>"])
 
     def test_relation_databag_merged(self):
         relation = self.harness.charm.model.get_relation("database")
