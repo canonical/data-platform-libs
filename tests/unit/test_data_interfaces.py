@@ -486,6 +486,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
     def test_on_database_created(self, _on_database_created):
         """Asserts on_database_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created database.
+        assert not self.harness.charm.requirer.is_resource_created()
+
         self.harness.update_relation_data(
             self.rel_id,
             self.app_name,
@@ -500,6 +502,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         event = _on_database_created.call_args[0][0]
         assert event.username == "test-username"
         assert event.password == "test-password"
+
+        assert self.harness.charm.requirer.is_resource_created()
 
     @patch.object(charm, "_on_endpoints_changed")
     def test_on_endpoints_changed(self, _on_endpoints_changed):
@@ -794,6 +798,8 @@ class TestKakfaRequires(DataRequirerBaseTests, unittest.TestCase):
     def test_on_topic_created(self, _on_topic_created):
         """Asserts on_topic_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created topic.
+        assert not self.harness.charm.requirer.is_resource_created()
+
         self.harness.update_relation_data(
             self.rel_id,
             self.app_name,
@@ -808,6 +814,8 @@ class TestKakfaRequires(DataRequirerBaseTests, unittest.TestCase):
         event = _on_topic_created.call_args[0][0]
         assert event.username == "test-username"
         assert event.password == "test-password"
+
+        assert self.harness.charm.requirer.is_resource_created()
 
     @patch.object(charm, "_on_bootstrap_server_changed")
     def test_on_bootstrap_server_changed(self, _on_bootstrap_server_changed):
