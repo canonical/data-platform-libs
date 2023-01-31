@@ -529,8 +529,6 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
 
-
-
     @patch.object(charm, "_on_endpoints_changed")
     def test_on_endpoints_changed(self, _on_endpoints_changed):
         """Asserts the correct call to on_endpoints_changed."""
@@ -821,7 +819,10 @@ class TestKakfaRequires(DataRequirerBaseTests, unittest.TestCase):
         return harness, rel_id
 
     @patch.object(charm, "_on_topic_created")
-    def test_on_topic_created(self, _on_topic_created, ):
+    def test_on_topic_created(
+        self,
+        _on_topic_created,
+    ):
         """Asserts on_topic_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created topic.
 

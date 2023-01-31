@@ -462,10 +462,10 @@ class DataRequires(Object, ABC):
     """Requires-side of the relation."""
 
     def __init__(
-            self,
-            charm,
-            relation_name: str,
-            extra_user_roles: str = None,
+        self,
+        charm,
+        relation_name: str,
+        extra_user_roles: str = None,
     ):
         """Manager of base client relations."""
         super().__init__(charm, relation_name)
@@ -548,26 +548,29 @@ class DataRequires(Object, ABC):
 
     @staticmethod
     def _is_resource_created_for_relation(relation: Relation):
-        return "username" in relation.data[relation.app] and \
-            "password" in relation.data[relation.app]
+        return (
+            "username" in relation.data[relation.app] and "password" in relation.data[relation.app]
+        )
 
     def is_resource_created(self, relation_id: Optional[int] = None) -> bool:
         """Check if the resource has been created.
 
-        This function can be used to check if the Provider answered with data
-        in the charm code when outside an event callback.
+        This function can be used to check if the Provider answered with data in the charm code
+        when outside an event callback.
+
+        Args:
+            relation_id: int, optional When provided the checks is done only for the id provided,
+                otherwise the checks is done for all relations
 
         Returns:
             True or False
         """
-
         if relation_id:
             return self._is_resource_created_for_relation(self.relations[relation_id])
         else:
-            return all([
-                self._is_resource_created_for_relation(relation)
-                for relation in self.relations
-            ])
+            return all(
+                [self._is_resource_created_for_relation(relation) for relation in self.relations]
+            )
 
 
 # General events
@@ -779,12 +782,12 @@ class DatabaseRequires(DataRequires):
     on = DatabaseRequiresEvents()
 
     def __init__(
-            self,
-            charm,
-            relation_name: str,
-            database_name: str,
-            extra_user_roles: str = None,
-            relations_aliases: List[str] = None,
+        self,
+        charm,
+        relation_name: str,
+        database_name: str,
+        extra_user_roles: str = None,
+        relations_aliases: List[str] = None,
     ):
         """Manager of database client relations."""
         super().__init__(charm, relation_name, extra_user_roles)
@@ -827,9 +830,9 @@ class DatabaseRequires(DataRequires):
         # Return if an alias was already assigned to this relation
         # (like when there are more than one unit joining the relation).
         if (
-                self.charm.model.get_relation(self.relation_name, relation_id)
-                        .data[self.local_unit]
-                        .get("alias")
+            self.charm.model.get_relation(self.relation_name, relation_id)
+            .data[self.local_unit]
+            .get("alias")
         ):
             return
 
