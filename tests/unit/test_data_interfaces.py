@@ -132,7 +132,6 @@ class DataProvidesBaseTests(ABC):
 
 
 class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
-
     metadata = DATABASE_METADATA
     relation_name = DATABASE_RELATION_NAME
     app_name = "database"
@@ -242,7 +241,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
 
 class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
-
     metadata = KAFKA_METADATA
     relation_name = KAFKA_RELATION_NAME
     app_name = "kafka"
