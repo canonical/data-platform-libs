@@ -132,7 +132,6 @@ class DataProvidesBaseTests(ABC):
 
 
 class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
-
     metadata = DATABASE_METADATA
     relation_name = DATABASE_RELATION_NAME
     app_name = "database"
@@ -242,7 +241,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
 
 class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
-
     metadata = KAFKA_METADATA
     relation_name = KAFKA_RELATION_NAME
     app_name = "kafka"
@@ -486,6 +484,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
     def test_on_database_created(self, _on_database_created):
         """Asserts on_database_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created database.
+        assert not self.harness.charm.requirer.is_resource_created()
+
         self.harness.update_relation_data(
             self.rel_id,
             self.app_name,
@@ -500,6 +500,32 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         event = _on_database_created.call_args[0][0]
         assert event.username == "test-username"
         assert event.password == "test-password"
+
+        assert self.harness.charm.requirer.is_resource_created()
+
+        rel_id = self.harness.add_relation(DATABASE_RELATION_NAME, self.app_name)
+        self.harness.add_relation_unit(rel_id, f"{self.app_name}/{rel_id}")
+
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        self.harness.update_relation_data(
+            rel_id,
+            self.app_name,
+            {"username": "test-username-2", "password": "test-password-2"},
+        )
+
+        # Assert the correct hook is called.
+        assert _on_database_created.call_count == 2
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_database_created.call_args[0][0]
+        assert event.username == "test-username-2"
+        assert event.password == "test-password-2"
+
+        assert self.harness.charm.requirer.is_resource_created(rel_id)
+        assert self.harness.charm.requirer.is_resource_created()
 
     @patch.object(charm, "_on_endpoints_changed")
     def test_on_endpoints_changed(self, _on_endpoints_changed):
@@ -791,9 +817,15 @@ class TestKakfaRequires(DataRequirerBaseTests, unittest.TestCase):
         return harness, rel_id
 
     @patch.object(charm, "_on_topic_created")
-    def test_on_topic_created(self, _on_topic_created):
+    def test_on_topic_created(
+        self,
+        _on_topic_created,
+    ):
         """Asserts on_topic_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created topic.
+
+        assert not self.harness.charm.requirer.is_resource_created()
+
         self.harness.update_relation_data(
             self.rel_id,
             self.app_name,
@@ -808,6 +840,32 @@ class TestKakfaRequires(DataRequirerBaseTests, unittest.TestCase):
         event = _on_topic_created.call_args[0][0]
         assert event.username == "test-username"
         assert event.password == "test-password"
+
+        assert self.harness.charm.requirer.is_resource_created()
+
+        rel_id = self.harness.add_relation(KAFKA_RELATION_NAME, self.app_name)
+        self.harness.add_relation_unit(rel_id, f"{self.app_name}/{rel_id}")
+
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        self.harness.update_relation_data(
+            rel_id,
+            self.app_name,
+            {"username": "test-username-2", "password": "test-password-2"},
+        )
+
+        # Assert the correct hook is called.
+        assert _on_topic_created.call_count == 2
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_topic_created.call_args[0][0]
+        assert event.username == "test-username-2"
+        assert event.password == "test-password-2"
+
+        assert self.harness.charm.requirer.is_resource_created(rel_id)
+        assert self.harness.charm.requirer.is_resource_created()
 
     @patch.object(charm, "_on_bootstrap_server_changed")
     def test_on_bootstrap_server_changed(self, _on_bootstrap_server_changed):
