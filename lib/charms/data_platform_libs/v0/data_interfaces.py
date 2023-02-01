@@ -559,8 +559,8 @@ class DataRequires(Object, ABC):
         when outside an event callback.
 
         Args:
-            relation_id: int, optional When provided the checks is done only for the id provided,
-                otherwise the checks is done for all relations
+            relation_id (int, optional): When provided the check is done only for the relation id provided,
+                otherwise the check is done for all relations
 
         Returns:
             True or False
