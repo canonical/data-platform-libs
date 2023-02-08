@@ -272,7 +272,6 @@ def parse_relation_data(
     ) -> Callable[[CharmBase, RelationEvent], G]:
         @wraps(f)
         def event_wrapper(self: CharmBase, event: RelationEvent):
-
             try:
                 app_data = (
                     read(event.relation.data[event.app], app_model)
