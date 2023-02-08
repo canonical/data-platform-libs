@@ -7,6 +7,7 @@ from typing import List, Optional, Union
 from unittest.mock import Mock
 
 from charms.data_platform_libs.v0.data_models import (
+    BaseConfigModel,
     RelationDataModel,
     TypedCharmBase,
     get_relation_data_as,
@@ -46,7 +47,7 @@ ACTIONS = """
 """
 
 
-class CharmConfig(BaseModel):
+class CharmConfig(BaseConfigModel):
     float_config: float
     low_value_config: int
 
@@ -144,6 +145,9 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(self.harness.charm.config, CharmConfig)
 
         self.assertIsInstance(self.harness.charm.config.float_config, float)
+
+        self.harness.update_config({"low-value-config": 1})
+        self.assertEqual(self.harness.charm.config["low-value-config"], 1)
 
     def test_config_parsing_ko(self):
         self.harness.update_config({"low-value-config": 200})

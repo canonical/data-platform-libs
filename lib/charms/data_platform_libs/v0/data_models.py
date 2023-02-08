@@ -39,9 +39,9 @@ also parsing and validation on standard dataclass implementation:
 
 ```python
 
-from pydantic import BaseModel
+from charms.data_platform_libs.v0.data_models import BaseConfigModel
 
-class MyConfig(BaseModel):
+class MyConfig(BaseConfigModel):
 
     my_key: int
 
@@ -59,6 +59,7 @@ created:
 dataclass = MyConfig(my_key="1")
 
 dataclass.my_key # this returns 1 (int)
+dataclass["my_key"] # this returns 1 (int)
 
 dataclass = MyConfig(my_key="102") # this returns a ValueError("Too High")
 ```
@@ -173,6 +174,14 @@ G = TypeVar("G")
 T = TypeVar("T", bound=BaseModel)
 AppModel = TypeVar("AppModel", bound=BaseModel)
 UnitModel = TypeVar("UnitModel", bound=BaseModel)
+
+
+class BaseConfigModel(BaseModel):
+    """Class to be used for defining the structured configuration options."""
+
+    def __getitem__(self, x):
+        """Return the item using the notation instance[key]."""
+        return getattr(self, x.replace("-", "_"))
 
 
 class TypedCharmBase(CharmBase, Generic[T]):
