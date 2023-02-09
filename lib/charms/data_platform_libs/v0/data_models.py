@@ -170,6 +170,11 @@ LIBAPI = 0
 # to 0 if you are raising the major API version
 LIBPATCH = 1
 
+PYDEPS = [
+    "ops>=2.0.0",
+    "pydantic>=1.10"
+]
+
 G = TypeVar("G")
 T = TypeVar("T", bound=BaseModel)
 AppModel = TypeVar("AppModel", bound=BaseModel)
@@ -205,7 +210,7 @@ def validate_params(cls: Type[T]):
     """
 
     def decorator(
-        f: Callable[[CharmBase, ActionEvent, Union[T, ValidationError]], G]
+            f: Callable[[CharmBase, ActionEvent, Union[T, ValidationError]], G]
     ) -> Callable[[CharmBase, ActionEvent], G]:
         @wraps(f)
         def event_wrapper(self: CharmBase, event: ActionEvent):
@@ -257,7 +262,7 @@ def read(relation_data: MutableMapping[str, str], obj: Type[T]) -> T:
 
 
 def parse_relation_data(
-    app_model: Optional[Type[AppModel]] = None, unit_model: Optional[Type[UnitModel]] = None
+        app_model: Optional[Type[AppModel]] = None, unit_model: Optional[Type[UnitModel]] = None
 ):
     """Return a decorator to allow pydantic parsing of the app and unit databags.
 
@@ -269,15 +274,15 @@ def parse_relation_data(
     """
 
     def decorator(
-        f: Callable[
-            [
-                CharmBase,
-                RelationEvent,
-                Union[AppModel, ValidationError],
-                Union[UnitModel, ValidationError],
-            ],
-            G,
-        ]
+            f: Callable[
+                [
+                    CharmBase,
+                    RelationEvent,
+                    Union[AppModel, ValidationError],
+                    Union[UnitModel, ValidationError],
+                ],
+                G,
+            ]
     ) -> Callable[[CharmBase, RelationEvent], G]:
         @wraps(f)
         def event_wrapper(self: CharmBase, event: RelationEvent):
@@ -328,8 +333,8 @@ class RelationDataModel(BaseModel):
 
 
 def get_relation_data_as(
-    model_type: Type[AppModel],
-    *relation_data: RelationDataContent,
+        model_type: Type[AppModel],
+        *relation_data: RelationDataContent,
 ) -> Union[AppModel, ValidationError]:
     """Return a merged representation of the provider and requirer databag into a single object.
 
