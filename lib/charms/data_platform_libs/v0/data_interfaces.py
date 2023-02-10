@@ -969,7 +969,7 @@ class KafkaRequiresEvent(RelationEvent):
 
     @property
     def bootstrap_server(self) -> Optional[str]:
-        """Returns a a comma-seperated list of broker uris."""
+        """Returns a a comma-separated list of broker uris."""
         return self.relation.data[self.relation.app].get("endpoints")
 
     @property
@@ -1049,7 +1049,7 @@ class KafkaProvides(DataProvides):
 
         Args:
             relation_id: the identifier for a particular relation.
-            zookeeper_uris: comma-seperated list of ZooKeeper server uris.
+            zookeeper_uris: comma-separated list of ZooKeeper server uris.
         """
         self._update_relation_data(relation_id, {"zookeeper-uris": zookeeper_uris})
 
@@ -1096,7 +1096,7 @@ class KafkaRequires(DataRequires):
             # “endpoints_changed“ event if “topic_created“ is triggered.
             return
 
-        # Emit an endpoints (bootstap-server) changed event if the Kakfa endpoints
+        # Emit an endpoints (bootstrap-server) changed event if the Kakfa endpoints
         # added or changed this info in the relation databag.
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
