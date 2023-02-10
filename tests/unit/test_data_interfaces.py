@@ -1,15 +1,13 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
+import re
 import unittest
 from abc import ABC, abstractmethod
+from logging import getLogger
 from typing import Tuple, Type
 from unittest.mock import Mock, patch
 
 import pytest
-from ops.charm import CharmBase
-from ops.testing import Harness
-from parameterized import parameterized
-
 from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
@@ -24,6 +22,11 @@ from charms.data_platform_libs.v0.data_interfaces import (
     TopicRequestedEvent,
 )
 from charms.harness_extensions.v0.capture_events import capture, capture_events
+from ops.charm import CharmBase
+from ops.testing import Harness
+from parameterized import parameterized
+
+logger = getLogger(__name__)
 
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
@@ -181,8 +184,8 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the endpoints are present in the relation.
         assert (
-                self.harness.get_relation_data(self.rel_id, "database")["endpoints"]
-                == "host1:port,host2:port"
+            self.harness.get_relation_data(self.rel_id, "database")["endpoints"]
+            == "host1:port,host2:port"
         )
 
     def test_set_read_only_endpoints(self):
@@ -192,8 +195,8 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the endpoints are present in the relation.
         assert (
-                self.harness.get_relation_data(self.rel_id, "database")["read-only-endpoints"]
-                == "host1:port,host2:port"
+            self.harness.get_relation_data(self.rel_id, "database")["read-only-endpoints"]
+            == "host1:port,host2:port"
         )
 
     def test_set_additional_fields(self):
@@ -290,8 +293,8 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the bootstrap-server is present in the relation.
         assert (
-                self.harness.get_relation_data(self.rel_id, self.app_name)["endpoints"]
-                == "host1:port,host2:port"
+            self.harness.get_relation_data(self.rel_id, self.app_name)["endpoints"]
+            == "host1:port,host2:port"
         )
 
     def test_set_additional_fields(self):
@@ -365,6 +368,9 @@ class ApplicationCharmDatabase(CharmBase):
             self, DATABASE_RELATION_NAME, DATABASE, EXTRA_USER_ROLES, CLUSTER_ALIASES[:]
         )
         self.framework.observe(self.requirer.on.database_created, self._on_database_created)
+        self.framework.observe(
+            self.on[DATABASE_RELATION_NAME].relation_broken, self._on_relation_broken
+        )
         self.framework.observe(self.requirer.on.endpoints_changed, self._on_endpoints_changed)
         self.framework.observe(
             self.requirer.on.read_only_endpoints_changed, self._on_read_only_endpoints_changed
@@ -373,17 +379,44 @@ class ApplicationCharmDatabase(CharmBase):
             self.requirer.on.cluster1_database_created, self._on_cluster1_database_created
         )
 
+    def log_relation_size(self, prefix=""):
+        logger.info(f"§{prefix} relations: {len(self.requirer.relations)}")
+
+    @staticmethod
+    def get_relation_size(log_message: str) -> int:
+        num_of_relations = (
+            re.search(r"relations: [0-9]*", log_message)
+            .group(0)
+            .replace("relations: ", "")
+            .strip()
+        )
+
+        return int(num_of_relations)
+
+    @staticmethod
+    def get_prefix(log_message: str) -> str:
+        return (
+            re.search(r"§.* relations:", log_message)
+            .group(0)
+            .replace("relations:", "")
+            .replace("§", "")
+            .strip()
+        )
+
     def _on_database_created(self, _) -> None:
-        pass
+        self.log_relation_size("on_database_created")
+
+    def _on_relation_broken(self, _) -> None:
+        self.log_relation_size("on_relation_broken")
 
     def _on_endpoints_changed(self, _) -> None:
-        pass
+        self.log_relation_size("on_endpoints_changed")
 
     def _on_read_only_endpoints_changed(self, _) -> None:
-        pass
+        self.log_relation_size("on_read_only_endpoints_changed")
 
     def _on_cluster1_database_created(self, _) -> None:
-        pass
+        self.log_relation_size("on_cluster1_database_created")
 
 
 class ApplicationCharmKafka(CharmBase):
@@ -447,9 +480,9 @@ class DataRequirerBaseTests(ABC):
     def test_diff(self):
         """Asserts that the charm library correctly returns a diff of the relation data."""
         # Define a mock relation changed event to be used in the subsequent diff calls.
-        APPLICATION = "data-platform"
+        application = "data-platform"
 
-        rel_id = self.add_relation(self.harness, APPLICATION)
+        rel_id = self.add_relation(self.harness, application)
 
         mock_event = Mock()
         # Set the app, id and the initial data for the relation.
@@ -481,6 +514,48 @@ class DataRequirerBaseTests(ABC):
         del data["password"]
         result = self.harness.charm.requirer._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
+
+
+class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
+    metadata = METADATA
+    relation_name = DATABASE_RELATION_NAME
+    charm = ApplicationCharmDatabase
+
+    app_name = "application"
+    provider = "database"
+
+    def setUp(self):
+        self.harness = self.get_harness()
+        self.harness.begin_with_initial_hooks()
+
+    def test_empty_resource_created(self):
+        self.assertFalse(self.harness.charm.requirer.is_resource_created())
+
+    def test_non_existing_resource_created(self):
+        self.assertRaises(IndexError, lambda: self.harness.charm.requirer.is_resource_created(0))
+        self.assertRaises(IndexError, lambda: self.harness.charm.requirer.is_resource_created(1))
+
+    def test_hide_relation_on_broken_event(self):
+        with self.assertLogs(logger, "INFO") as logs:
+            rel_id = self.add_relation(self.harness, self.provider)
+            self.harness.update_relation_data(
+                rel_id, self.provider, {"username": "username", "password": "password"}
+            )
+
+        # make sure two events were fired
+        self.assertEqual(len(logs.output), 2)
+        self.assertListEqual(
+            [self.harness.charm.get_prefix(log) for log in logs.output],
+            ["on_database_created", "on_cluster1_database_created"],
+        )
+        self.assertEqual(self.harness.charm.get_relation_size(logs.output[0]), 1)
+
+        with self.assertLogs(logger, "INFO") as logs:
+            self.harness.remove_relation(rel_id)
+
+        # Within the relation broken event the requirer should not show any relation
+        self.assertEqual(self.harness.charm.get_relation_size(logs.output[0]), 0)
+        self.assertEqual(self.harness.charm.get_prefix(logs.output[0]), "on_relation_broken")
 
 
 class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
@@ -691,24 +766,21 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Call the function and check the alias.
         self.harness.charm.requirer._assign_relation_alias(self.rel_id)
         assert (
-                self.harness.get_relation_data(self.rel_id, unit_name)["alias"]
-                == CLUSTER_ALIASES[0]
+            self.harness.get_relation_data(self.rel_id, unit_name)["alias"] == CLUSTER_ALIASES[0]
         )
 
         # Add another relation and check that the second cluster alias was assigned to it.
         second_rel_id = self.add_relation(self.harness, "another-database")
 
         assert (
-                self.harness.get_relation_data(second_rel_id, unit_name)["alias"]
-                == CLUSTER_ALIASES[1]
+            self.harness.get_relation_data(second_rel_id, unit_name)["alias"] == CLUSTER_ALIASES[1]
         )
 
         # Reset the alias and test again using the function call.
         self.harness.update_relation_data(second_rel_id, unit_name, {"alias": ""})
         self.harness.charm.requirer._assign_relation_alias(second_rel_id)
         assert (
-                self.harness.get_relation_data(second_rel_id, unit_name)["alias"]
-                == CLUSTER_ALIASES[1]
+            self.harness.get_relation_data(second_rel_id, unit_name)["alias"] == CLUSTER_ALIASES[1]
         )
 
     @patch.object(charm, "_on_cluster1_database_created")
@@ -833,11 +905,10 @@ class TestKakfaRequires(DataRequirerBaseTests, unittest.TestCase):
         self.rel_id = self.add_relation(self.harness, self.provider)
         self.harness.begin_with_initial_hooks()
 
-
     @patch.object(charm, "_on_topic_created")
     def test_on_topic_created(
-            self,
-            _on_topic_created,
+        self,
+        _on_topic_created,
     ):
         """Asserts on_topic_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created topic.
