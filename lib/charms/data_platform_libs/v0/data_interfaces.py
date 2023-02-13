@@ -501,12 +501,6 @@ class DataRequires(Object, ABC):
             a dict of the values stored in the relation data bag
                 for all relation instances (indexed by the relation ID).
         """
-        if "-relation-broken" in os.environ.get("JUJU_HOOK_NAME", ""):
-            # read more in https://bugs.launchpad.net/juju/+bug/1960934
-            raise RuntimeError(
-                "`fetch_relation_data` cannot be used in `*-relation-broken` events"
-            )
-
         data = {}
         for relation in self.relations:
             data[relation.id] = {

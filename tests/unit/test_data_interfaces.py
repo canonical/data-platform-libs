@@ -407,6 +407,9 @@ class ApplicationCharmDatabase(CharmBase):
         self.log_relation_size("on_database_created")
 
     def _on_relation_broken(self, _) -> None:
+        # This should not raise errors
+        data = self.requirer.fetch_relation_data()
+
         self.log_relation_size("on_relation_broken")
 
     def _on_endpoints_changed(self, _) -> None:
