@@ -280,7 +280,6 @@ exchanged in the relation databag.
 
 import json
 import logging
-import os
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from datetime import datetime
