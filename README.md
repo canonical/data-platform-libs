@@ -21,10 +21,13 @@ which they may be imported and used as normal charms. For example:
 Following are the libraries available in this repository:
 
 - `data_interfaces` - Library to manage the relation for the data-platform products.
+- `data_models` - Library to introduce pydantic models for handling configuration, action parameters and databags.
 - `database_provides` - [DEPRECATED] Library that offers custom events and methods for provider-side of the
   relation (e.g. mysql)
 - `database_requires` - [DEPRECATED] Library that offers custom events and methods for requirer-side of the
   relation (e.g. wordpress)
+
+The libraries are compatible with `ops>=2.0`. 
 
 The charms from the `tests/integration` folder aren't meant to be used for anything beyond testing
 and example code. They serve as examples of how to use the charm libraries.
