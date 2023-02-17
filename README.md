@@ -27,7 +27,7 @@ Following are the libraries available in this repository:
 - `database_requires` - [DEPRECATED] Library that offers custom events and methods for requirer-side of the
   relation (e.g. wordpress)
 
-The libraries are compatible with `ops>=2.0`. 
+> __Note:__ `data_interfaces` is not compatible `ops<=1.5.4`. It is compatible with only `ops>=2.0.0`. 
 
 The charms from the `tests/integration` folder aren't meant to be used for anything beyond testing
 and example code. They serve as examples of how to use the charm libraries.
