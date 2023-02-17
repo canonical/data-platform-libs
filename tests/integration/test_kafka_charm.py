@@ -7,7 +7,7 @@ import logging
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.helpers import get_application_relation_data
+from .helpers import get_application_relation_data
 
 logger = logging.getLogger(__name__)
 
