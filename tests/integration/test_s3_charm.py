@@ -28,12 +28,9 @@ async def test_deploy_charms(ops_test: OpsTest, application_s3_charm, s3_charm):
             application_s3_charm,
             application_name=APPLICATION_APP_NAME,
             num_units=2,
+            series="focal",
         ),
-        ops_test.model.deploy(
-            s3_charm,
-            application_name=S3_APP_NAME,
-            num_units=2,
-        ),
+        ops_test.model.deploy(s3_charm, application_name=S3_APP_NAME, num_units=2, series="focal"),
     )
     await ops_test.model.wait_for_idle(apps=[S3_APP_NAME], status="active", wait_for_units=1)
     await ops_test.model.wait_for_idle(
@@ -71,8 +68,7 @@ async def test_two_applications_doesnt_share_the_same_relation_data(
 
     # Deploy another application.
     await ops_test.model.deploy(
-        application_s3_charm,
-        application_name=another_application_app_name,
+        application_s3_charm, application_name=another_application_app_name, series="jammy"
     )
     await ops_test.model.wait_for_idle(apps=[S3_APP_NAME, APPLICATION_APP_NAME], status="active")
     await ops_test.model.wait_for_idle(apps=[another_application_app_name], status="waiting")

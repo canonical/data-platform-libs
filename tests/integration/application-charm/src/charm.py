@@ -51,6 +51,14 @@ class ApplicationCharm(CharmBase):
             self.first_database.on.endpoints_changed, self._on_first_database_endpoints_changed
         )
 
+        self.framework.observe(
+            self.on["first-database"].relation_broken, self._on_first_database_relation_broken
+        )
+
+        self.framework.observe(
+            self.on["second-database"].relation_broken, self._on_second_database_relation_broken
+        )
+
         # Events related to the second database that is requested
         # (these events are defined in the database requires charm library).
         database_name = f'{self.app.name.replace("-", "_")}_second_database'
@@ -134,6 +142,23 @@ class ApplicationCharm(CharmBase):
     def _on_first_database_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Event triggered when the read/write endpoints of the database change."""
         logger.info(f"first database endpoints have been changed to: {event.endpoints}")
+
+    def _on_first_database_relation_broken(self, _):
+        """Event triggered when relation is broken."""
+        logger.info("First database relation broken.")
+        logger.info(f"Resource created: {self.first_database.is_resource_created()}")
+        self.unit.status = ActiveStatus(
+            f"Is resource create: {self.first_database.is_resource_created()}"
+        )
+
+    def _on_second_database_relation_broken(self, _):
+        """Event triggered when relation is broken."""
+        logger.info("Second database relation broken.")
+        logger.info(f"Resource created: {self.second_database.is_resource_created()}")
+        self.unit.status = ActiveStatus("received database credentials of the first database")
+        self.unit.status = ActiveStatus(
+            f"Is resource create: {self.first_database.is_resource_created()}"
+        )
 
     # Second database events observers.
     def _on_second_database_created(self, event: DatabaseCreatedEvent) -> None:
