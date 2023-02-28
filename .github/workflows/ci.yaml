@@ -27,7 +27,7 @@ jobs:
         run: tox -e unit
 
   integration-test-database:
-    name: Integration tests database (microk8s)
+    name: Integration tests database library (microk8s)
     needs:
       - lint
       - unit-test
@@ -52,7 +52,7 @@ jobs:
           model: testing
   
   integration-test-kafka:
-    name: Integration tests kafka (microk8s)
+    name: Integration tests kafka library (microk8s)
     needs:
       - lint
       - unit-test
@@ -77,7 +77,7 @@ jobs:
           model: testing
 
   integration-test-s3:
-    name: Integration tests kafka (microk8s)
+    name: Integration tests s3 library (microk8s)
     needs:
       - lint
       - unit-test
