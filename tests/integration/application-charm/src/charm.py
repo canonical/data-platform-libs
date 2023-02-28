@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 # Extra roles that this application needs when interacting with the database.
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 EXTRA_USER_ROLES_KAFKA = "producer,consumer"
+CONSUMER_PREFIX_GROUP = "test-prefix"
 
 
 class ApplicationCharm(CharmBase):
@@ -109,7 +110,9 @@ class ApplicationCharm(CharmBase):
 
         # Kafka events
 
-        self.kafka = KafkaRequires(self, "kafka-client", "test-topic", EXTRA_USER_ROLES_KAFKA)
+        self.kafka = KafkaRequires(
+            self, "kafka-client", "test-topic", EXTRA_USER_ROLES_KAFKA, CONSUMER_PREFIX_GROUP
+        )
 
         self.framework.observe(
             self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed

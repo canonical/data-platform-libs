@@ -26,8 +26,8 @@ jobs:
       - name: Run tests
         run: tox -e unit
 
-  integration-test-microk8s:
-    name: Integration tests (microk8s)
+  integration-test-database:
+    name: Integration tests database (microk8s)
     needs:
       - lint
       - unit-test
@@ -43,10 +43,61 @@ jobs:
           bootstrap-options: "--agent-version 2.9.34"
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox -e integration -- --model testing
+        run: tox -e integration-database -- --model testing
       - name: Dump logs
         uses: canonical/charm-logdump-action@main
         if: failure()
         with:
           app: data-platform-libs
           model: testing
+  
+  integration-test-kafka:
+    name: Integration tests kafka (microk8s)
+    needs:
+      - lint
+      - unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          # This is needed until https://bugs.launchpad.net/juju/+bug/1992833 is fixed.
+          bootstrap-options: "--agent-version 2.9.34"
+      - name: Run integration tests
+        # set a predictable model name so it can be consumed by charm-logdump-action
+        run: tox -e integration-kafka -- --model testing
+      - name: Dump logs
+        uses: canonical/charm-logdump-action@main
+        if: failure()
+        with:
+          app: data-platform-libs
+          model: testing
+
+  integration-test-s3:
+    name: Integration tests kafka (microk8s)
+    needs:
+      - lint
+      - unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          # This is needed until https://bugs.launchpad.net/juju/+bug/1992833 is fixed.
+          bootstrap-options: "--agent-version 2.9.34"
+      - name: Run integration tests
+        # set a predictable model name so it can be consumed by charm-logdump-action
+        run: tox -e integration-s3 -- --model testing
+      - name: Dump logs
+        uses: canonical/charm-logdump-action@main
+        if: failure()
+        with:
+          app: data-platform-libs
+          model: testing
+

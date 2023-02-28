@@ -84,6 +84,7 @@ class KafkaCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Creating connection")
         # retrieve topic name from the requirer side
         topic = event.topic
+        consumer_group_prefix = event.consumer_group_prefix
 
         relation_id = event.relation.id
 
@@ -96,11 +97,11 @@ class KafkaCharm(CharmBase):
         # set connection info in the databag relation
         self.kafka_provider.set_bootstrap_server(relation_id, bootstrap_server)
         self.kafka_provider.set_credentials(relation_id, username=username, password=password)
-        self.kafka_provider.set_consumer_group_prefix(relation_id, "group1,group2")
+        self.kafka_provider.set_consumer_group_prefix(relation_id, consumer_group_prefix)
         self.kafka_provider.set_tls(relation_id, "True")
         self.kafka_provider.set_tls_ca(relation_id, "Canonical")
         self.kafka_provider.set_zookeeper_uris(relation_id, "protocol.z1:port/,protocol.z2:port/")
-
+        self.kafka_provider.set_topic(relation_id, topic)
         self.unit.status = ActiveStatus(f"Topic: {topic} granted!")
 
     def _on_sync_password(self, event: ActionEvent):
