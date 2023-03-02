@@ -1123,8 +1123,8 @@ class KafkaRequires(DataRequires):
         charm,
         relation_name: str,
         topic: str,
-        extra_user_roles: str = None,
-        consumer_group_prefix: str = None,
+        extra_user_roles: Optional[str] = None,
+        consumer_group_prefix: Optional[str] = None,
     ):
         """Manager of Kafka client relations."""
         # super().__init__(charm, relation_name)
