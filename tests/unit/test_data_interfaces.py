@@ -901,7 +901,7 @@ class TestKakfaRequires(DataRequirerBaseTests, unittest.TestCase):
     charm = ApplicationCharmKafka
 
     app_name = "application"
-    provider = "database"
+    provider = "kafka"
 
     def setUp(self):
         self.harness = self.get_harness()

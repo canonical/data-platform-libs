@@ -24,14 +24,10 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, kafka_charm):
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm,
-            application_name=APPLICATION_APP_NAME,
-            num_units=1,
+            application_charm, application_name=APPLICATION_APP_NAME, num_units=1, series="jammy"
         ),
         ops_test.model.deploy(
-            kafka_charm,
-            application_name=KAFKA_APP_NAME,
-            num_units=1,
+            kafka_charm, application_name=KAFKA_APP_NAME, num_units=1, series="jammy"
         ),
     )
     await ops_test.model.wait_for_idle(apps=[KAFKA_APP_NAME], status="active", wait_for_units=1)
@@ -68,10 +64,15 @@ async def test_kafka_relation_with_charm_libraries(ops_test: OpsTest):
         ops_test, APPLICATION_APP_NAME, RELATION_NAME, "consumer-group-prefix"
     )
 
+    topic = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "topic"
+    )
+
     assert username == "admin"
     assert password == "password"
     assert boostrap_server == "host1:port,host2:port"
-    assert consumer_group_prefix == "group1,group2"
+    assert consumer_group_prefix == "test-prefix"
+    assert topic == "test-topic"
 
 
 async def test_kafka_bootstrap_server_changed(ops_test: OpsTest):

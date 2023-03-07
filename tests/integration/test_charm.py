@@ -37,9 +37,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm,
-            application_name=APPLICATION_APP_NAME,
-            num_units=2,
+            application_charm, application_name=APPLICATION_APP_NAME, num_units=2, series="jammy"
         ),
         ops_test.model.deploy(
             database_charm,
@@ -50,6 +48,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
             },
             application_name=DATABASE_APP_NAME,
             num_units=2,
+            series="focal",
         ),
         ops_test.model.deploy(
             database_charm,
@@ -59,6 +58,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
                 ]
             },
             application_name=ANOTHER_DATABASE_APP_NAME,
+            series="focal",
         ),
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active", wait_for_units=1)
@@ -133,8 +133,7 @@ async def test_two_applications_doesnt_share_the_same_relation_data(
 
     # Deploy another application.
     await ops_test.model.deploy(
-        application_charm,
-        application_name=another_application_app_name,
+        application_charm, application_name=another_application_app_name, series="jammy"
     )
     await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
 
