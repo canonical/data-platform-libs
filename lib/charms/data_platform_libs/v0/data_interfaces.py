@@ -1131,19 +1131,15 @@ class KafkaRequires(DataRequires):
         super().__init__(charm, relation_name, extra_user_roles)
         self.charm = charm
         self.topic = topic
-        self.consumer_group_prefix = consumer_group_prefix
+        self.consumer_group_prefix = consumer_group_prefix or ""
 
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
         """Event emitted when the application joins the Kafka relation."""
-        # Sets both topic and extra user roles in the relation
-        # if the roles are provided. Otherwise, sets only the topic.
-        relation_data = {}
-        if self.topic:
-            relation_data["topic"] = self.topic
-        if self.extra_user_roles:
-            relation_data["extra-user-roles"] = self.extra_user_roles
-        if self.consumer_group_prefix:
-            relation_data["consumer-group-prefix"] = self.consumer_group_prefix
+        # Sets topic, extra user roles, and "consumer-group-prefix" in the relation
+        relation_data = {
+            f: getattr(self, f.replace("-", "_"), "")
+            for f in ["consumer-group-prefix", "extra-user-roles", "topic"]
+        }
 
         self._update_relation_data(event.relation.id, relation_data)
 
