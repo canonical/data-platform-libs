@@ -1159,7 +1159,7 @@ class KafkaRequires(DataRequires):
             # “endpoints_changed“ event if “topic_created“ is triggered.
             return
 
-        # Emit an endpoints (bootstap-server) changed event if the Kakfa endpoints
+        # Emit an endpoints (bootstap-server) changed event if the Kafka endpoints
         # added or changed this info in the relation databag.
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
