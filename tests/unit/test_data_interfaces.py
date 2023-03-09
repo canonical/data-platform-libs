@@ -895,7 +895,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 assert captured.unit.name == f"{self.provider}/0"
 
 
-class TestKakfaRequires(DataRequirerBaseTests, unittest.TestCase):
+class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
     metadata = METADATA
     relation_name = KAFKA_RELATION_NAME
     charm = ApplicationCharmKafka

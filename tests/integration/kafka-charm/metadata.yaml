@@ -4,7 +4,7 @@ name: kafka
 description: |
   Toy charm used to emulate Kafka in integration tests.
 summary: |
-  Charm used to mimic the Kakfa charm for test purpose only.
+  Charm used to mimic the Kafka charm for test purpose only.
 
 
 peers:
