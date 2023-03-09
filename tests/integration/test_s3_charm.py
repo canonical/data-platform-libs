@@ -7,7 +7,7 @@ import logging
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.helpers import get_connection_info
+from .helpers import get_connection_info
 
 logger = logging.getLogger(__name__)
 

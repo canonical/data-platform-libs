@@ -10,10 +10,7 @@ import pytest
 import yaml
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.helpers import (
-    build_connection_string,
-    get_application_relation_data,
-)
+from .helpers import build_connection_string, get_application_relation_data
 
 logger = logging.getLogger(__name__)
 
