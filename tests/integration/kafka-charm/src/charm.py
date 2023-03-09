@@ -77,7 +77,7 @@ class KafkaCharm(CharmBase):
 
     def _on_start(self, _) -> None:
         """Only sets an active status."""
-        self.unit.status = ActiveStatus("Kakfa Ready!")
+        self.unit.status = ActiveStatus("Kafka Ready!")
 
     def _on_topic_requested(self, event: TopicRequestedEvent):
         """Handle the on_topic_requested event."""
