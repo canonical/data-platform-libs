@@ -534,7 +534,7 @@ class DataRequires(Object, ABC):
             a Diff instance containing the added, deleted and changed
                 keys from the event relation databag.
         """
-        return diff(event, self.local_unit)
+        return diff(event, self.local_app)
 
     @property
     def relations(self) -> List[Relation]:
