@@ -30,7 +30,9 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, opensearch_ch
             opensearch_charm, application_name=OPENSEARCH_APP_NAME, num_units=1, series="jammy"
         ),
     )
-    await ops_test.model.wait_for_idle(apps=[OPENSEARCH_APP_NAME], status="active", wait_for_units=1)
+    await ops_test.model.wait_for_idle(
+        apps=[OPENSEARCH_APP_NAME], status="active", wait_for_units=1
+    )
     await ops_test.model.wait_for_idle(
         apps=[APPLICATION_APP_NAME], status="active", wait_for_units=1
     )
@@ -67,5 +69,3 @@ async def test_opensearch_relation_with_charm_libraries(ops_test: OpsTest):
     assert password == "password"
     assert endpoints == "host1:port,host2:port"
     assert index == "test-index"
-
-

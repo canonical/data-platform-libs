@@ -12,8 +12,8 @@ import logging
 from typing import Dict, Optional
 
 from charms.data_platform_libs.v0.data_interfaces import (
-    OpenSearchProvides,
     IndexRequestedEvent,
+    OpenSearchProvides,
 )
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
@@ -36,7 +36,9 @@ class OpenSearchCharm(CharmBase):
 
         # Charm events defined in the OpenSearchProvides charm library.
         self.opensearch_provider = OpenSearchProvides(self, relation_name=REL)
-        self.framework.observe(self.opensearch_provider.on.index_requested, self._on_index_requested)
+        self.framework.observe(
+            self.opensearch_provider.on.index_requested, self._on_index_requested
+        )
         self.framework.observe(self.on[PEER].relation_joined, self._on_peer_relation_joined)
 
         # actions
@@ -81,7 +83,6 @@ class OpenSearchCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Creating connection")
         # retrieve index name from the requirer side
         index = event.index
-        consumer_group_prefix = event.consumer_group_prefix
 
         relation_id = event.relation.id
 

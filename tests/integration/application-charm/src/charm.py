@@ -15,10 +15,10 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseRequires,
-    KafkaRequires,
-    TopicCreatedEvent,
-    OpenSearchRequires,
     IndexCreatedEvent,
+    KafkaRequires,
+    OpenSearchRequires,
+    TopicCreatedEvent,
 )
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
@@ -124,7 +124,9 @@ class ApplicationCharm(CharmBase):
 
         # OpenSearch events
 
-        self.opensearch = OpenSearchRequires(self, "opensearch-client", "test-index", EXTRA_USER_ROLES_OPENSEARCH)
+        self.opensearch = OpenSearchRequires(
+            self, "opensearch-client", "test-index", EXTRA_USER_ROLES_OPENSEARCH
+        )
 
         self.framework.observe(
             self.opensearch.on.endpoints_changed, self._on_opensearch_endpoints_changed
