@@ -293,7 +293,7 @@ class DatabaseProvides(Object):
             relation_id: the identifier for a particular relation.
             tls_ca: TLS certification authority.
         """
-        self._update_relation_data(relation_id, {"tls_ca": tls_ca})
+        self._update_relation_data(relation_id, {"tls-ca": tls_ca})
 
     def set_uris(self, relation_id: int, uris: str) -> None:
         """Set the database connection URIs in the application relation databag.

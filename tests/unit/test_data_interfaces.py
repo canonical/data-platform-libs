@@ -17,8 +17,11 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseRequires,
     DatabaseRequiresEvents,
     Diff,
+    IndexRequestedEvent,
     KafkaProvides,
     KafkaRequires,
+    OpenSearchProvides,
+    OpenSearchRequires,
     TopicRequestedEvent,
 )
 from charms.harness_extensions.v0.capture_events import capture, capture_events
@@ -38,6 +41,7 @@ provides:
   {DATABASE_RELATION_NAME}:
     interface: {DATABASE_RELATION_INTERFACE}
 """
+
 TOPIC = "data_platform_topic"
 KAFKA_RELATION_INTERFACE = "kafka_client"
 KAFKA_RELATION_NAME = "kafka"
@@ -46,6 +50,16 @@ name: kafka
 provides:
   {KAFKA_RELATION_NAME}:
     interface: {KAFKA_RELATION_INTERFACE}
+"""
+
+INDEX = "data_platform_index"
+OPENSEARCH_RELATION_INTERFACE = "opensearch_client"
+OPENSEARCH_RELATION_NAME = "opensearch"
+OPENSEARCH_METADATA = f"""
+name: opensearch
+provides:
+  {OPENSEARCH_RELATION_NAME}:
+    interface: {OPENSEARCH_RELATION_INTERFACE}
 """
 
 
@@ -76,6 +90,21 @@ class KafkaCharm(CharmBase):
         self.framework.observe(self.provider.on.topic_requested, self._on_topic_requested)
 
     def _on_topic_requested(self, _) -> None:
+        pass
+
+
+class OpenSearchCharm(CharmBase):
+    """Mock Opensearch charm to use in unit tests."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.provider = OpenSearchProvides(
+            self,
+            OPENSEARCH_RELATION_NAME,
+        )
+        self.framework.observe(self.provider.on.index_requested, self._on_index_requested)
+
+    def _on_index_requested(self, _) -> None:
         pass
 
 
@@ -213,7 +242,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             "data": "{}",  # Data is the diff stored between multiple relation changed events.
             "replset": "rs0",
             "tls": "True",
-            "tls_ca": "Canonical",
+            "tls-ca": "Canonical",
             "uris": "host1:port,host2:port",
             "version": "1.0",
         }
@@ -309,7 +338,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
             "data": "{}",  # Data is the diff stored between multiple relation changed events.
             "tls": "True",
-            "tls_ca": "Canonical",
+            "tls-ca": "Canonical",
             "zookeeper-uris": "host1:port,host2:port",
             "consumer-group-prefix": "pr1,pr2",
         }
@@ -340,6 +369,85 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         assert captured.event.unit.name == "application/0"
 
 
+class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
+    metadata = OPENSEARCH_METADATA
+    relation_name = OPENSEARCH_RELATION_NAME
+    app_name = "opensearch"
+    charm = OpenSearchCharm
+
+    def get_harness(self) -> Tuple[Harness, int]:
+        harness = Harness(self.charm, meta=self.metadata)
+        # Set up the initial relation and hooks.
+        rel_id = harness.add_relation(self.relation_name, "application")
+        harness.add_relation_unit(rel_id, "application/0")
+        harness.set_leader(True)
+        harness.begin_with_initial_hooks()
+        return harness, rel_id
+
+    @patch.object(OpenSearchCharm, "_on_index_requested")
+    def emit_topic_requested_event(self, _on_index_requested):
+        # Emit the topic requested event.
+        relation = self.harness.charm.model.get_relation(self.relation_name, self.rel_id)
+        application = self.harness.charm.model.get_app(self.app_name)
+        self.harness.charm.provider.on.index_requested.emit(relation, application)
+        return _on_index_requested.call_args[0][0]
+
+    @patch.object(OpenSearchCharm, "_on_index_requested")
+    def test_on_index_requested(self, _on_index_requested):
+        """Asserts that the correct hook is called when a new topic is requested."""
+        # Simulate the request of a new topic plus extra user roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {"index": INDEX, "extra-user-roles": EXTRA_USER_ROLES},
+        )
+
+        # Assert the correct hook is called.
+        _on_index_requested.assert_called_once()
+
+        # Assert the topic name and the extra user roles
+        # are accessible in the providers charm library event.
+        event = _on_index_requested.call_args[0][0]
+        assert event.index == INDEX
+        assert event.extra_user_roles == EXTRA_USER_ROLES
+
+    def test_set_additional_fields(self):
+        """Asserts that the additional fields are in the relation databag when they are set."""
+        # Set the additional fields in the relation using the provides charm library.
+        self.harness.charm.provider.set_tls_ca(self.rel_id, "Canonical")
+
+        # Check that the additional fields are present in the relation.
+        assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
+            "data": "{}",  # Data is the diff stored between multiple relation changed events.
+            "tls-ca": "Canonical",
+        }
+
+    def test_fetch_relation_data(self):
+        # Set some data in the relation.
+        self.harness.update_relation_data(self.rel_id, "application", {"index": INDEX})
+
+        # Check the data using the charm library function
+        # (the diff/data key should not be present).
+        data = self.harness.charm.provider.fetch_relation_data()
+        assert data == {self.rel_id: {"index": INDEX}}
+
+    def test_index_requested_event(self):
+        # Test custom event creation
+
+        # Test the event being emitted by the application.
+        with capture(self.harness.charm, IndexRequestedEvent) as captured:
+            self.harness.update_relation_data(self.rel_id, "application", {"index": INDEX})
+        assert captured.event.app.name == "application"
+
+        # Reset the diff data to trigger the event again later.
+        self.harness.update_relation_data(self.rel_id, self.app_name, {"data": "{}"})
+
+        # Test the event being emitted by the unit.
+        with capture(self.harness.charm, IndexRequestedEvent) as captured:
+            self.harness.update_relation_data(self.rel_id, "application/0", {"index": INDEX})
+        assert captured.event.unit.name == "application/0"
+
+
 CLUSTER_ALIASES = ["cluster1", "cluster2"]
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
@@ -355,6 +463,8 @@ requires:
     limit: {len(CLUSTER_ALIASES)}
   {KAFKA_RELATION_NAME}:
     interface: {KAFKA_RELATION_INTERFACE}
+  {OPENSEARCH_RELATION_NAME}:
+    interface: {OPENSEARCH_RELATION_INTERFACE}
 """
 TOPIC = "data_platform_topic"
 
@@ -437,6 +547,18 @@ class ApplicationCharmKafka(CharmBase):
         pass
 
     def _on_bootstrap_server_changed(self, _) -> None:
+        pass
+
+
+class ApplicationCharmOpenSearch(CharmBase):
+    """Mock application charm to use in units tests."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.requirer = OpenSearchRequires(self, OPENSEARCH_RELATION_NAME, INDEX, EXTRA_USER_ROLES)
+        self.framework.observe(self.requirer.on.index_created, self._on_index_created)
+
+    def _on_index_created(self, _) -> None:
         pass
 
 
@@ -1051,3 +1173,108 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.tls_ca == "Canonical"
         assert event.zookeeper_uris == "h1:port,h2:port"
         assert event.consumer_group_prefix == "pr1,pr2"
+
+
+class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
+    metadata = METADATA
+    relation_name = OPENSEARCH_RELATION_NAME
+    charm = ApplicationCharmOpenSearch
+
+    app_name = "application"
+    provider = "opensearch"
+
+    def setUp(self):
+        self.harness = self.get_harness()
+        self.rel_id = self.add_relation(self.harness, self.provider)
+        self.harness.begin_with_initial_hooks()
+
+    @patch.object(charm, "_on_index_created")
+    def test_on_index_created(
+        self,
+        _on_index_created,
+    ):
+        """Asserts on_index_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created topic.
+
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {"username": "test-username", "password": "test-password"},
+        )
+
+        # Assert the correct hook is called.
+        _on_index_created.assert_called_once()
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_index_created.call_args[0][0]
+        assert event.username == "test-username"
+        assert event.password == "test-password"
+
+        assert self.harness.charm.requirer.is_resource_created()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        self.harness.update_relation_data(
+            rel_id,
+            self.provider,
+            {"username": "test-username-2", "password": "test-password-2"},
+        )
+
+        # Assert the correct hook is called.
+        assert _on_index_created.call_count == 2
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_index_created.call_args[0][0]
+        assert event.username == "test-username-2"
+        assert event.password == "test-password-2"
+
+        assert self.harness.charm.requirer.is_resource_created(rel_id)
+        assert self.harness.charm.requirer.is_resource_created()
+
+    def test_additional_fields_are_accessible(self):
+        """Asserts additional fields are accessible using the charm library after being set."""
+        # Simulate setting the additional fields.
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "tls-ca": "Canonical",
+                "version": "1.0",
+            },
+        )
+
+        # Check that the fields are present in the relation
+        # using the requires charm library.
+        relation_data = self.harness.charm.requirer.fetch_relation_data()[self.rel_id]
+        assert relation_data["tls-ca"] == "Canonical"
+        assert relation_data["version"] == "1.0"
+
+    @patch.object(charm, "_on_index_created")
+    def test_fields_are_accessible_through_event(self, _on_index_created):
+        """Asserts fields are accessible through the requires charm library event."""
+        # Simulate setting the additional fields.
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "username": "test-username",
+                "password": "test-password",
+                "endpoints": "host1:port,host2:port",
+                "tls-ca": "Canonical",
+            },
+        )
+
+        # Check that the fields are present in the relation
+        # using the requires charm library event.
+        event = _on_index_created.call_args[0][0]
+        assert event.username == "test-username"
+        assert event.password == "test-password"
+        assert event.endpoints == "host1:port,host2:port"
+        assert event.tls_ca == "Canonical"

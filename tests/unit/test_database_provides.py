@@ -157,7 +157,7 @@ class TestDatabaseProvides(unittest.TestCase):
             "data": "{}",  # Data is the diff stored between multiple relation changed events.
             "replset": "rs0",
             "tls": "True",
-            "tls_ca": "Canonical",
+            "tls-ca": "Canonical",
             "uris": "host1:port,host2:port",
             "version": "1.0",
         }
