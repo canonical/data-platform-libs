@@ -233,7 +233,7 @@ class TestDatabaseRequires(unittest.TestCase):
             {
                 "replset": "rs0",
                 "tls": "True",
-                "tls-ca": "Canonical",
+                "tls_ca": "Canonical",
                 "uris": "host1:port,host2:port",
                 "version": "1.0",
             },
@@ -244,7 +244,7 @@ class TestDatabaseRequires(unittest.TestCase):
         relation_data = self.harness.charm.database.fetch_relation_data()[self.rel_id]
         assert relation_data["replset"] == "rs0"
         assert relation_data["tls"] == "True"
-        assert relation_data["tls-ca"] == "Canonical"
+        assert relation_data["tls_ca"] == "Canonical"
         assert relation_data["uris"] == "host1:port,host2:port"
         assert relation_data["version"] == "1.0"
 
@@ -262,7 +262,7 @@ class TestDatabaseRequires(unittest.TestCase):
                 "read-only-endpoints": "host1:port,host2:port",
                 "replset": "rs0",
                 "tls": "True",
-                "tls-ca": "Canonical",
+                "tls_ca": "Canonical",
                 "uris": "host1:port,host2:port",
                 "version": "1.0",
             },
