@@ -303,7 +303,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 9
+LIBPATCH = 10
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -1301,7 +1301,7 @@ class OpenSearchRequires(DataRequires):
         diff = self._diff(event)
 
         # Check if authentication has updated, emit event if so
-        updates = {"password", "tls", "tls-ca"}
+        updates = {"username", "password", "tls", "tls-ca"}
         if len(set(diff._asdict().keys()) - updates) < len(diff):
             logger.info("authentication updated at: %s", datetime.now())
             self.on.authentication_updated.emit(event.relation, app=event.app, unit=event.unit)

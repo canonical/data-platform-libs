@@ -6,6 +6,7 @@ sync-password:
       type: string
       description: Kafka password.
   required: [password]
+
 sync-username:
   description: Set usernmae.
   params:
@@ -13,6 +14,3 @@ sync-username:
       type: string
       description: Kafka username.
   required: [username]
-
-
-
