@@ -1,0 +1,16 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: opensearch
+description: |
+  Toy charm used to emulate opensearch in integration tests.
+summary: |
+  Charm used to mimic the opensearch charm for test purpose only.
+
+
+peers:
+  opensearch-peers:
+    interface: opensearch_peers
+
+provides:
+  opensearch-client:
+    interface: opensearch_client

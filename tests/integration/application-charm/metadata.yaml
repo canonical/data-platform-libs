@@ -19,3 +19,5 @@ requires:
     limit: 2
   kafka-client:
     interface: kafka_client
+  opensesarch-client:
+    interface: opensearch_client

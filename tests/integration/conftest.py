@@ -89,3 +89,16 @@ async def kafka_charm(ops_test: OpsTest):
     charm_path = "tests/integration/kafka-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
+
+
+@pytest.fixture(scope="module")
+async def opensearch_charm(ops_test: OpsTest):
+    """Build the OpenSearch charm.
+
+    TODO we could simplify a lot of these charm builds by having a single test charm that includes
+    all these relations. This might be easily achieved by merging this repo with the
+    data-integrator charm repo.
+    """
+    charm_path = "tests/integration/opensearch-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm

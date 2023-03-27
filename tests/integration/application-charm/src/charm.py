@@ -17,6 +17,8 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseRequires,
     KafkaRequires,
     TopicCreatedEvent,
+    OpenSearchRequires,
+    IndexCreatedEvent,
 )
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
@@ -27,6 +29,7 @@ logger = logging.getLogger(__name__)
 # Extra roles that this application needs when interacting with the database.
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 EXTRA_USER_ROLES_KAFKA = "producer,consumer"
+EXTRA_USER_ROLES_OPENSEARCH = "admin,default"
 CONSUMER_GROUP_PREFIX = "test-prefix"
 
 
@@ -119,6 +122,15 @@ class ApplicationCharm(CharmBase):
         )
         self.framework.observe(self.kafka.on.topic_created, self._on_kafka_topic_created)
 
+        # OpenSearch events
+
+        self.opensearch = OpenSearchRequires(self, "opensearch-client", "test-index", EXTRA_USER_ROLES_OPENSEARCH)
+
+        self.framework.observe(
+            self.opensearch.on.endpoints_changed, self._on_opensearch_endpoints_changed
+        )
+        self.framework.observe(self.opensearch.on.index_created, self._on_opensearch_index_created)
+
         # actions
 
         self.framework.observe(self.on.reset_unit_status_action, self._on_reset_unit_status)
@@ -198,6 +210,15 @@ class ApplicationCharm(CharmBase):
         """Event triggered when a topic was created for this application."""
         logger.info("On kafka topic created")
         self.unit.status = ActiveStatus("kafka_topic_created")
+
+    def _on_opensearch_index_created(self, _: IndexCreatedEvent):
+        """Event triggered when an index was created for this application."""
+        logger.info("On opensearch index created event fired")
+        self.unit.status = ActiveStatus("opensearch_index_created")
+
+    def _on_opensearch_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
+        """Event triggered when the read/write endpoints of the database change."""
+        logger.info(f"opensearch endpoints have been changed to: {event.endpoints}")
 
     def _on_reset_unit_status(self, _: ActionEvent):
         """Handle the reset of status message for the unit."""
