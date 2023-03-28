@@ -199,7 +199,7 @@ class DatabaseEvent(RelationEvent):
     @property
     def tls_ca(self) -> Optional[str]:
         """Returns TLS CA."""
-        return self.relation.data[self.relation.app].get("tls_ca")
+        return self.relation.data[self.relation.app].get("tls-ca")
 
     @property
     def uris(self) -> Optional[str]:
