@@ -127,10 +127,6 @@ class ApplicationCharm(CharmBase):
         self.opensearch = OpenSearchRequires(
             self, "opensearch-client", "test-index", EXTRA_USER_ROLES_OPENSEARCH
         )
-
-        self.framework.observe(
-            self.opensearch.on.endpoints_changed, self._on_opensearch_endpoints_changed
-        )
         self.framework.observe(self.opensearch.on.index_created, self._on_opensearch_index_created)
 
         # actions
@@ -217,10 +213,6 @@ class ApplicationCharm(CharmBase):
         """Event triggered when an index was created for this application."""
         logger.info("On opensearch index created event fired")
         self.unit.status = ActiveStatus("opensearch_index_created")
-
-    def _on_opensearch_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
-        """Event triggered when the read/write endpoints of the database change."""
-        logger.info(f"opensearch endpoints have been changed to: {event.endpoints}")
 
     def _on_reset_unit_status(self, _: ActionEvent):
         """Handle the reset of status message for the unit."""
