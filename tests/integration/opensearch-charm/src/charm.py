@@ -41,10 +41,6 @@ class OpenSearchCharm(CharmBase):
         )
         self.framework.observe(self.on[PEER].relation_joined, self._on_peer_relation_joined)
 
-        # actions
-        self.framework.observe(self.on.sync_password_action, self._on_sync_password)
-        self.framework.observe(self.on.sync_username_action, self._on_sync_username)
-
     def _on_peer_relation_joined(self, _):
         pass
 
