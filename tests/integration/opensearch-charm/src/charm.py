@@ -71,7 +71,7 @@ class OpenSearchCharm(CharmBase):
 
     def _on_start(self, _) -> None:
         """Only sets an active status."""
-        self.unit.status = ActiveStatus("Kafka Ready!")
+        self.unit.status = ActiveStatus("OpenSearch Ready!")
 
     def _on_index_requested(self, event: IndexRequestedEvent):
         """Handle the on_index_requested event."""
