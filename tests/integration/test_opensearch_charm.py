@@ -12,7 +12,7 @@ from .helpers import get_application_relation_data
 logger = logging.getLogger(__name__)
 
 APPLICATION_APP_NAME = "requirer-app"
-OPENSEARCH_APP_NAME = "opensearch"
+OPENSEARCH_APP_NAME = "opensearch-test"
 APP_NAMES = [APPLICATION_APP_NAME, OPENSEARCH_APP_NAME]
 RELATION_NAME = "opensearch-client"
 
@@ -30,11 +30,13 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, opensearch_ch
             opensearch_charm, application_name=OPENSEARCH_APP_NAME, num_units=1, series="jammy"
         ),
     )
-    await ops_test.model.wait_for_idle(
-        apps=[OPENSEARCH_APP_NAME], status="active", wait_for_units=1
-    )
-    await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_APP_NAME], status="active", wait_for_units=1
+    await asyncio.gather(
+         ops_test.model.wait_for_idle(
+            apps=[OPENSEARCH_APP_NAME], status="active", wait_for_units=1
+        ),
+        ops_test.model.wait_for_idle(
+            apps=[APPLICATION_APP_NAME], status="active", wait_for_units=1
+        )
     )
 
 

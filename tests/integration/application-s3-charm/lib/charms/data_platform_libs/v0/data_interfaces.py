@@ -1,1 +1,0 @@
-../../../../../../../lib/charms/data_platform_libs/v0/data_interfaces.py

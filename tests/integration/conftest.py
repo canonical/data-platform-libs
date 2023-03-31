@@ -39,6 +39,8 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     shutil.copyfile(library_path, install_path)
     install_path = "tests/integration/application-charm/" + library_path
     shutil.copyfile(library_path, install_path)
+    install_path = "tests/integration/opensearch-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
 
 
 @pytest.fixture(scope="module", autouse=True)
