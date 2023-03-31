@@ -667,12 +667,20 @@ class DatabaseRequiresEvent(RelationEvent):
 
     @property
     def endpoints(self) -> Optional[str]:
-        """Returns a comma separated list of read/write endpoints."""
+        """Returns a comma separated list of read/write endpoints.
+
+        In VM charms, this is the primary's address.
+        In kubernetes charms, this is the service to the primary pod.
+        """
         return self.relation.data[self.relation.app].get("endpoints")
 
     @property
     def read_only_endpoints(self) -> Optional[str]:
-        """Returns a comma separated list of read only endpoints."""
+        """Returns a comma separated list of read only endpoints.
+
+        In VM charms, this is the address of all the secondary instances.
+        In kubernetes charms, this is the service to all replica pod instances.
+        """
         return self.relation.data[self.relation.app].get("read-only-endpoints")
 
     @property
@@ -765,6 +773,10 @@ class DatabaseProvides(DataProvides):
 
         This function writes in the application data bag, therefore,
         only the leader unit can call it.
+
+        In VM charms, only the primary's address should be passed as an endpoint.
+        In kubernetes charms, the service endpoint to the primary pod should be
+        passed as an endpoint.
 
         Args:
             relation_id: the identifier for a particular relation.
