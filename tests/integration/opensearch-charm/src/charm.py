@@ -2,10 +2,9 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Kafka provider charm that accepts connections from application charms.
+"""OpenSearch provider charm that accepts connections from application charms.
 
-This charm is meant to be used only for testing
-of the libraries in this repository.
+This charm is meant to be used only for testing the libraries in this repository.
 """
 
 import logging
