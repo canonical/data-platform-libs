@@ -39,6 +39,8 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     shutil.copyfile(library_path, install_path)
     install_path = "tests/integration/application-charm/" + library_path
     shutil.copyfile(library_path, install_path)
+    install_path = "tests/integration/opensearch-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -87,5 +89,18 @@ async def s3_charm(ops_test: OpsTest):
 async def kafka_charm(ops_test: OpsTest):
     """Build the Kafka charm."""
     charm_path = "tests/integration/kafka-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def opensearch_charm(ops_test: OpsTest):
+    """Build the OpenSearch charm.
+
+    TODO we could simplify a lot of these charm builds by having a single test charm that includes
+    all these relations. This might be easily achieved by merging this repo with the
+    data-integrator charm repo.
+    """
+    charm_path = "tests/integration/opensearch-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
