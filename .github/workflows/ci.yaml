@@ -55,7 +55,7 @@ jobs:
           - integration-database
           - integration-s3
           - integration-opensearch
-          # - integration-kafka
+          - integration-kafka
     name: ${{ matrix.tox-environments }}
     needs:
       - lint

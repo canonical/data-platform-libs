@@ -303,7 +303,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -1272,7 +1272,7 @@ class OpenSearchProvides(DataProvides):
         self._update_relation_data(relation_id, {"endpoints": endpoints})
 
     def set_version(self, relation_id: int, version: str) -> None:
-        """Set the database version in the application relation databag.
+        """Set the opensearch version in the application relation databag.
 
         Args:
             relation_id: the identifier for a particular relation.
