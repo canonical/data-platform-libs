@@ -119,6 +119,33 @@ async def test_user_with_extra_roles(ops_test: OpsTest):
     connection.close()
 
 
+async def test_postgresql_plugin(ops_test: OpsTest):
+    """Test that the application charm can check whether a plugin is enabled."""
+    # Check that the plugin is disabled.
+    unit_name = f"{APPLICATION_APP_NAME}/0"
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-plugin-status", **{"plugin": "citext"}
+    )
+    await action.wait()
+    assert action.results.get("plugin-status") == "disabled"
+
+    # Connect to the database and enable the plugin (PostgreSQL extension).
+    connection_string = await build_connection_string(
+        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+    )
+    with psycopg2.connect(connection_string) as connection, connection.cursor() as cursor:
+        connection.autocommit = True
+        cursor.execute("CREATE EXTENSION citext;")
+    connection.close()
+
+    # Check that the plugin is enabled.
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-plugin-status", **{"plugin": "citext"}
+    )
+    await action.wait()
+    assert action.results.get("plugin-status") == "enabled"
+
+
 async def test_two_applications_doesnt_share_the_same_relation_data(
     ops_test: OpsTest, application_charm
 ):

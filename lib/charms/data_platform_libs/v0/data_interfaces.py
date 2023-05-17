@@ -303,7 +303,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -926,6 +926,44 @@ class DatabaseRequires(DataRequires):
             if relation.id == relation_id:
                 return relation.data[self.local_unit].get("alias")
         return None
+
+    def is_postgresql_plugin_enabled(self, plugin: str) -> bool:
+        """Returns whether a plugin is enabled in the database.
+
+        PostgreSQL only.
+        """
+        # Psycopg 3 is imported locally to avoid the need of its package installation
+        # when relating to a database charm other than PostgreSQL.
+        import psycopg
+
+        # Return False if no relation is established.
+        if len(self.relations) == 0:
+            return False
+
+        relation_data = self.fetch_relation_data()[self.relations[0].id]
+        logger.error(f"relation_data: {relation_data}")
+        host = relation_data.get("endpoints")
+
+        # Return False if there is no endpoint available.
+        if host is None:
+            return False
+
+        host = host.split(":")[0]
+        user = relation_data.get("username")
+        password = relation_data.get("password")
+        connection_string = (
+            f"host='{host}' dbname='{self.database}' user='{user}' password='{password}'"
+        )
+        try:
+            with psycopg.connect(connection_string) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(f"SELECT TRUE FROM pg_extension WHERE extname='{plugin}';")
+                    return cursor.fetchone() is not None
+        except psycopg.Error as e:
+            logger.exception(
+                f"failed to check whether {plugin} plugin is enabled in the database: %s", str(e)
+            )
+            return False
 
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
         """Event emitted when the application joins the database relation."""

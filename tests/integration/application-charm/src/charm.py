@@ -27,7 +27,7 @@ from ops.model import ActiveStatus
 logger = logging.getLogger(__name__)
 
 # Extra roles that this application needs when interacting with the database.
-EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
+EXTRA_USER_ROLES = "SUPERUSER"
 EXTRA_USER_ROLES_KAFKA = "producer,consumer"
 EXTRA_USER_ROLES_OPENSEARCH = "admin,default"
 CONSUMER_GROUP_PREFIX = "test-prefix"
@@ -41,6 +41,7 @@ class ApplicationCharm(CharmBase):
 
         # Default charm events.
         self.framework.observe(self.on.start, self._on_start)
+        self.framework.observe(self.on.get_plugin_status_action, self._on_get_plugin_status)
 
         # Events related to the first database that is requested
         # (these events are defined in the database requires charm library).
@@ -196,6 +197,18 @@ class ApplicationCharm(CharmBase):
     def _on_cluster2_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Event triggered when the read/write endpoints of the database change."""
         logger.info(f"cluster2 endpoints have been changed to: {event.endpoints}")
+
+    def _on_get_plugin_status(self, event: ActionEvent) -> None:
+        """Returns the PostgreSQL plugin status (enabled/disabled)."""
+        plugin = event.params.get("plugin")
+        if not plugin:
+            event.fail("Please provide a plugin name")
+            return
+
+        plugin_status = (
+            "enabled" if self.first_database.is_postgresql_plugin_enabled(plugin) else "disabled"
+        )
+        event.set_results({"plugin-status": plugin_status})
 
     def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
         """Event triggered when a bootstrap server was changed for this application."""
