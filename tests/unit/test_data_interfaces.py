@@ -7,6 +7,7 @@ from logging import getLogger
 from typing import Tuple, Type
 from unittest.mock import Mock, patch
 
+import psycopg
 import pytest
 from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
@@ -930,6 +931,35 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         """Asserts the correct relation alias is returned."""
         # Assert the relation got the first cluster alias.
         assert self.harness.charm.requirer._get_relation_alias(self.rel_id) == CLUSTER_ALIASES[0]
+
+    @patch("psycopg.connect")
+    def test_is_postgresql_plugin_enabled(self, _connect):
+        """Asserts that the function correctly returns whether a plugin is enabled."""
+        plugin = "citext"
+
+        # Assert False is returned when there is no endpoint available.
+        assert not self.harness.charm.requirer.is_postgresql_plugin_enabled(plugin)
+
+        # Assert False when the connection to the database fails.
+        _connect.side_effect = psycopg.Error
+        with self.harness.hooks_disabled():
+            self.harness.update_relation_data(
+                self.rel_id, self.provider, {"endpoints": "test-endpoint:5432"}
+            )
+        assert not self.harness.charm.requirer.is_postgresql_plugin_enabled(plugin)
+
+        _connect.side_effect = None
+        # Assert False when the plugin is disabled.
+        _connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.fetchone.return_value = (
+            None
+        )
+        assert not self.harness.charm.requirer.is_postgresql_plugin_enabled(plugin)
+
+        # Assert True when the plugin is enabled.
+        _connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.fetchone.return_value = (
+            True
+        )
+        assert self.harness.charm.requirer.is_postgresql_plugin_enabled(plugin)
 
     @parameterized.expand([(True,), (False,)])
     def test_database_events(self, is_leader: bool):
