@@ -941,7 +941,6 @@ class DatabaseRequires(DataRequires):
             return False
 
         relation_data = self.fetch_relation_data()[self.relations[0].id]
-        logger.error(f"relation_data: {relation_data}")
         host = relation_data.get("endpoints")
 
         # Return False if there is no endpoint available.
