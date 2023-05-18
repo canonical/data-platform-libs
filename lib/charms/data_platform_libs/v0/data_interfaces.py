@@ -144,6 +144,19 @@ class ApplicationCharm(CharmBase):
 
 ```
 
+When it's needed to check whether a plugin (extension) is enabled on the PostgreSQL
+charm, you can use the is_postgresql_plugin_enabled method. To use that, you need to
+add the following dependency to your charmcraft.yaml file:
+
+```yaml
+
+parts:
+  charm:
+    charm-binary-python-packages:
+      - psycopg[binary]
+
+```
+
 ### Provider Charm
 
 Following an example of using the DatabaseRequestedEvent, in the context of the
