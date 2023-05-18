@@ -927,8 +927,13 @@ class DatabaseRequires(DataRequires):
                 return relation.data[self.local_unit].get("alias")
         return None
 
-    def is_postgresql_plugin_enabled(self, plugin: str) -> bool:
+    def is_postgresql_plugin_enabled(self, plugin: str, relation_index: int = 0) -> bool:
         """Returns whether a plugin is enabled in the database.
+
+        Args:
+            plugin: name of the plugin to check.
+            relation_index: optional relation index to check the database
+                (default: 0 - first relation).
 
         PostgreSQL only.
         """
@@ -940,7 +945,7 @@ class DatabaseRequires(DataRequires):
         if len(self.relations) == 0:
             return False
 
-        relation_data = self.fetch_relation_data()[self.relations[0].id]
+        relation_data = self.fetch_relation_data()[self.relations[relation_index].id]
         host = relation_data.get("endpoints")
 
         # Return False if there is no endpoint available.
