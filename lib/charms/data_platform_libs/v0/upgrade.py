@@ -27,32 +27,13 @@ LIBPATCH = 1
 logger = logging.getLogger(__name__)
 
 
-def reduce_versions(version: str) -> str:
-    """Removes leading 0 versions from version string.
-
-    Returns:
-        String of versions with leading zeroes removed
-
-    Examples:
-        0.0.24.0.4 --> 24.0.4
-        3.5.3 -> 3.5.3
-
-    """
-    matches = re.search(r"^(?:[0.]+)(.*)", version)
-
-    if not matches:
-        return version
-
-    return matches[1]
-
-
 def build_complete_sem_ver(version: str) -> list[int]:
     """Builds complete major.minor.patch version from version string.
 
     Returns:
         List of major.minor.patch version integers
     """
-    versions = [int(ver) for ver in str(version).split(".")]
+    versions = [int(ver) if ver != "*" else 0 for ver in str(version).split(".")]
     return (versions + 3 * [0])[:3]
 
 
@@ -121,6 +102,33 @@ def verify_tilde_requirements(version: str, requirement: str) -> bool:
             return False
 
         if (i > max_version_index) and (sem_version[i] < sem_requirement[i]):
+            return False
+
+    return True
+
+def verify_wildcard_requirements(version: str, requirement: str) -> bool:
+    """Verifies version requirements using wildcards.
+
+    Args:
+        `version`: the version currently in use
+        `requiremeent`: the requirement version
+
+    Returns:
+        True if `version` meets defined `requirement`. Otherwise False
+    """
+    if "*" not in requirement:
+        return True
+
+    sem_version = build_complete_sem_ver(version)
+    sem_requirement = build_complete_sem_ver(requirement)
+
+    max_version_index = requirement.count(".")
+
+    for i in range(3):
+        if (i < max_version_index) and (sem_version[i] != sem_requirement[i]):
+            return False
+
+        if (i == max_version_index) and (sem_version[i] < sem_requirement[i]):
             return False
 
     return True

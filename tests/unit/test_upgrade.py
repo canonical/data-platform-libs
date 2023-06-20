@@ -3,6 +3,7 @@ from charms.data_platform_libs.v0.upgrade import (
     build_complete_sem_ver,
     verify_caret_requirements,
     verify_tilde_requirements,
+    verify_wildcard_requirements,
 )
 
 
@@ -93,3 +94,31 @@ def test_verify_caret_requirements(requirement, version, output):
 )
 def test_verify_tilde_requirements(requirement, version, output):
     assert verify_tilde_requirements(version=version, requirement=requirement) == output
+
+@pytest.mark.parametrize(
+    "requirement,version,output",
+    [
+        ("~1", "1", True),
+        ("^0", "1", True),
+        ("0", "0.1", True),
+        ("*", "1.5.6", True),
+        ("*", "0.0.1", True),
+        ("*", "0.2.0", True),
+        ("*", "1.0.0", True),
+        ("1.*", "1.0.0", True),
+        ("1.*", "2.0.0", False),
+        ("1.*", "0.6.2", False),
+        ("1.2.*", "0.6.2", False),
+        ("1.2.*", "1.6.2", False),
+        ("1.2.*", "1.2.2", True),
+        ("1.2.*", "1.2.0", True),
+        ("1.2.*", "1.1.6", False),
+        ("1.2.*", "1.1.0", False),
+        ("0.2.*", "1.1.0", False),
+        ("0.2.*", "0.1.0", False),
+        ("0.2.*", "0.2.9", True),
+        ("0.2.*", "0.6.0", False),
+    ],
+)
+def test_verify_wildcard_requirements(requirement, version, output):
+    assert verify_wildcard_requirements(version=version, requirement=requirement) == output
