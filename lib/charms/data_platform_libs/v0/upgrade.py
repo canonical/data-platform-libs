@@ -178,13 +178,41 @@ def verify_inequality_requirements(version: str, requirement: str) -> bool:
         ):
             return True
 
+        # version not increased at any point
         if sem_version[i] < sem_requirement[i]:
             return False
 
+        # valid
         if sem_version[i] > sem_requirement[i]:
             return True
 
+    # must not be valid
     return False
+
+
+def verify_requirements(version: str, requirement: str) -> bool:
+    """Verifies a specified version against defined requirements.
+
+    Supports caret (^), tilde (~), wildcard (*) and greater-than inequalities (>, >=)
+
+    Args:
+        `version`: the version currently in use
+        `requirement`: the requirement version
+
+    Returns:
+        True if `version` meets defined `requirement`. Otherwise False
+    """
+    if not all(
+        [
+            verify_inequality_requirements(version=version, requirement=requirement),
+            verify_caret_requirements(version=version, requirement=requirement),
+            verify_tilde_requirements(version=version, requirement=requirement),
+            verify_wildcard_requirements(version=version, requirement=requirement),
+        ]
+    ):
+        return False
+
+    return True
 
 
 class DependencyModel(BaseModel):
@@ -193,9 +221,32 @@ class DependencyModel(BaseModel):
     dependencies: dict[str, str]
     name: str
     upgrade_supported = str
-    version: str
+    version: int
 
-    # TODO: implement upgrade_supported greater than version
+    @validator("dependencies", "upgrade_supported")
+    @classmethod
+    def dependency_uses_only_one_special_char_validator(
+        cls, value: dict[str, str] | str
+    ) -> dict[str, str] | str:
+        chars = ["~", "^", ">", "*"]
+
+        # flattening dict type from dependancies value
+        values = str(value.values()) if isinstance(value, dict) else value
+
+        if (count := sum([values.count(char) for char in chars])) > 1:
+            raise ValueError(f"Value uses greater than 1 special character (^ ~ > *).")
+
+        return value
+
+    @root_validator
+    @classmethod
+    def upgrade_supported_validator(cls, values) -> dict[str, dict[str, str] | str] | None:
+        if not verify_requirements(version=values.version, requirement=values.upgrade_supported):
+            raise ValueError(
+                f"upgrade_supported value {values.upgrade_supported} greater than version value {values.version} for {values.name}."
+            )
+
+        return values
 
 
 class UpgradeError(Exception):
