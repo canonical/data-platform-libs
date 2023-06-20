@@ -1,0 +1,62 @@
+import logging
+import pytest
+from charms.data_platform_libs.v0.upgrade import (
+    reduce_versions,
+    build_complete_sem_ver,
+    verify_caret_requirements,
+    verify_tilde_requirements,
+)
+
+
+@pytest.mark.parametrize(
+    "version,output", [("0.0.24.0.4", "24.0.4"), ("3.5.3", "3.5.3"), ("0.3", "3")]
+)
+def test_reduce_versions(version, output):
+    assert reduce_versions(version) == output
+
+
+@pytest.mark.parametrize(
+    "version,output",
+    [
+        ("0.0.24.0.4", [0, 0, 24]),
+        ("3.5.3", [3, 5, 3]),
+        ("0.3", [0, 3, 0]),
+        ("1.2", [1, 2, 0]),
+        (1, [1, 0, 0]),
+    ],
+)
+def test_build_complete_sem_ver(version, output):
+    assert build_complete_sem_ver(version) == output
+
+@pytest.mark.parametrize(
+    "requirement,version,output",
+    [
+        ("^1.2.3", "1.2.2", False),
+        ("^1.2.3", "1.3", True),
+        ("^1.2.3", "2.2.5", False),
+        ("^1.2", "1.2.2", True),
+        ("^1.2.3", "1.2", False),
+        ("^1.2.3", "2.2.5", False),
+        ("^1", "1.2.2", True),
+        ("^1", "1.6", True),
+        ("^1", "1.7.9", True),
+        ("^1", "0.6", False),
+        ("^1", "2", False),
+        ("^1", "2.3", False),
+        ("^0.2.3", "0.2.2", False),
+        ("^0.2.3", "0.2.5", True),
+        ("^0.2.3", "1.2.5", False),
+        ("^0.2.3", "0.3.6", False),
+        ("^0.0.3", "0.0.4", False),
+        ("^0.0.3", "0.0.2", False),
+        ("^0.0.3", "0.0", False),
+        ("^0.0.3", "0.3.6", False),
+        ("^0.0", "0.0.3", True),
+        ("^0.0", "0.1.0", False),
+        ("^0", "0.1.0", True),
+        ("^0", "0.3.6", True),
+        ("^0", "1.0.0", False),
+    ],
+)
+def test_verify_caret_requirements(requirement, version, output):
+    assert verify_caret_requirements(version=version, requirement=requirement) == output

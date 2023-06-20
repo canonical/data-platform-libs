@@ -3,11 +3,15 @@ from ops.charm import (
     ActionEvent,
     CharmBase,
     RelationChangedEvent,
+    RelationCreatedEvent,
     UpgradeCharmEvent,
 )
 from ops.framework import EventBase, Object
-from overrides import override
+from ops.model import Relation
 import logging
+import pydantic
+from pydantic import BaseModel, ValidationError
+import re
 
 
 # The unique Charmhub library identifier, never change it
@@ -21,6 +25,107 @@ LIBAPI = 0
 LIBPATCH = 1
 
 logger = logging.getLogger(__name__)
+
+
+def reduce_versions(version: str) -> str:
+    """Removes leading 0 versions from version string.
+
+    Returns:
+        String of versions with leading zeroes removed
+
+    Examples:
+        0.0.24.0.4 --> 24.0.4
+        3.5.3 -> 3.5.3
+
+    """
+    matches = re.search(r"^(?:[0.]+)(.*)", version)
+
+    if not matches:
+        return version
+
+    return matches[1]
+
+
+def build_complete_sem_ver(version: str) -> list[int]:
+    """Builds complete major.minor.patch version from version string.
+
+    Returns:
+        List of major.minor.patch version integers
+    """
+    versions = [int(ver) for ver in str(version).split(".")]
+    return (versions + 3 * [0])[:3]
+
+
+def verify_caret_requirements(version: str, requirement: str) -> bool:
+    """Verifies version requirements using carats.
+
+    Args:
+        `version`: the version currently in use
+        `requiremeent`: the requirement version
+
+    Returns:
+        True if `version` meets defined `requirement`. Otherwise False
+    """
+    if not requirement.startswith("^"):
+        return True
+    else:
+        requirement = requirement[1:]
+
+    sem_version = build_complete_sem_ver(version)
+    sem_requirement = build_complete_sem_ver(requirement)
+
+    max_version_index = requirement.count(".")
+    for i, semver in enumerate(sem_requirement):
+        if semver != 0:
+            max_version_index = i
+            break
+
+    for i in range(3):
+        if (i == max_version_index) and (sem_version[i] != sem_requirement[i]):
+            logger.info("larger than max at index")
+            return False
+
+        if (i < max_version_index) and (sem_version[i] > sem_requirement[i]):
+            logger.info("larger than max before index")
+            return False
+
+        if (i > max_version_index) and (sem_version[i] > sem_requirement[i]):
+            return True
+
+    return False
+
+
+def verify_tilde_requirements(version: str, requirement: str) -> bool:
+    """Verifies version requirements using tildes.
+
+    Args:
+        `version`: the version currently in use
+        `requiremeent`: the requirement version
+
+    Returns:
+        True if `version` meets defined `requirement`. Otherwise False
+    """
+    if not requirement.startswith("~"):
+        return True
+
+    versions = version.split(".")
+    requirements = requirement.split(".")
+
+    if versions[0] >= requirements[0]:
+        return False
+
+    return True
+
+
+class DependencyModel(BaseModel):
+    """Manager for a single dependency."""
+
+    dependencies: dict[str, str]
+    name: str
+    upgrade_supported = str
+    version: str
+
+    # TODO: implement upgrade_supported greater than version
 
 
 class UpgradeError(Exception):
