@@ -231,7 +231,7 @@ class DependencyModel(BaseModel):
         values = str(value.values()) if isinstance(value, dict) else value
 
         if (count := sum([values.count(char) for char in chars])) > 1:
-            raise ValueError(f"Value uses greater than 1 special character (^ ~ > *).")
+            raise ValueError(f"Value uses greater than 1 special character (^ ~ > *). Found {count}.")
 
         return value
 
