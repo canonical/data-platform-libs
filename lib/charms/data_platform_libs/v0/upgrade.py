@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Any
 from ops.charm import (
     ActionEvent,
     CharmBase,
@@ -10,7 +11,7 @@ from ops.framework import EventBase, Object
 from ops.model import Relation
 import logging
 import pydantic
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, root_validator, validator
 import re
 
 
@@ -34,6 +35,8 @@ def build_complete_sem_ver(version: str) -> list[int]:
         List of major.minor.patch version integers
     """
     versions = [int(ver) if ver != "*" else 0 for ver in str(version).split(".")]
+
+    # padding with 0s until complete major.minor.patch
     return (versions + 3 * [0])[:3]
 
 
@@ -55,6 +58,7 @@ def verify_caret_requirements(version: str, requirement: str) -> bool:
     sem_version = build_complete_sem_ver(version)
     sem_requirement = build_complete_sem_ver(requirement)
 
+    # caret uses first non-zero character, not enough to just count '.
     max_version_index = requirement.count(".")
     for i, semver in enumerate(sem_requirement):
         if semver != 0:
@@ -62,12 +66,15 @@ def verify_caret_requirements(version: str, requirement: str) -> bool:
             break
 
     for i in range(3):
+        # version higher than first non-zero
         if (i < max_version_index) and (sem_version[i] > sem_requirement[i]):
             return False
 
+        # version either higher or lower than first non-zero
         if (i == max_version_index) and (sem_version[i] != sem_requirement[i]):
             return False
 
+        # valid
         if (i > max_version_index) and (sem_version[i] > sem_requirement[i]):
             return True
 
@@ -95,15 +102,19 @@ def verify_tilde_requirements(version: str, requirement: str) -> bool:
     max_version_index = min(1, requirement.count("."))
 
     for i in range(3):
+        # version higher before requirement level
         if (i < max_version_index) and (sem_version[i] > sem_requirement[i]):
             return False
 
+        # version either higher or lower at requirement level
         if (i == max_version_index) and (sem_version[i] != sem_requirement[i]):
             return False
 
+        # version lower after requirement level
         if (i > max_version_index) and (sem_version[i] < sem_requirement[i]):
             return False
 
+    # must be valid
     return True
 
 
@@ -126,12 +137,15 @@ def verify_wildcard_requirements(version: str, requirement: str) -> bool:
     max_version_index = requirement.count(".")
 
     for i in range(3):
+        # version not the same before wildcard
         if (i < max_version_index) and (sem_version[i] != sem_requirement[i]):
             return False
 
+        # version not higher after wildcard
         if (i == max_version_index) and (sem_version[i] < sem_requirement[i]):
             return False
 
+    # must be valid
     return True
 
 
@@ -156,6 +170,7 @@ def verify_inequality_requirements(version: str, requirement: str) -> bool:
     max_version_index = raw_requirement.count(".") or 0
 
     for i in range(3):
+        # valid at same requirement level
         if (
             (i == max_version_index)
             and ("=" in requirement)
