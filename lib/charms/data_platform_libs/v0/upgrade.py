@@ -81,12 +81,10 @@ def verify_caret_requirements(version: str, requirement: str) -> bool:
             break
 
     for i in range(3):
-        if (i == max_version_index) and (sem_version[i] != sem_requirement[i]):
-            logger.info("larger than max at index")
+        if (i < max_version_index) and (sem_version[i] > sem_requirement[i]):
             return False
 
-        if (i < max_version_index) and (sem_version[i] > sem_requirement[i]):
-            logger.info("larger than max before index")
+        if (i == max_version_index) and (sem_version[i] != sem_requirement[i]):
             return False
 
         if (i > max_version_index) and (sem_version[i] > sem_requirement[i]):
@@ -107,12 +105,23 @@ def verify_tilde_requirements(version: str, requirement: str) -> bool:
     """
     if not requirement.startswith("~"):
         return True
+    else:
+        requirement = requirement[1:]
 
-    versions = version.split(".")
-    requirements = requirement.split(".")
+    sem_version = build_complete_sem_ver(version)
+    sem_requirement = build_complete_sem_ver(requirement)
 
-    if versions[0] >= requirements[0]:
-        return False
+    max_version_index = min(1, requirement.count("."))
+
+    for i in range(3):
+        if (i < max_version_index) and (sem_version[i] > sem_requirement[i]):
+            return False
+
+        if (i == max_version_index) and (sem_version[i] != sem_requirement[i]):
+            return False
+
+        if (i > max_version_index) and (sem_version[i] < sem_requirement[i]):
+            return False
 
     return True
 
