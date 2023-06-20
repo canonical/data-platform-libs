@@ -1,18 +1,9 @@
-import logging
 import pytest
 from charms.data_platform_libs.v0.upgrade import (
-    reduce_versions,
     build_complete_sem_ver,
     verify_caret_requirements,
     verify_tilde_requirements,
 )
-
-
-@pytest.mark.parametrize(
-    "version,output", [("0.0.24.0.4", "24.0.4"), ("3.5.3", "3.5.3"), ("0.3", "3")]
-)
-def test_reduce_versions(version, output):
-    assert reduce_versions(version) == output
 
 
 @pytest.mark.parametrize(
@@ -22,6 +13,11 @@ def test_reduce_versions(version, output):
         ("3.5.3", [3, 5, 3]),
         ("0.3", [0, 3, 0]),
         ("1.2", [1, 2, 0]),
+        ("3.5.*", [3, 5, 0]),
+        ("0.*", [0, 0, 0]),
+        ("1.*", [1, 0, 0]),
+        ("1.2.*", [1, 2, 0]),
+        ("*", [0, 0, 0]),
         (1, [1, 0, 0]),
     ],
 )
