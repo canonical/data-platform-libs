@@ -22,22 +22,23 @@ LIBPATCH = 1
 
 logger = logging.getLogger(__name__)
 
-class UpgradeError(Exception):
-    """Base class for upgrade related exceptions in the module.
 
-    Args:
-        `message`: string message to be logged out
-        `cause`: short human-readable description of the cause of the error (optional)
-        `resolution`: short human-readable instructions for manual solutions to the error (optional)
-    """
+class UpgradeError(Exception):
+    """Base class for upgrade related exceptions in the module."""
+
     def __init__(self, message: str, cause: str | None, resolution: str | None):
         super().__init__(message)
-        self.cause = cause
-        self.resolution = resolution
+        self.message = message
+        self.cause = cause or ""
+        self.resolution = resolution or ""
 
     def __repr__(self):
+        """Representation of the UpgradeError class."""
+        return f"{type(self).__module__}.{type(self).__name__} - {str(vars(self))}"
+
+    def __str__(self):
         """String representation of the UpgradeError class."""
-        return f"{type(self).__module__}.{type(self).__name__} {self.args}"
+        return repr(self)
 
 
 class ClusterNotReadyError(UpgradeError):
@@ -48,8 +49,10 @@ class ClusterNotReadyError(UpgradeError):
         `cause`: short human-readable description of the cause of the error
         `resolution`: short human-readable instructions for manual solutions to the error (optional)
     """
+
     def __init__(self, message: str, cause: str, resolution: str | None = None):
         super().__init__(message, cause=cause, resolution=resolution)
+
 
 class UpgradeFailedError(UpgradeError):
     """Exception flagging that something in the upgrade process failed, and should be aborted.
@@ -59,6 +62,7 @@ class UpgradeFailedError(UpgradeError):
         `cause`: short human-readable description of the cause of the error
         `resolution`: short human-readable instructions for manual solutions to the error
     """
+
     def __init__(self, message: str, cause: str, resolution: str):
         super().__init__(message, cause=cause, resolution=resolution)
 
@@ -90,7 +94,7 @@ class DataUpgrade(Object):
         try:
             self.pre_upgrade_check()
         except ClusterNotReadyError as e:
-            logger.error(str(e))
+            logger.error(e)
             event.fail(message="Action must be ran on the Juju leader for the application.")
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent):
@@ -114,5 +118,3 @@ class DataUpgrade(Object):
                 e.g [5, 2, 4, 1, 3]
         """
         pass
-
-
