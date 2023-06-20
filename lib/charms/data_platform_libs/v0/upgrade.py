@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Any
 from ops.charm import (
     ActionEvent,
     CharmBase,
@@ -10,9 +9,7 @@ from ops.charm import (
 from ops.framework import EventBase, Object
 from ops.model import Relation
 import logging
-import pydantic
-from pydantic import BaseModel, ValidationError, root_validator, validator
-import re
+from pydantic import BaseModel, root_validator, validator
 
 
 # The unique Charmhub library identifier, never change it
