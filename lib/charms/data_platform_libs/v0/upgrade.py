@@ -79,7 +79,7 @@ def verify_tilde_requirements(version: str, requirement: str) -> bool:
 
     Args:
         `version`: the version currently in use
-        `requiremeent`: the requirement version
+        `requirement`: the requirement version
 
     Returns:
         True if `version` meets defined `requirement`. Otherwise False
@@ -106,12 +106,13 @@ def verify_tilde_requirements(version: str, requirement: str) -> bool:
 
     return True
 
+
 def verify_wildcard_requirements(version: str, requirement: str) -> bool:
     """Verifies version requirements using wildcards.
 
     Args:
         `version`: the version currently in use
-        `requiremeent`: the requirement version
+        `requirement`: the requirement version
 
     Returns:
         True if `version` meets defined `requirement`. Otherwise False
@@ -132,6 +133,43 @@ def verify_wildcard_requirements(version: str, requirement: str) -> bool:
             return False
 
     return True
+
+
+def verify_inequality_requirements(version: str, requirement: str) -> bool:
+    """Verifies version requirements using inequalities.
+
+    Args:
+        `version`: the version currently in use
+        `requirement`: the requirement version
+
+    Returns:
+        True if `version` meets defined `requirement`. Otherwise False
+    """
+    if not any([char for char in [">", ">="] if requirement.startswith(char)]):
+        return True
+    else:
+        raw_requirement = requirement.replace(">", "").replace("=", "")
+
+    sem_version = build_complete_sem_ver(version)
+    sem_requirement = build_complete_sem_ver(raw_requirement)
+
+    max_version_index = raw_requirement.count(".") or 0
+
+    for i in range(3):
+        if (
+            (i == max_version_index)
+            and ("=" in requirement)
+            and (sem_version[i] == sem_requirement[i])
+        ):
+            return True
+
+        if sem_version[i] < sem_requirement[i]:
+            return False
+
+        if sem_version[i] > sem_requirement[i]:
+            return True
+
+    return False
 
 
 class DependencyModel(BaseModel):

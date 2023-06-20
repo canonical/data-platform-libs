@@ -2,6 +2,7 @@ import pytest
 from charms.data_platform_libs.v0.upgrade import (
     build_complete_sem_ver,
     verify_caret_requirements,
+    verify_inequality_requirements,
     verify_tilde_requirements,
     verify_wildcard_requirements,
 )
@@ -95,6 +96,7 @@ def test_verify_caret_requirements(requirement, version, output):
 def test_verify_tilde_requirements(requirement, version, output):
     assert verify_tilde_requirements(version=version, requirement=requirement) == output
 
+
 @pytest.mark.parametrize(
     "requirement,version,output",
     [
@@ -122,3 +124,51 @@ def test_verify_tilde_requirements(requirement, version, output):
 )
 def test_verify_wildcard_requirements(requirement, version, output):
     assert verify_wildcard_requirements(version=version, requirement=requirement) == output
+
+
+@pytest.mark.parametrize(
+    "requirement,version,output",
+    [
+        ("~1", "1", True),
+        ("^0", "1", True),
+        ("0", "0.1", True),
+        (">1", "1.8", True),
+        (">1", "8.8.0", True),
+        (">0", "8.8.0", True),
+        (">0", "0.0", False),
+        (">0", "0.0.0", False),
+        (">0", "0.0.1", True),
+        (">1.0", "1.0.0", False),
+        (">1.0", "1.0", False),
+        (">1.0", "1.5.6", True),
+        (">1.0", "2.0", True),
+        (">1.0", "0.0.4", False),
+        (">1.6", "1.3", False),
+        (">1.6", "1.3.8", False),
+        (">1.6", "1.35.8", True),
+        (">1.6.3", "1.7.8", True),
+        (">1.22.3", "1.7.8", False),
+        (">0.22.3", "1.7.8", True),
+        (">=1.0", "1.0.0", True),
+        (">=1.0", "1.0", True),
+        (">=0.2", "0.2", True),
+        (">=0.2.7", "0.2.7", True),
+        (">=1.0", "1.5.6", True),
+        (">=1", "1", True),
+        (">=1", "1.0", True),
+        (">=1", "1.0.0", True),
+        (">=1", "1.0.6", True),
+        (">=1", "0.0", False),
+        (">=1", "0.0.1", False),
+        (">=1.0", "2.0", True),
+        (">=1.0", "0.0.4", False),
+        (">=1.6", "1.3", False),
+        (">=1.6", "1.3.8", False),
+        (">=1.6", "1.35.8", True),
+        (">=1.6.3", "1.7.8", True),
+        (">=1.22.3", "1.7.8", False),
+        (">=0.22.3", "1.7.8", True),
+    ],
+)
+def test_verify_inequality_requirements(requirement, version, output):
+    assert verify_inequality_requirements(version=version, requirement=requirement) == output
