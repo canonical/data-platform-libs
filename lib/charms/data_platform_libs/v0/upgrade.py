@@ -230,31 +230,66 @@ def verify_requirements(version: str, requirement: str) -> bool:
 
 
 class DependencyModel(BaseModel):
-    """Manager for a single dependency."""
+    """Manager for a single dependency.
+
+    To be used as part of another model representing a collection of arbitrary dependencies.
+
+    Example Usage:
+        ```python
+        class KafkaDependenciesModel(BaseModel):
+            kafka_charm: dict[str, Any] # DependencyModel
+            kafka_service: dict[str, Any] # DependencyModel
+
+        deps = {
+            "kafka_charm": {
+                "dependencies": {"zookeeper": ">5"},
+                "name": "kafka",
+                "upgrade_supported": ">5",
+                "version": "10",
+            },
+            "kafka_service": {
+                "dependencies": {"zookeeper": "^3.6"},
+                "name": "kafka",
+                "upgrade_supported": "~3.3",
+                "version": "3.3.2",
+            },
+        }
+
+        # loading dict in to model
+        model = KafkaDependenciesModel(**deps)
+
+        # exporting back validated deps
+        print(model.dict())
+        ```
+    """
 
     dependencies: dict[str, str]
     name: str
     upgrade_supported = str
-    version: int
+    version: str
 
-    @validator("dependencies", "upgrade_supported")
+    @validator("dependencies", "upgrade_supported", check_fields=False)
     @classmethod
     def dependency_uses_only_one_special_char_validator(
         cls, value: dict[str, str] | str
     ) -> dict[str, str] | str:
+        """Validates only one special character is used in a defined requirement."""
         chars = ["~", "^", ">", "*"]
 
-        # flattening dict type from dependancies value
+        # flattening dict type from dependencies value
         values = str(value.values()) if isinstance(value, dict) else value
 
         if (count := sum([values.count(char) for char in chars])) > 1:
-            raise ValueError(f"Value uses greater than 1 special character (^ ~ > *). Found {count}.")
+            raise ValueError(
+                f"Value uses greater than 1 special character (^ ~ > *). Found {count}."
+            )
 
         return value
 
     @root_validator
     @classmethod
     def upgrade_supported_validator(cls, values) -> dict[str, dict[str, str] | str] | None:
+        """Validates that given `upgrade_supported` values aren't ahead of current `version`."""
         if not verify_requirements(version=values.version, requirement=values.upgrade_supported):
             raise ValueError(
                 f"upgrade_supported value {values.upgrade_supported} greater than version value {values.version} for {values.name}."
