@@ -1,4 +1,23 @@
+# Copyright 2023 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Handler for `upgrade` relation events for in-place upgrades on VMs."""
+
+import logging
 from abc import abstractmethod
+from typing import Any
+
 from ops.charm import (
     ActionEvent,
     CharmBase,
@@ -8,9 +27,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, Object
 from ops.model import Relation
-import logging
 from pydantic import BaseModel, root_validator, validator
-
 
 # The unique Charmhub library identifier, never change it
 LIBID = "156258aefb79435a93d933409a8c8684"
