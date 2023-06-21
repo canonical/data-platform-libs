@@ -347,33 +347,56 @@ class UpgradeGrantedEvent(EventBase):
 
 
 class DataUpgrade(Object):
-    """Manages `upgrade` relations."""
+    """Manages `upgrade` relation operators for in-place upgrades."""
 
-    def __init__(self, charm: CharmBase, relation_name: str = "upgrade"):
+    def __init__(
+        self,
+        charm: CharmBase,
+        dependency_model: BaseModel,
+        relation_name: str = "upgrade",
+    ):
         super().__init__(charm, relation_name)
         self.charm = charm
+        self.dependency_model = dependency_model
         self.relation_name = relation_name
 
+        # events
+        self.framework.observe(
+            self.charm.on[relation_name].relation_created, self._on_upgrade_created
+        )
+        self.framework.observe(
+            self.charm.on[relation_name].relation_changed, self._on_upgrade_changed
+        )
         self.framework.observe(
             self.charm.on[relation_name].relation_changed, self._on_upgrade_changed
         )
 
-    def _on_upgrade_changed(self, event: RelationChangedEvent):
-        raise NotImplementedError
+        # actions
+        self.framework.observe(
+            getattr(self.on, "pre_upgrade_check_action"), self._on_pre_upgrade_check_action
+        )
 
-    def _on_pre_upgrade_check_action(self, event: ActionEvent):
-        if not self.charm.unit.is_leader():
-            event.fail(message="Action must be ran on the Juju leader for the application.")
-            return
+    @property
+    def peer_relation(self) -> Relation | None:
+        """The upgrade peer relation."""
+        return self.charm.model.get_relation(self.relation_name)
 
-        try:
-            self.pre_upgrade_check()
-        except ClusterNotReadyError as e:
-            logger.error(e)
-            event.fail(message="Action must be ran on the Juju leader for the application.")
+    @property
+    def state(self) -> str | None:
+        """The unit state from the upgrade peer relation."""
+        if not self.peer_relation:
+            return None
 
-    def _on_upgrade_charm(self, event: UpgradeCharmEvent):
-        raise NotImplementedError
+        return self.peer_relation.data[self.charm.unit].get("state", None)
+
+    @property
+    def stored_dependencies(self) -> dict[str, Any] | None:
+        """The application dependencies from the upgrade peer relation."""
+        if not self.peer_relation:
+            return None
+
+        # TODO - type usefully using pre-existing model
+        return self.peer_relation.data[self.charm.app].get("dependencies")
 
     @abstractmethod
     def pre_upgrade_check(self) -> None:
@@ -393,3 +416,63 @@ class DataUpgrade(Object):
                 e.g [5, 2, 4, 1, 3]
         """
         pass
+
+    def _on_upgrade_created(self, _: RelationCreatedEvent) -> None:
+        """Handler for `upgrade-relation-created` events."""
+        if not self.charm.unit.is_leader() or not self.peer_relation:
+            return
+
+        # persisting dependencies to the relation data
+        self.peer_relation.data[self.charm.app].update(
+            {"dependencies": str(self.dependency_model.dict())}
+        )
+
+    def _on_pre_upgrade_check_action(self, event: ActionEvent):
+        """Handler for `pre-upgrade-check-action` events."""
+        if not self.peer_relation:
+            event.fail(message="Could not find upgrade relation.")
+            return
+
+        if not self.charm.unit.is_leader():
+            event.fail(message="Action must be ran on the Juju leader.")
+            return
+
+        # checking if upgrade in progress
+        for unit in set([self.charm.unit] + list(self.peer_relation.units)):
+            if (current_state := self.peer_relation.data[unit].get("state")) in {
+                "ready",
+                "upgrading",
+                "completed",
+                "failed",
+            }:
+                event.fail(f"{unit} is in {current_state} state and is currently upgrading.")
+                return
+
+        try:
+            self.pre_upgrade_check()
+            upgrade_stack = self.build_upgrade_stack()
+        except ClusterNotReadyError as e:
+            logger.error(e)
+            event.fail(message=e.message)
+            return
+        except Exception as e:
+            logger.error(e)
+            event.fail(message="Unknown error found.")
+            return
+
+        # setting upgrade_stack to peer relation data
+        self.peer_relation.data[self.charm.app].update({"upgrade_stack": str(upgrade_stack)})
+
+        # flagging units as healthy and waiting for incoming upgrade-charm event
+        for unit in set([self.charm.unit] + list(self.peer_relation.units)):
+            self.peer_relation.data[unit].update({"state": "waiting"})
+
+    # TODO - implement
+    def _on_upgrade_changed(self, event: RelationChangedEvent):
+        """Handler for `upgrade-relation-changed` events."""
+        raise NotImplementedError
+
+    # TODO - implement
+    def _on_upgrade_charm(self, event: UpgradeCharmEvent):
+        """Handler for `upgrade-charm` events."""
+        raise NotImplementedError
