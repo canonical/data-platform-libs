@@ -1,3 +1,6 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 import pytest
 from charms.data_platform_libs.v0.upgrade import (
     build_complete_sem_ver,
