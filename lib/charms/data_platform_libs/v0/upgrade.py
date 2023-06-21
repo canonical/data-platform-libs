@@ -322,7 +322,7 @@ class ClusterNotReadyError(UpgradeError):
     Args:
         `message`: string message to be logged out
         `cause`: short human-readable description of the cause of the error
-        `resolution`: short human-readable instructions for manual solutions to the error (optional)
+        `resolution`: short human-readable instructions for manual error resolution (optional)
     """
 
     def __init__(self, message: str, cause: str, resolution: str | None = None):
