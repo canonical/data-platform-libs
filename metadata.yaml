@@ -1,16 +1,23 @@
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 name: data-platform-libs
 display_name: Data Platform Libs
+summary: Data platform libraries.
 description: |
   This library is a uniform interface to a selection of common database
   metadata, with added custom events that add convenience to database management,
   and methods to set the application related data.
 
+  The charm provides libraries for both bare-metal/virtual-machines and K8s.
+
   NOTE: This charm is not meant to be deployed
-summary: |
-  Data platform libs.
 source: https://github.com/canonical/data-platform-libs
 issues: https://github.com/canonical/data-platform-libs/issues
+website:
+  - https://ubuntu.com/data
+  - https://charmhub.io/data-platform-libs
+  - https://github.com/canonical/data-platform-libs
+  - https://chat.charmhub.io/charmhub/channels/data-platform
 maintainers:
-  - Marcelo Neppel <marcelo.neppel@canonical.com>
+  - Data Platform Team <data-platform@lists.launchpad.net>
