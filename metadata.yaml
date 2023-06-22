@@ -18,6 +18,7 @@ website:
   - https://ubuntu.com/data
   - https://charmhub.io/data-platform-libs
   - https://github.com/canonical/data-platform-libs
+  - https://launchpad.net/~data-platform
   - https://chat.charmhub.io/charmhub/channels/data-platform
 maintainers:
   - Data Platform Team <data-platform@lists.launchpad.net>
