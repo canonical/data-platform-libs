@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 
 name: data-platform-libs
-display_name: Data Platform Libs
+display-name: Data Platform Libs
 summary: Data platform libraries.
 description: |
   This library is a uniform interface to a selection of common database
@@ -12,6 +12,7 @@ description: |
   The charm provides libraries for both bare-metal/virtual-machines and K8s.
 
   NOTE: This charm is not meant to be deployed
+docs: https://discourse.charmhub.io/t/data-platform-libs-documentation/10955
 source: https://github.com/canonical/data-platform-libs
 issues: https://github.com/canonical/data-platform-libs/issues
 website:
