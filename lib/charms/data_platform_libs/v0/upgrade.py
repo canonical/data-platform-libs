@@ -28,7 +28,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, Object
 from ops.model import Relation
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator
 
 # The unique Charmhub library identifier, never change it
 LIBID = "156258aefb79435a93d933409a8c8684"
@@ -255,7 +255,7 @@ class Dependency(str):
 
     @classmethod
     def validate(cls, value: str):
-        """Validate input data."""
+        """Validates input requirement uses only one supported special character."""
         if (count := sum([value.count(char) for char in cls.chars])) > 1:
             raise ValueError(
                 f"Value uses greater than 1 special character (^ ~ > *). Found {count}."
@@ -302,6 +302,21 @@ class DependencyModel(BaseModel):
     name: str
     upgrade_supported = Dependency
     version: str
+
+    @root_validator(pre=True)
+    @classmethod
+    def upgrade_supported_validator(
+        cls, values
+    ) -> dict[str, dict[str, Dependency] | str | Dependency]:
+        """Validates specified `version` is not behind specified `upgrade_supported` requirement."""
+        if not verify_requirements(
+            version=values.get("version"), requirement=values.get("upgrade_supported")
+        ):
+            raise ValueError(
+                f"upgrade_supported value {values.get('upgrade_supported')} greater than version value {values.get('version')} for {values.get('name')}."
+            )
+
+        return values
 
     # TODO: implement when comparing two dependency models for upgradability
     def __rshift__(self):
