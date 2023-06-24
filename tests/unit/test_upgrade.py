@@ -14,6 +14,10 @@ from charms.data_platform_libs.v0.upgrade import (
 from pydantic import ValidationError
 
 
+class GandalfModel(BaseModel):
+    gandalf_the_white: DependencyModel
+
+
 @pytest.mark.parametrize(
     "version,output",
     [
@@ -190,9 +194,6 @@ def test_dependency_model_raises_for_incompatible_version():
         },
     }
 
-    class GandalfModel(BaseModel):
-        gandalf_the_white: DependencyModel
-
     with pytest.raises(ValidationError):
         GandalfModel(**deps)
 
@@ -207,9 +208,6 @@ def test_dependency_model_raises_for_bad_dependency(value):
             "version": "7",
         },
     }
-
-    class GandalfModel(BaseModel):
-        gandalf_the_white: DependencyModel
 
     with pytest.raises(ValidationError):
         GandalfModel(**deps)
@@ -226,9 +224,6 @@ def test_dependency_model_raises_for_bad_nested_dependency(value):
         },
     }
 
-    class GandalfModel(BaseModel):
-        gandalf_the_white: DependencyModel
-
     with pytest.raises(ValidationError):
         GandalfModel(**deps)
 
@@ -244,9 +239,6 @@ def test_dependency_model_raises_for_bad_upgrade_supported(value):
         },
     }
 
-    class GandalfModel(BaseModel):
-        gandalf_the_white: DependencyModel
-
     with pytest.raises(ValidationError):
         GandalfModel(**deps)
 
@@ -261,10 +253,8 @@ def test_dependency_model_succeeds():
         },
     }
 
-    class GandalfModel(BaseModel):
-        gandalf_the_white: DependencyModel
-
     GandalfModel(**deps)
+
 
 def test_dependency_model_succeeds_nested():
     deps = {
@@ -275,8 +265,5 @@ def test_dependency_model_succeeds_nested():
             "version": "7",
         },
     }
-
-    class GandalfModel(BaseModel):
-        gandalf_the_white: DependencyModel
 
     GandalfModel(**deps)
