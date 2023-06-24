@@ -58,8 +58,8 @@ def verify_caret_requirements(version: str, requirement: str) -> bool:
     """Verifies version requirements using carats.
 
     Args:
-        `version`: the version currently in use
-        `requiremeent`: the requirement version
+        version: the version currently in use
+        requirement: the requirement version
 
     Returns:
         True if `version` meets defined `requirement`. Otherwise False
@@ -99,8 +99,8 @@ def verify_tilde_requirements(version: str, requirement: str) -> bool:
     """Verifies version requirements using tildes.
 
     Args:
-        `version`: the version currently in use
-        `requirement`: the requirement version
+        version: the version currently in use
+        requirement: the requirement version
 
     Returns:
         True if `version` meets defined `requirement`. Otherwise False
@@ -136,8 +136,8 @@ def verify_wildcard_requirements(version: str, requirement: str) -> bool:
     """Verifies version requirements using wildcards.
 
     Args:
-        `version`: the version currently in use
-        `requirement`: the requirement version
+        version: the version currently in use
+        requirement: the requirement version
 
     Returns:
         True if `version` meets defined `requirement`. Otherwise False
@@ -167,8 +167,8 @@ def verify_inequality_requirements(version: str, requirement: str) -> bool:
     """Verifies version requirements using inequalities.
 
     Args:
-        `version`: the version currently in use
-        `requirement`: the requirement version
+        version: the version currently in use
+        requirement: the requirement version
 
     Returns:
         True if `version` meets defined `requirement`. Otherwise False
@@ -210,8 +210,8 @@ def verify_requirements(version: str, requirement: str) -> bool:
     Supports caret (^), tilde (~), wildcard (*) and greater-than inequalities (>, >=)
 
     Args:
-        `version`: the version currently in use
-        `requirement`: the requirement version
+        version: the version currently in use
+        requirement: the requirement version
 
     Returns:
         True if `version` meets defined `requirement`. Otherwise False
