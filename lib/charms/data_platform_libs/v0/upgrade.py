@@ -308,7 +308,7 @@ class DependencyModel(BaseModel):
     def upgrade_supported_validator(
         cls, values
     ) -> dict[str, dict[str, Dependency] | str | Dependency]:
-        """Validates specified `version` is not behind specified `upgrade_supported` requirement."""
+        """Validates specified `version` meets `upgrade_supported` requirement."""
         if not verify_requirements(
             version=values.get("version"), requirement=values.get("upgrade_supported")
         ):
