@@ -420,13 +420,25 @@ class DataUpgrade(Object):
         return self.peer_relation.data[self.charm.unit].get("state", None)
 
     @property
-    def stored_dependencies(self) -> dict[str, Any] | None:
+    def stored_dependencies(self) -> BaseModel | None:
         """The application dependencies from the upgrade peer relation."""
         if not self.peer_relation:
             return None
 
-        # TODO - type usefully using pre-existing model
-        return self.peer_relation.data[self.charm.app].get("dependencies")
+        if not (deps := self.peer_relation.data[self.charm.app].get("dependencies", "")):
+            return None
+
+        return type(self.dependency_model)(**json.loads(deps))
+
+    @property
+    def upgrade_stack(self) -> list[int] | None:
+        """The upgrade stack from the upgrade peer relation."""
+        if not self.peer_relation:
+            return None
+
+        return (
+            json.loads(self.peer_relation.data[self.charm.app].get("upgrade-stack", "[]")) or None
+        )
 
     @abstractmethod
     def pre_upgrade_check(self) -> None:
@@ -438,7 +450,7 @@ class DataUpgrade(Object):
         pass
 
     @abstractmethod
-    def build_upgrade_stack(self) -> list[str]:
+    def build_upgrade_stack(self) -> list[int]:
         """Builds ordered list of all application unit.ids to upgrade in.
 
         Returns:
@@ -454,7 +466,7 @@ class DataUpgrade(Object):
 
         # persisting dependencies to the relation data
         self.peer_relation.data[self.charm.app].update(
-            {"dependencies": str(self.dependency_model.dict())}
+            {"dependencies": json.dumps(self.dependency_model.dict())}
         )
 
     def _on_pre_upgrade_check_action(self, event: ActionEvent):
@@ -491,7 +503,9 @@ class DataUpgrade(Object):
             return
 
         # setting upgrade_stack to peer relation data
-        self.peer_relation.data[self.charm.app].update({"upgrade_stack": str(upgrade_stack)})
+        self.peer_relation.data[self.charm.app].update(
+            {"upgrade-stack": json.dumps(upgrade_stack)}
+        )
 
         # flagging units as healthy and waiting for incoming upgrade-charm event
         for unit in set([self.charm.unit] + list(self.peer_relation.units)):
