@@ -265,3 +265,18 @@ def test_dependency_model_succeeds():
         gandalf_the_white: DependencyModel
 
     GandalfModel(**deps)
+
+def test_dependency_model_succeeds_nested():
+    deps = {
+        "gandalf_the_white": {
+            "dependencies": {"gandalf_the_grey": "~1.0", "durin": "^1.2.5"},
+            "name": "gandalf",
+            "upgrade_supported": ">1.2",
+            "version": "7",
+        },
+    }
+
+    class GandalfModel(BaseModel):
+        gandalf_the_white: DependencyModel
+
+    GandalfModel(**deps)
