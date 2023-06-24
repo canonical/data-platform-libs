@@ -3,12 +3,15 @@
 
 import pytest
 from charms.data_platform_libs.v0.upgrade import (
+    BaseModel,
+    DependencyModel,
     build_complete_sem_ver,
     verify_caret_requirements,
     verify_inequality_requirements,
     verify_tilde_requirements,
     verify_wildcard_requirements,
 )
+from pydantic import ValidationError
 
 
 @pytest.mark.parametrize(
@@ -175,3 +178,90 @@ def test_verify_wildcard_requirements(requirement, version, output):
 )
 def test_verify_inequality_requirements(requirement, version, output):
     assert verify_inequality_requirements(version=version, requirement=requirement) == output
+
+
+def test_dependency_model_raises_for_incompatible_version():
+    deps = {
+        "gandalf_the_white": {
+            "dependencies": {"gandalf_the_grey": ">5"},
+            "name": "gandalf",
+            "upgrade_supported": ">5",
+            "version": "4",
+        },
+    }
+
+    class GandalfModel(BaseModel):
+        gandalf_the_white: DependencyModel
+
+    with pytest.raises(ValidationError):
+        GandalfModel(**deps)
+
+
+@pytest.mark.parametrize("value", ["saruman", "1.3", ""])
+def test_dependency_model_raises_for_bad_dependency(value):
+    deps = {
+        "gandalf_the_white": {
+            "dependencies": {"gandalf_the_grey": value},
+            "name": "gandalf",
+            "upgrade_supported": ">6",
+            "version": "7",
+        },
+    }
+
+    class GandalfModel(BaseModel):
+        gandalf_the_white: DependencyModel
+
+    with pytest.raises(ValidationError):
+        GandalfModel(**deps)
+
+
+@pytest.mark.parametrize("value", ["balrog", "1.3", ""])
+def test_dependency_model_raises_for_bad_nested_dependency(value):
+    deps = {
+        "gandalf_the_white": {
+            "dependencies": {"gandalf_the_grey": "~1.0", "durin": value},
+            "name": "gandalf",
+            "upgrade_supported": ">6",
+            "version": "7",
+        },
+    }
+
+    class GandalfModel(BaseModel):
+        gandalf_the_white: DependencyModel
+
+    with pytest.raises(ValidationError):
+        GandalfModel(**deps)
+
+
+@pytest.mark.parametrize("value", ["saruman", "1.3", ""])
+def test_dependency_model_raises_for_bad_upgrade_supported(value):
+    deps = {
+        "gandalf_the_white": {
+            "dependencies": {"gandalf_the_grey": ">5"},
+            "name": "gandalf",
+            "upgrade_supported": value,
+            "version": "7",
+        },
+    }
+
+    class GandalfModel(BaseModel):
+        gandalf_the_white: DependencyModel
+
+    with pytest.raises(ValidationError):
+        GandalfModel(**deps)
+
+
+def test_dependency_model_succeeds():
+    deps = {
+        "gandalf_the_white": {
+            "dependencies": {"gandalf_the_grey": ">5"},
+            "name": "gandalf",
+            "upgrade_supported": ">1.2",
+            "version": "7",
+        },
+    }
+
+    class GandalfModel(BaseModel):
+        gandalf_the_white: DependencyModel
+
+    GandalfModel(**deps)
