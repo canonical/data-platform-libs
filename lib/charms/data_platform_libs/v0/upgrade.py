@@ -14,9 +14,10 @@
 
 """Handler for `upgrade` relation events for in-place upgrades on VMs."""
 
+import json
 import logging
 from abc import abstractmethod
-from typing import Any
+from typing import Callable, Generator
 
 from ops.charm import (
     ActionEvent,
@@ -27,7 +28,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, Object
 from ops.model import Relation
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel
 
 # The unique Charmhub library identifier, never change it
 LIBID = "156258aefb79435a93d933409a8c8684"
@@ -40,6 +41,8 @@ LIBAPI = 0
 LIBPATCH = 1
 
 logger = logging.getLogger(__name__)
+
+# --- DEPENDENCY RESOLUTION FUNCTIONS ---
 
 
 def build_complete_sem_ver(version: str) -> list[int]:
@@ -229,6 +232,38 @@ def verify_requirements(version: str, requirement: str) -> bool:
     return True
 
 
+# --- DEPENDENCY MODEL TYPES ---
+
+
+class Dependency(str):
+    """Type for a single dependency.
+
+    Examples values:
+        - >0.0.3
+        - >=1.5
+        - ~3.6
+        - ^6.8.0
+        - 4.*
+    """
+
+    chars = ["~", "^", ">", "*"]
+
+    @classmethod
+    def __get_validators__(cls) -> Generator[Callable, None, None]:
+        """Get validators to parse and validate the input data."""
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, value: str):
+        """Validate input data."""
+        if (count := sum([value.count(char) for char in cls.chars])) > 1:
+            raise ValueError(
+                f"Value uses greater than 1 special character (^ ~ > *). Found {count}."
+            )
+
+        return value
+
+
 class DependencyModel(BaseModel):
     """Manager for a single dependency.
 
@@ -237,8 +272,8 @@ class DependencyModel(BaseModel):
     Example Usage:
         ```python
         class KafkaDependenciesModel(BaseModel):
-            kafka_charm: dict[str, Any] # DependencyModel
-            kafka_service: dict[str, Any] # DependencyModel
+            kafka_charm: DependencyModel
+            kafka_service: DependencyModel
 
         deps = {
             "kafka_charm": {
@@ -263,39 +298,28 @@ class DependencyModel(BaseModel):
         ```
     """
 
-    dependencies: dict[str, str]
+    dependencies: dict[str, Dependency]
     name: str
-    upgrade_supported = str
+    upgrade_supported = Dependency
     version: str
 
-    @validator("dependencies", "upgrade_supported", check_fields=False)
-    @classmethod
-    def dependency_uses_only_one_special_char_validator(
-        cls, value: dict[str, str] | str
-    ) -> dict[str, str] | str:
-        """Validates only one special character is used in a defined requirement."""
-        chars = ["~", "^", ">", "*"]
+    # TODO: implement when comparing two dependency models for upgradability
+    def __rshift__(self):
+        """Used for comparing two instances of `DependencyModel` for upgradability.
 
-        # flattening dict type from dependencies value
-        values = str(value.values()) if isinstance(value, dict) else value
+        Example Usage:
+            ```python
+            old_deps: DependencyModel = foo  # from persisted relation data
+            new_deps: DependencyModel = bar  # from charm
 
-        if (count := sum([values.count(char) for char in chars])) > 1:
-            raise ValueError(
-                f"Value uses greater than 1 special character (^ ~ > *). Found {count}."
-            )
+            if not old_deps >> new_deps:
+                raise
+            ```
+        """
+        raise NotImplementedError
 
-        return value
 
-    @root_validator
-    @classmethod
-    def upgrade_supported_validator(cls, values) -> dict[str, dict[str, str] | str] | None:
-        """Validates that given `upgrade_supported` values aren't ahead of current `version`."""
-        if not verify_requirements(version=values.version, requirement=values.upgrade_supported):
-            raise ValueError(
-                f"upgrade_supported value {values.upgrade_supported} greater than version value {values.version} for {values.name}."
-            )
-
-        return values
+# --- CUSTOM EXCEPTIONS ---
 
 
 class UpgradeError(Exception):
@@ -342,8 +366,14 @@ class UpgradeFailedError(UpgradeError):
         super().__init__(message, cause=cause, resolution=resolution)
 
 
+# --- CUSTOM EVENTS ---
+
+
 class UpgradeGrantedEvent(EventBase):
     """Used to tell units that they can process an upgrade."""
+
+
+# --- EVENT HANDLER ---
 
 
 class DataUpgrade(Object):
