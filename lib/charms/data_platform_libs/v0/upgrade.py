@@ -17,7 +17,6 @@
 import json
 import logging
 from abc import abstractmethod
-from typing import Callable, Generator
 
 from ops.charm import (
     ActionEvent,
@@ -28,7 +27,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, Object
 from ops.model import Relation
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel, root_validator, validator
 
 # The unique Charmhub library identifier, never change it
 LIBID = "156258aefb79435a93d933409a8c8684"
@@ -235,35 +234,6 @@ def verify_requirements(version: str, requirement: str) -> bool:
 # --- DEPENDENCY MODEL TYPES ---
 
 
-class Dependency(str):
-    """Type for a single dependency.
-
-    Examples values:
-        - >0.0.3
-        - >=1.5
-        - ~3.6
-        - ^6.8.0
-        - 4.*
-    """
-
-    chars = ["~", "^", ">", "*"]
-
-    @classmethod
-    def __get_validators__(cls) -> Generator[Callable, None, None]:
-        """Get validators to parse and validate the input data."""
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, value: str):
-        """Validates input requirement uses only one supported special character."""
-        if (count := sum([value.count(char) for char in cls.chars])) > 1:
-            raise ValueError(
-                f"Value uses greater than 1 special character (^ ~ > *). Found {count}."
-            )
-
-        return value
-
-
 class DependencyModel(BaseModel):
     """Manager for a single dependency.
 
@@ -298,16 +268,26 @@ class DependencyModel(BaseModel):
         ```
     """
 
-    dependencies: dict[str, Dependency]
+    dependencies: dict[str, str]
     name: str
-    upgrade_supported = Dependency
+    upgrade_supported: str
     version: str
 
-    @root_validator(pre=True)
+    @validator("dependencies", "upgrade_supported", each_item=True)
     @classmethod
-    def upgrade_supported_validator(
-        cls, values
-    ) -> dict[str, dict[str, Dependency] | str | Dependency]:
+    def dependencies_validator(cls, value):
+        """Validates values with dependencies for multiple special characters."""
+        chars = ["~", "^", ">", "*"]
+        if (count := sum([value.count(char) for char in chars])) != 1:
+            raise ValueError(
+                f"Value uses greater than 1 special character (^ ~ > *). Found {count}."
+            )
+
+        return value
+
+    @root_validator(skip_on_failure=True)
+    @classmethod
+    def version_upgrade_supported_validator(cls, values) -> dict[str, dict[str, str] | str]:
         """Validates specified `version` meets `upgrade_supported` requirement."""
         if not verify_requirements(
             version=values.get("version"), requirement=values.get("upgrade_supported")
