@@ -389,9 +389,7 @@ class DataUpgrade(Object, ABC):
         self.framework.observe(
             self.charm.on[relation_name].relation_changed, self._on_upgrade_changed
         )
-        self.framework.observe(
-            self.charm.on[relation_name].relation_changed, self._on_upgrade_changed
-        )
+        self.framework.observe(self.charm.on.upgrade_charm, self._on_upgrade_charm)
 
         # actions
         self.framework.observe(
@@ -431,6 +429,27 @@ class DataUpgrade(Object, ABC):
         return (
             json.loads(self.peer_relation.data[self.charm.app].get("upgrade-stack", "[]")) or None
         )
+
+    @property
+    def upgrading_units(self) -> tuple[str, str] | None:
+        """Check whether any peer units are currently upgrading.
+
+        Returns:
+            Tuple of upgrading unit name and state.
+        """
+        if not self.peer_relation:
+            return None
+
+        for unit in set([self.charm.unit] + list(self.peer_relation.units)):
+            if (current_state := self.peer_relation.data[unit].get("state")) in {
+                "ready",
+                "upgrading",
+                "completed",
+                "failed",
+            }:
+                return (unit.name, current_state)
+
+        return None
 
     @abstractmethod
     def pre_upgrade_check(self) -> None:
@@ -472,15 +491,9 @@ class DataUpgrade(Object, ABC):
             return
 
         # checking if upgrade in progress
-        for unit in set([self.charm.unit] + list(self.peer_relation.units)):
-            if (current_state := self.peer_relation.data[unit].get("state")) in {
-                "ready",
-                "upgrading",
-                "completed",
-                "failed",
-            }:
-                event.fail(f"{unit} is in {current_state} state and is currently upgrading.")
-                return
+        if unit := self.upgrading_units:
+            event.fail(f"{unit[0]} is in {unit[1]} state and is currently upgrading.")
+            return
 
         try:
             logger.info("Running pre-upgrade-check...")
