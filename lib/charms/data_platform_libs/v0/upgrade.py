@@ -16,7 +16,7 @@
 
 import json
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from ops.charm import (
     ActionEvent,
@@ -68,8 +68,8 @@ def verify_caret_requirements(version: str, requirement: str) -> bool:
     """
     if not requirement.startswith("^"):
         return True
-    else:
-        requirement = requirement[1:]
+
+    requirement = requirement[1:]
 
     sem_version = build_complete_sem_ver(version)
     sem_requirement = build_complete_sem_ver(requirement)
@@ -109,8 +109,8 @@ def verify_tilde_requirements(version: str, requirement: str) -> bool:
     """
     if not requirement.startswith("~"):
         return True
-    else:
-        requirement = requirement[1:]
+
+    requirement = requirement[1:]
 
     sem_version = build_complete_sem_ver(version)
     sem_requirement = build_complete_sem_ver(requirement)
@@ -177,8 +177,8 @@ def verify_inequality_requirements(version: str, requirement: str) -> bool:
     """
     if not any([char for char in [">", ">="] if requirement.startswith(char)]):
         return True
-    else:
-        raw_requirement = requirement.replace(">", "").replace("=", "")
+
+    raw_requirement = requirement.replace(">", "").replace("=", "")
 
     sem_version = build_complete_sem_ver(version)
     sem_requirement = build_complete_sem_ver(raw_requirement)
@@ -299,17 +299,14 @@ class DependencyModel(BaseModel):
         return values
 
     # TODO: implement when comparing two dependency models for upgradability
-    def __rshift__(self):
+    def is_compatible(self, requirement: "DependencyModel"):
         """Used for comparing two instances of `DependencyModel` for upgradability.
 
-        Example Usage:
-            ```python
-            old_deps: DependencyModel = foo  # from persisted relation data
-            new_deps: DependencyModel = bar  # from charm
+        Args:
+            requirement: the specific requiement to compare this dependency against
 
-            if not old_deps >> new_deps:
-                raise
-            ```
+        Returns:
+            True if version is compatible with requirement. Otherwise False
         """
         raise NotImplementedError
 
@@ -371,7 +368,7 @@ class UpgradeGrantedEvent(EventBase):
 # --- EVENT HANDLER ---
 
 
-class DataUpgrade(Object):
+class DataUpgrade(Object, ABC):
     """Manages `upgrade` relation operators for in-place upgrades."""
 
     def __init__(
@@ -486,8 +483,12 @@ class DataUpgrade(Object):
                 return
 
         try:
+            logger.info("Running pre-upgrade-check...")
             self.pre_upgrade_check()
+
+            logger.info("Building upgrade stack...")
             upgrade_stack = self.build_upgrade_stack()
+            logger.info(f"Built upgrade stack of {upgrade_stack}")
         except ClusterNotReadyError as e:
             logger.error(e)
             event.fail(message=e.message)
@@ -497,12 +498,12 @@ class DataUpgrade(Object):
             event.fail(message="Unknown error found.")
             return
 
-        # setting upgrade_stack to peer relation data
+        logger.info("Setting upgrade_stack to peer relation data...")
         self.peer_relation.data[self.charm.app].update(
             {"upgrade-stack": json.dumps(upgrade_stack)}
         )
 
-        # flagging units as healthy and waiting for incoming upgrade-charm event
+        logger.info("Marking units as waiting for upgrade-charm event...")
         for unit in set([self.charm.unit] + list(self.peer_relation.units)):
             self.peer_relation.data[unit].update({"state": "waiting"})
 
