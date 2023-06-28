@@ -44,6 +44,7 @@ provides:
 """
 
 TOPIC = "data_platform_topic"
+WILDCARD_TOPIC = "*"
 KAFKA_RELATION_INTERFACE = "kafka_client"
 KAFKA_RELATION_NAME = "kafka"
 KAFKA_METADATA = f"""
@@ -1150,6 +1151,11 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
 
         # Assert the hook is called now.
         _on_bootstrap_server_changed.assert_called_once()
+
+    def test_wildcard_topic(self):
+        """Asserts Exception raised on wildcard being used for topic."""
+        with self.assertRaises(ValueError):
+            self.harness.charm.requirer.topic = WILDCARD_TOPIC
 
     def test_additional_fields_are_accessible(self):
         """Asserts additional fields are accessible using the charm library after being set."""
