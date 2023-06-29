@@ -17,6 +17,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
+from typing import Optional, Union
 
 from ops.charm import (
     ActionEvent,
@@ -287,7 +288,7 @@ class DependencyModel(BaseModel):
 
     @root_validator(skip_on_failure=True)
     @classmethod
-    def version_upgrade_supported_validator(cls, values) -> dict[str, dict[str, str] | str]:
+    def version_upgrade_supported_validator(cls, values) -> dict[str, Union[dict[str, str], str]]:
         """Validates specified `version` meets `upgrade_supported` requirement."""
         if not verify_requirements(
             version=values.get("version"), requirement=values.get("upgrade_supported")
@@ -317,7 +318,7 @@ class DependencyModel(BaseModel):
 class UpgradeError(Exception):
     """Base class for upgrade related exceptions in the module."""
 
-    def __init__(self, message: str, cause: str | None, resolution: str | None):
+    def __init__(self, message: str, cause: Optional[str], resolution: Optional[str]):
         super().__init__(message)
         self.message = message
         self.cause = cause or ""
@@ -341,7 +342,7 @@ class ClusterNotReadyError(UpgradeError):
         `resolution`: short human-readable instructions for manual error resolution (optional)
     """
 
-    def __init__(self, message: str, cause: str, resolution: str | None = None):
+    def __init__(self, message: str, cause: str, resolution: Optional[str] = None):
         super().__init__(message, cause=cause, resolution=resolution)
 
 
@@ -397,12 +398,12 @@ class DataUpgrade(Object, ABC):
         )
 
     @property
-    def peer_relation(self) -> Relation | None:
+    def peer_relation(self) -> Optional[Relation]:
         """The upgrade peer relation."""
         return self.charm.model.get_relation(self.relation_name)
 
     @property
-    def state(self) -> str | None:
+    def state(self) -> Optional[str]:
         """The unit state from the upgrade peer relation."""
         if not self.peer_relation:
             return None
@@ -410,7 +411,7 @@ class DataUpgrade(Object, ABC):
         return self.peer_relation.data[self.charm.unit].get("state", None)
 
     @property
-    def stored_dependencies(self) -> BaseModel | None:
+    def stored_dependencies(self) -> Optional[BaseModel]:
         """The application dependencies from the upgrade peer relation."""
         if not self.peer_relation:
             return None
@@ -421,7 +422,7 @@ class DataUpgrade(Object, ABC):
         return type(self.dependency_model)(**json.loads(deps))
 
     @property
-    def upgrade_stack(self) -> list[int] | None:
+    def upgrade_stack(self) -> Optional[list[int]]:
         """The upgrade stack from the upgrade peer relation."""
         if not self.peer_relation:
             return None
@@ -431,7 +432,7 @@ class DataUpgrade(Object, ABC):
         )
 
     @property
-    def upgrading_units(self) -> tuple[str, str] | None:
+    def upgrading_units(self) -> Optional[tuple[str, str]]:
         """Check whether any peer units are currently upgrading.
 
         Returns:
