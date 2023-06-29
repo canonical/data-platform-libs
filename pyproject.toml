@@ -39,3 +39,40 @@ docstring-convention = "google"
 copyright-check = "True"
 copyright-author = "Canonical Ltd."
 copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
+
+[tool.ruff]
+line-length = 99
+select = ["E", "W", "F", "C", "N", "D", "I001"]
+extend-ignore = [
+    "D203",
+    "D204",
+    "D213",
+    "D215",
+    "D400",
+    "D401",
+    "D404",
+    "D406",
+    "D407",
+    "D408",
+    "D409",
+    "D413",
+]
+ignore = ["E501", "D107"]
+extend-exclude = ["__pycache__", "*.egg_info"]
+per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104", "E999"], "src/literals.py" = ["D101"]}
+target-version="py310"
+src = ["src", "tests"]
+
+[tool.ruff.mccabe]
+max-complexity = 10
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["./lib"]
+pythonVersion = "3.10"
+pythonPlatform = "All"
+typeCheckingMode = "basic"
+reportIncompatibleMethodOverride = false
+reportImportCycles = false
+reportMissingModuleSource = true
+stubPath = ""
