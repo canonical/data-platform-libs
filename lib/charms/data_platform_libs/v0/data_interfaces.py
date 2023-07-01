@@ -296,7 +296,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from ops.charm import (
     CharmBase,
@@ -306,7 +306,7 @@ from ops.charm import (
     RelationJoinedEvent,
 )
 from ops.framework import EventSource, Object
-from ops.model import Relation, UnitOrApplication
+from ops.model import Application, Relation, Unit
 
 # The unique Charmhub library identifier, never change it
 LIBID = "6c3e6b6680d64e9c89e611d1a15f65be"
@@ -331,7 +331,7 @@ changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
 
-def diff(event: RelationChangedEvent, bucket: UnitOrApplication) -> Diff:
+def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
     """Retrieves the diff of the data in the relation changed databag.
 
     Args:

@@ -113,7 +113,7 @@ class ExampleRequirerCharm(CharmBase):
 import json
 import logging
 from collections import namedtuple
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import ops.charm
 import ops.framework
@@ -127,7 +127,7 @@ from ops.charm import (
     RelationJoinedEvent,
 )
 from ops.framework import EventSource, Object, ObjectEvents
-from ops.model import Relation, RelationDataContent, UnitOrApplication
+from ops.model import Application, Relation, RelationDataContent, Unit
 
 # The unique Charmhub library identifier, never change it
 LIBID = "fca396f6254246c9bfa565b1f85ab528"
@@ -150,7 +150,7 @@ changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
 
-def diff(event: RelationChangedEvent, bucket: UnitOrApplication) -> Diff:
+def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
     """Retrieves the diff of the data in the relation changed databag.
 
     Args:
