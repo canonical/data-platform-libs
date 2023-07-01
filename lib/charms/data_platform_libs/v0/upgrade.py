@@ -274,15 +274,22 @@ class DependencyModel(BaseModel):
     upgrade_supported: str
     version: str
 
-    @validator("dependencies", "upgrade_supported", each_item=True)
+    @validator("dependencies", "upgrade_supported")
     @classmethod
     def dependencies_validator(cls, value):
         """Validates values with dependencies for multiple special characters."""
+        if isinstance(value, dict):
+            deps = value.values()
+        else:
+            deps = [value]
+
         chars = ["~", "^", ">", "*"]
-        if (count := sum([value.count(char) for char in chars])) != 1:
-            raise ValueError(
-                f"Value uses greater than 1 special character (^ ~ > *). Found {count}."
-            )
+
+        for dep in deps:
+            if (count := sum([dep.count(char) for char in chars])) != 1:
+                raise ValueError(
+                    f"Value uses greater than 1 special character (^ ~ > *). Found {count}."
+                )
 
         return value
 
