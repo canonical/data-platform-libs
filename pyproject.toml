@@ -76,4 +76,3 @@ reportIncompatibleMethodOverride = false
 reportImportCycles = false
 reportMissingModuleSource = true
 stubPath = ""
-dependencies = ["psycopg", "ops"]
