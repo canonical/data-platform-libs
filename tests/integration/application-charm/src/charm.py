@@ -10,6 +10,10 @@ of the libraries in this repository.
 
 import logging
 
+from ops.charm import ActionEvent, CharmBase
+from ops.main import main
+from ops.model import ActiveStatus
+
 from charms.data_platform_libs.v0.data_interfaces import (
     BootstrapServerChangedEvent,
     DatabaseCreatedEvent,
@@ -20,9 +24,6 @@ from charms.data_platform_libs.v0.data_interfaces import (
     OpenSearchRequires,
     TopicCreatedEvent,
 )
-from ops.charm import ActionEvent, CharmBase
-from ops.main import main
-from ops.model import ActiveStatus
 
 logger = logging.getLogger(__name__)
 

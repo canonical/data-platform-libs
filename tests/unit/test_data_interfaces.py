@@ -9,6 +9,10 @@ from unittest.mock import Mock, patch
 
 import psycopg
 import pytest
+from ops.charm import CharmBase
+from ops.testing import Harness
+from parameterized import parameterized
+
 from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
@@ -26,9 +30,6 @@ from charms.data_platform_libs.v0.data_interfaces import (
     TopicRequestedEvent,
 )
 from charms.harness_extensions.v0.capture_events import capture, capture_events
-from ops.charm import CharmBase
-from ops.testing import Harness
-from parameterized import parameterized
 
 logger = getLogger(__name__)
 

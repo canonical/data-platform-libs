@@ -10,14 +10,15 @@ of the libraries in this repository.
 
 import logging
 
+from ops.charm import CharmBase, RelationJoinedEvent
+from ops.main import main
+from ops.model import ActiveStatus, WaitingStatus
+
 from charms.data_platform_libs.v0.s3 import (
     CredentialsChangedEvent,
     CredentialsGoneEvent,
     S3Requirer,
 )
-from ops.charm import CharmBase, RelationJoinedEvent
-from ops.main import main
-from ops.model import ActiveStatus, WaitingStatus
 
 logger = logging.getLogger(__name__)
 FIRST_RELATION = "first-s3-credentials"

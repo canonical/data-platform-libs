@@ -6,6 +6,10 @@ import unittest
 from typing import List, Optional, Union
 from unittest.mock import Mock
 
+from ops.charm import ActionEvent, RelationEvent
+from ops.testing import Harness
+from pydantic import BaseModel, ValidationError, validator
+
 from charms.data_platform_libs.v0.data_models import (
     BaseConfigModel,
     RelationDataModel,
@@ -14,9 +18,6 @@ from charms.data_platform_libs.v0.data_models import (
     parse_relation_data,
     validate_params,
 )
-from ops.charm import ActionEvent, RelationEvent
-from ops.testing import Harness
-from pydantic import BaseModel, ValidationError, validator
 
 METADATA = """
     name: test-app

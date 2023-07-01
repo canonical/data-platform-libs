@@ -10,10 +10,11 @@ of the libraries in this repository.
 
 import logging
 
-from charms.data_platform_libs.v0.s3 import CredentialRequestedEvent, S3Provider
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
+
+from charms.data_platform_libs.v0.s3 import CredentialRequestedEvent, S3Provider
 
 logger = logging.getLogger(__name__)
 

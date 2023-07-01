@@ -13,14 +13,15 @@ import secrets
 import string
 
 import psycopg2
-from charms.data_platform_libs.v0.data_interfaces import (
-    DatabaseProvides,
-    DatabaseRequestedEvent,
-)
 from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
+
+from charms.data_platform_libs.v0.data_interfaces import (
+    DatabaseProvides,
+    DatabaseRequestedEvent,
+)
 
 logger = logging.getLogger(__name__)
 
