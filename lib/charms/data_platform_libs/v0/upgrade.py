@@ -176,7 +176,7 @@ def verify_inequality_requirements(version: str, requirement: str) -> bool:
     Returns:
         True if `version` meets defined `requirement`. Otherwise False
     """
-    if not any([char for char in [">", ">="] if requirement.startswith(char)]):
+    if not any(char for char in [">", ">="] if requirement.startswith(char)):
         return True
 
     raw_requirement = requirement.replace(">", "").replace("=", "")

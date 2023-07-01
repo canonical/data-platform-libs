@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""[DEPRECATED] Relation 'requires' side abstraction for database relation.
+r"""[DEPRECATED] Relation 'requires' side abstraction for database relation.
 
 This library is a uniform interface to a selection of common database
 metadata, with added custom events that add convenience to database management,
@@ -160,7 +160,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version.
-LIBPATCH = 5
+LIBPATCH = 6
 
 logger = logging.getLogger(__name__)
 
@@ -171,16 +171,25 @@ class DatabaseEvent(RelationEvent):
     @property
     def endpoints(self) -> Optional[str]:
         """Returns a comma separated list of read/write endpoints."""
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("endpoints")
 
     @property
     def password(self) -> Optional[str]:
         """Returns the password for the created user."""
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("password")
 
     @property
     def read_only_endpoints(self) -> Optional[str]:
         """Returns a comma separated list of read only endpoints."""
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("read-only-endpoints")
 
     @property
@@ -189,16 +198,25 @@ class DatabaseEvent(RelationEvent):
 
         MongoDB only.
         """
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("replset")
 
     @property
     def tls(self) -> Optional[str]:
         """Returns whether TLS is configured."""
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("tls")
 
     @property
     def tls_ca(self) -> Optional[str]:
         """Returns TLS CA."""
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("tls-ca")
 
     @property
@@ -207,11 +225,17 @@ class DatabaseEvent(RelationEvent):
 
         MongoDB, Redis, OpenSearch and Kafka only.
         """
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("uris")
 
     @property
     def username(self) -> Optional[str]:
         """Returns the created username."""
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("username")
 
     @property
@@ -220,6 +244,9 @@ class DatabaseEvent(RelationEvent):
 
         Version as informed by the database daemon.
         """
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("version")
 
 
@@ -259,15 +286,15 @@ A tuple for storing the diff between two data mappings.
 class DatabaseRequires(Object):
     """Requires-side of the database relation."""
 
-    on = DatabaseEvents()
+    on = DatabaseEvents()  # pyright: ignore [reportGeneralTypeIssues]
 
     def __init__(
         self,
         charm,
         relation_name: str,
         database_name: str,
-        extra_user_roles: str = None,
-        relations_aliases: List[str] = None,
+        extra_user_roles: Optional[str] = None,
+        relations_aliases: Optional[List[str]] = None,
     ):
         """Manager of database client relations."""
         super().__init__(charm, relation_name)
@@ -352,9 +379,11 @@ class DatabaseRequires(Object):
         # Retrieve the old data from the data key in the local unit relation databag.
         old_data = json.loads(event.relation.data[self.local_unit].get("data", "{}"))
         # Retrieve the new data from the event relation databag.
-        new_data = {
-            key: value for key, value in event.relation.data[event.app].items() if key != "data"
-        }
+        new_data = (
+            {key: value for key, value in event.relation.data[event.app].items() if key != "data"}
+            if event.app
+            else {}
+        )
 
         # These are the keys that were added to the databag and triggered this event.
         added = new_data.keys() - old_data.keys()
@@ -413,9 +442,11 @@ class DatabaseRequires(Object):
         """
         data = {}
         for relation in self.relations:
-            data[relation.id] = {
-                key: value for key, value in relation.data[relation.app].items() if key != "data"
-            }
+            data[relation.id] = (
+                {key: value for key, value in relation.data[relation.app].items() if key != "data"}
+                if relation.app
+                else {}
+            )
         return data
 
     def _update_relation_data(self, relation_id: int, data: dict) -> None:
@@ -461,7 +492,9 @@ class DatabaseRequires(Object):
         if "username" in diff.added and "password" in diff.added:
             # Emit the default event (the one without an alias).
             logger.info("database created at %s", datetime.now())
-            self.on.database_created.emit(event.relation, app=event.app, unit=event.unit)
+            getattr(self.on, "database_created").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
 
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "database_created")
@@ -475,7 +508,9 @@ class DatabaseRequires(Object):
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("endpoints changed on %s", datetime.now())
-            self.on.endpoints_changed.emit(event.relation, app=event.app, unit=event.unit)
+            getattr(self.on, "endpoints_changed").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
 
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "endpoints_changed")
@@ -489,7 +524,7 @@ class DatabaseRequires(Object):
         if "read-only-endpoints" in diff.added or "read-only-endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("read-only-endpoints changed on %s", datetime.now())
-            self.on.read_only_endpoints_changed.emit(
+            getattr(self.on, "read_only_endpoints_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
