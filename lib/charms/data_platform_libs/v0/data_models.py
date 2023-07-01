@@ -231,7 +231,7 @@ def write(relation_data: RelationDataContent, model: BaseModel):
         relation_data: pointer to the relation databag
         model: instance of pydantic model to be written
     """
-    for key, value in model.dict(exclude_none=True).items():
+    for key, value in model.model_dump(exclude_none=True).items():
         relation_data[key.replace("_", "-")] = (
             str(value) if isinstance(value, str) or isinstance(value, int) else json.dumps(value)
         )
@@ -248,7 +248,7 @@ def read(relation_data: MutableMapping[str, str], obj: Type[T]) -> T:
         **{
             field_name: (
                 relation_data[parsed_key]
-                if field.type_ in [int, str, float]
+                if field.annotation in [int, str, float]
                 else json.loads(relation_data[parsed_key])
             )
             for field_name, field in obj.__fields__.items()  # pyright: ignore[reportGeneralTypeIssues]

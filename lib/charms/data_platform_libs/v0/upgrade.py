@@ -17,7 +17,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Optional
 
 from ops.charm import (
     ActionEvent,
@@ -28,7 +28,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, Object
 from ops.model import Relation
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel, field_validator, model_validator
 
 # The unique Charmhub library identifier, never change it
 LIBID = "156258aefb79435a93d933409a8c8684"
@@ -265,7 +265,7 @@ class DependencyModel(BaseModel):
         model = KafkaDependenciesModel(**deps)
 
         # exporting back validated deps
-        print(model.dict())
+        print(model.model_dump())
         ```
     """
 
@@ -274,7 +274,7 @@ class DependencyModel(BaseModel):
     upgrade_supported: str
     version: str
 
-    @validator("dependencies", "upgrade_supported")
+    @field_validator("dependencies", "upgrade_supported")
     @classmethod
     def dependencies_validator(cls, value):
         """Validates values with dependencies for multiple special characters."""
@@ -293,9 +293,9 @@ class DependencyModel(BaseModel):
 
         return value
 
-    @root_validator(skip_on_failure=True)
+    @model_validator(mode="before")
     @classmethod
-    def version_upgrade_supported_validator(cls, values) -> dict[str, Union[dict[str, str], str]]:
+    def version_upgrade_supported_validator(cls, values):
         """Validates specified `version` meets `upgrade_supported` requirement."""
         if not verify_requirements(
             version=values.get("version"), requirement=values.get("upgrade_supported")
@@ -426,7 +426,7 @@ class DataUpgrade(Object, ABC):
         if not (deps := self.peer_relation.data[self.charm.app].get("dependencies", "")):
             return None
 
-        return type(self.dependency_model)(**json.loads(deps))
+        return type(self.dependency_model).model_validate_json(deps)
 
     @property
     def upgrade_stack(self) -> Optional[list[int]]:
@@ -485,7 +485,7 @@ class DataUpgrade(Object, ABC):
 
         # persisting dependencies to the relation data
         self.peer_relation.data[self.charm.app].update(
-            {"dependencies": json.dumps(self.dependency_model.dict())}
+            {"dependencies": self.dependency_model.model_dump_json()}
         )
 
     def _on_pre_upgrade_check_action(self, event: ActionEvent):
