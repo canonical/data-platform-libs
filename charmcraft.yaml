@@ -3,9 +3,10 @@
 
 type: charm
 parts:
-  build-packages:
-    - rustc
-    - cargo
+  charm:
+    build-packages:
+      - rustc
+      - cargo
 bases:
   - build-on:
     - name: "ubuntu"
