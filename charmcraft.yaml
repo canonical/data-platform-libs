@@ -1,4 +1,11 @@
-type: "charm"
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+type: charm
+parts:
+  build-packages:
+    - rustc
+    - cargo
 bases:
   - build-on:
     - name: "ubuntu"
