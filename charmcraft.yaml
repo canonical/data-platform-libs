@@ -4,6 +4,8 @@
 type: charm
 parts:
   charm:
+    charm-binary-python-packages:
+      - pydantic
     build-packages:
       - rustc
       - cargo
