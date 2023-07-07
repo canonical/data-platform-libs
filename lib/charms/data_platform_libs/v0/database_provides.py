@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""[DEPRECATED] Relation provider side abstraction for database relation.
+r"""[DEPRECATED] Relation provider side abstraction for database relation.
 
 This library is a uniform interface to a selection of common database
 metadata, with added custom events that add convenience to database management,
@@ -80,7 +80,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +91,17 @@ class DatabaseEvent(RelationEvent):
     @property
     def database(self) -> Optional[str]:
         """Returns the database that was requested."""
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("database")
 
     @property
     def extra_user_roles(self) -> Optional[str]:
         """Returns the extra user roles that were requested."""
+        if not self.relation.app:
+            return None
+
         return self.relation.data[self.relation.app].get("extra-user-roles")
 
 
@@ -124,7 +130,7 @@ deleted - key that were deleted"""
 class DatabaseProvides(Object):
     """Provides-side of the database relation."""
 
-    on = DatabaseEvents()
+    on = DatabaseEvents()  # pyright: ignore [reportGeneralTypeIssues]
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         super().__init__(charm, relation_name)
@@ -150,9 +156,11 @@ class DatabaseProvides(Object):
         # Retrieve the old data from the data key in the application relation databag.
         old_data = json.loads(event.relation.data[self.local_app].get("data", "{}"))
         # Retrieve the new data from the event relation databag.
-        new_data = {
-            key: value for key, value in event.relation.data[event.app].items() if key != "data"
-        }
+        new_data = (
+            {key: value for key, value in event.relation.data[event.app].items() if key != "data"}
+            if event.app
+            else {}
+        )
 
         # These are the keys that were added to the databag and triggered this event.
         added = new_data.keys() - old_data.keys()
@@ -184,7 +192,9 @@ class DatabaseProvides(Object):
         # Emit a database requested event if the setup key (database name and optional
         # extra user roles) was added to the relation databag by the application.
         if "database" in diff.added:
-            self.on.database_requested.emit(event.relation, app=event.app, unit=event.unit)
+            getattr(self.on, "database_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
 
     def fetch_relation_data(self) -> dict:
         """Retrieves data from relation.
@@ -198,9 +208,11 @@ class DatabaseProvides(Object):
         """
         data = {}
         for relation in self.relations:
-            data[relation.id] = {
-                key: value for key, value in relation.data[relation.app].items() if key != "data"
-            }
+            data[relation.id] = (
+                {key: value for key, value in relation.data[relation.app].items() if key != "data"}
+                if relation.app
+                else {}
+            )
         return data
 
     def _update_relation_data(self, relation_id: int, data: dict) -> None:
@@ -215,8 +227,8 @@ class DatabaseProvides(Object):
                 that should be updated in the relation.
         """
         if self.local_unit.is_leader():
-            relation = self.charm.model.get_relation(self.relation_name, relation_id)
-            relation.data[self.local_app].update(data)
+            if relation := self.charm.model.get_relation(self.relation_name, relation_id):
+                relation.data[self.local_app].update(data)
 
     @property
     def relations(self) -> List[Relation]:

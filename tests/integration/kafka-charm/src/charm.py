@@ -11,13 +11,14 @@ of the libraries in this repository.
 import logging
 from typing import Dict, Optional
 
+from ops.charm import ActionEvent, CharmBase
+from ops.main import main
+from ops.model import ActiveStatus, MaintenanceStatus
+
 from charms.data_platform_libs.v0.data_interfaces import (
     KafkaProvides,
     TopicRequestedEvent,
 )
-from ops.charm import ActionEvent, CharmBase
-from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus
 
 logger = logging.getLogger(__name__)
 

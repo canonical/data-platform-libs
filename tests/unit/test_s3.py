@@ -5,6 +5,9 @@ import logging
 import unittest
 from unittest.mock import Mock, patch
 
+from ops.charm import CharmBase
+from ops.testing import Harness
+
 from charms.data_platform_libs.v0.s3 import (
     CredentialRequestedEvent,
     Diff,
@@ -12,8 +15,6 @@ from charms.data_platform_libs.v0.s3 import (
     S3Requirer,
 )
 from charms.harness_extensions.v0.capture_events import capture
-from ops.charm import CharmBase
-from ops.testing import Harness
 
 RELATION_INTERFACE = "s3-credentials"
 BUCKET_NAME = "test-bucket"

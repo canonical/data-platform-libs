@@ -2,6 +2,8 @@
 # See LICENSE file for licensing details.
 
 import pytest
+from pydantic import ValidationError
+
 from charms.data_platform_libs.v0.upgrade import (
     BaseModel,
     DependencyModel,
@@ -11,7 +13,6 @@ from charms.data_platform_libs.v0.upgrade import (
     verify_tilde_requirements,
     verify_wildcard_requirements,
 )
-from pydantic import ValidationError
 
 
 class GandalfModel(BaseModel):

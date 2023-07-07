@@ -3,14 +3,15 @@
 import unittest
 from unittest.mock import Mock, patch
 
+from ops.charm import CharmBase
+from ops.testing import Harness
+
 from charms.data_platform_libs.v0.database_provides import (
     DatabaseProvides,
     DatabaseRequestedEvent,
     Diff,
 )
 from charms.harness_extensions.v0.capture_events import capture
-from ops.charm import CharmBase
-from ops.testing import Harness
 
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"

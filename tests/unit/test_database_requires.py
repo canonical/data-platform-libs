@@ -4,6 +4,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 import pytest
+from ops.charm import CharmBase
+from ops.testing import Harness
+from parameterized import parameterized
+
 from charms.data_platform_libs.v0.database_requires import (
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
@@ -13,9 +17,6 @@ from charms.data_platform_libs.v0.database_requires import (
     Diff,
 )
 from charms.harness_extensions.v0.capture_events import capture_events
-from ops.charm import CharmBase
-from ops.testing import Harness
-from parameterized import parameterized
 
 CLUSTER_ALIASES = ["cluster1", "cluster2"]
 DATABASE = "data_platform"
