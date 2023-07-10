@@ -708,7 +708,6 @@ class DataUpgrade(Object, ABC):
     def on_upgrade_changed(self, event: RelationChangedEvent) -> None:
         """Handler for `upgrade-relation-changed` events."""
         if not self.peer_relation:
-            event.defer()
             return
 
         # if any other unit failed, mark as failed
