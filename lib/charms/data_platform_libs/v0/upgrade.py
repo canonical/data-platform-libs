@@ -439,6 +439,7 @@ class DataUpgrade(Object, ABC):
             self.charm.on[relation_name].relation_changed, self.on_upgrade_changed
         )
         self.framework.observe(self.charm.on.upgrade_charm, self._on_upgrade_charm)
+        self.framework.observe(getattr(self.charm.on, "upgrade_granted"), self._on_upgrade_granted)
 
         # actions
         self.framework.observe(
@@ -738,3 +739,7 @@ class DataUpgrade(Object, ABC):
             self.peer_relation.data[self.charm.unit].update({"state": "upgrading"})
             getattr(self.on, "upgrade_granted").emit()
             return
+
+    @abstractmethod
+    def _on_upgrade_granted(self, event: UpgradeGrantedEvent) -> None:
+        """Handler for `upgrade-granted` events."""
