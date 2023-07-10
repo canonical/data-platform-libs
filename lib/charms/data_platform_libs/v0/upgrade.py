@@ -452,8 +452,8 @@ class DataUpgrade(Object, ABC):
         return self.charm.model.get_relation(self.relation_name)
 
     @property
-    def peer_units(self) -> Iterable[Unit]:
-        """The upgrade peer units."""
+    def app_units(self) -> Iterable[Unit]:
+        """The peer-related units in the application."""
         if not self.peer_relation:
             return []
 
@@ -530,7 +530,7 @@ class DataUpgrade(Object, ABC):
         if not self.peer_relation:
             return None
 
-        states = [self.peer_relation.data[unit].get("state", "") for unit in self.peer_units]
+        states = [self.peer_relation.data[unit].get("state", "") for unit in self.app_units]
 
         try:
             return sorted(states, key=self.STATES.index)[0]
@@ -621,7 +621,7 @@ class DataUpgrade(Object, ABC):
             if self.substrate == "k8s":
                 logger.info("Building upgrade stack for K8s...")
                 built_upgrade_stack = sorted(
-                    [int(unit.name.split("/")[1]) for unit in self.peer_units]
+                    [int(unit.name.split("/")[1]) for unit in self.app_units]
                 )
             else:
                 logger.info("Building upgrade stack for VMs...")
