@@ -752,11 +752,11 @@ class S3Requirer(Object):
 
     def get_s3_connection_info(self) -> Dict[str, str]:
         """Return the s3 credentials as a dictionary."""
-        relation = self.charm.model.get_relation(self.relation_name)
-        if not relation or not relation.app:
-            return {}
+        for relation in self.relations:
+            if relation and relation.app:
+                return self._load_relation_data(relation.data[relation.app])
 
-        return self._load_relation_data(relation.data[relation.app])
+        return {}
 
     def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Notify the charm about a broken S3 credential store relation."""
