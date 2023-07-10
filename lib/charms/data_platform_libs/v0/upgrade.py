@@ -559,7 +559,7 @@ class DataUpgrade(Object, ABC):
         """
         # don't raise if k8s substrate, uses default statefulset order
         if self.substrate == "k8s":
-            pass
+            return []
 
         raise NotImplementedError
 
