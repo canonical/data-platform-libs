@@ -17,7 +17,7 @@ r"""Handler for `upgrade` relation events for in-place upgrades on VMs."""
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Iterable, List, Literal, Optional
+from typing import Iterable, List, Literal, Optional, Tuple
 
 from ops.charm import (
     ActionEvent,
@@ -649,15 +649,31 @@ class DataUpgrade(Object, ABC):
         """
         keys = self.dependency_model.__fields__.keys()
 
+        compatible = True
+        incompatibilities: List[Tuple[str, str, str, str]] = []
         for key in keys:
             old_dep: DependencyModel = getattr(self.stored_dependencies, key)
             new_dep: DependencyModel = getattr(self.dependency_model, key)
 
             if not old_dep.can_upgrade(dependency=new_dep):
-                raise VersionError(
-                    message="Versions incompatible - {key} {old_dep.version} can not be upgraded to {new_dep.version}",
-                    cause=f"Upgrades only supported from {key} versions satisfying requirement {new_dep.version}",
+                compatible = False
+                incompatibilities.append(
+                    (key, old_dep.version, new_dep.version, new_dep.upgrade_supported)
                 )
+
+        base_message = "Versions incompatible"
+        base_cause = "Upgrades only supported for specific versions"
+        if not compatible:
+            for incompat in incompatibilities:
+                base_message += (
+                    f", {incompat[0]} {incompat[1]} can not be upgraded to {incompat[2]}"
+                )
+                base_cause += f", {incompat[0]} versions satisfying requirement {incompat[3]}"
+
+            raise VersionError(
+                message=base_message,
+                cause=base_cause,
+            )
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
         """Handler for `upgrade-charm` events."""
