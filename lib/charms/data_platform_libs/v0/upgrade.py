@@ -739,7 +739,7 @@ class DataUpgrade(Object, ABC):
 
         # pop mutates the `upgrade_stack` attr
         top_unit_id = self.upgrade_stack.pop()
-        top_unit = self.charm.model.get_unit(f"{self.charm.app}/{top_unit_id}")
+        top_unit = self.charm.model.get_unit(f"{self.charm.app.name}/{top_unit_id}")
         top_state = self.peer_relation.data[top_unit].get("state")
 
         # if top of stack is completed, leader pops it
