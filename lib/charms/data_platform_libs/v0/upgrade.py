@@ -722,13 +722,14 @@ class DataUpgrade(Object, ABC):
 
         # if all units completed, mark as complete
         if not self.upgrade_stack:
-            if self.cluster_state == "completed":
+            if self.cluster_state == "idle":
+                logger.debug("upgrade-changed event handled before pre-checks, exiting...")
+                return
+            elif self.cluster_state == "completed":
                 logger.info("All units completed upgrade, setting idle upgrade state...")
                 self.peer_relation.data[self.charm.unit].update({"state": "idle"})
                 return
-            elif self.cluster_state == "idle":
-                return
-            else:  # in case event was handled before pre-checks
+            else:
                 logger.debug("Did not find upgrade-stack or completed cluster state, deferring...")
                 event.defer()
                 return
