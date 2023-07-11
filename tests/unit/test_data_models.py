@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 from ops.charm import ActionEvent, RelationEvent
 from ops.testing import Harness
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, ValidationError, validator
 
 from charms.data_platform_libs.v0.data_models import (
     BaseConfigModel,
@@ -52,7 +52,7 @@ class CharmConfig(BaseConfigModel):
     float_config: float
     low_value_config: int
 
-    @field_validator("low_value_config")
+    @validator("low_value_config")
     @classmethod
     def less_than_100(cls, value: int):
         if value >= 100:
@@ -170,7 +170,7 @@ class TestCharm(unittest.TestCase):
         with self.assertLogs(level="ERROR") as logger:
             self.assertFalse(self.harness.charm._set_server_action(mock_event))
         self.assertTrue("validation error" in logger.output[0])
-        self.assertTrue("Field required" in logger.output[0])
+        self.assertTrue("field required" in logger.output[0])
 
     def test_relation_databag_io(self):
         relation_id = self.harness.add_relation("database", "mongodb")
