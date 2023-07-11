@@ -432,6 +432,7 @@ class DataUpgrade(Object, ABC):
         self.dependency_model = dependency_model
         self.relation_name = relation_name
         self.substrate = substrate
+        self._upgrade_stack = None
 
         # events
         self.framework.observe(
