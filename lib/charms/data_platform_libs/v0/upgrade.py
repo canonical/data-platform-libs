@@ -726,6 +726,8 @@ class DataUpgrade(Object, ABC):
                 logger.info("All units completed upgrade, setting idle upgrade state...")
                 self.peer_relation.data[self.charm.unit].update({"state": "idle"})
                 return
+            elif self.cluster_state == "idle":
+                return
             else:  # in case event was handled before pre-checks
                 logger.debug("Did not find upgrade-stack or completed cluster state, deferring...")
                 event.defer()
