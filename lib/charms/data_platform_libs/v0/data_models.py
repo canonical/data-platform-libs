@@ -168,9 +168,9 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
-PYDEPS = ["ops>=2.0.0", "pydantic>=1.10"]
+PYDEPS = ["ops>=2.0.0", "pydantic>=1.10,<2"]
 
 G = TypeVar("G")
 T = TypeVar("T", bound=BaseModel)
@@ -231,7 +231,7 @@ def write(relation_data: RelationDataContent, model: BaseModel):
         relation_data: pointer to the relation databag
         model: instance of pydantic model to be written
     """
-    for key, value in model.model_dump(exclude_none=True).items():
+    for key, value in model.dict(exclude_none=True).items():
         relation_data[key.replace("_", "-")] = (
             str(value) if isinstance(value, str) or isinstance(value, int) else json.dumps(value)
         )
