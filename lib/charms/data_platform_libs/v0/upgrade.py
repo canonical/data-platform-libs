@@ -590,11 +590,14 @@ class DataUpgrade(Object, ABC):
 
     def _on_upgrade_created(self, event: RelationCreatedEvent) -> None:
         """Handler for `upgrade-relation-created` events."""
-        if not self.charm.unit.is_leader():
-            return
-
         if not self.peer_relation:
             event.defer()
+            return
+
+        logger.info("Setting upgrade state to idle...")
+        self.peer_relation.data[self.charm.unit].update({"state": "idle"})
+
+        if not self.charm.unit.is_leader():
             return
 
         logger.info("Setting charm dependencies to relation data...")
