@@ -29,7 +29,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object
 from ops.model import Relation, Unit
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, root_validator, validator
 
 # The unique Charmhub library identifier, never change it
 LIBID = "156258aefb79435a93d933409a8c8684"
@@ -39,7 +39,9 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
+
+PYDEPS = ["pydantic>=1.10,<2"]
 
 logger = logging.getLogger(__name__)
 
@@ -272,7 +274,7 @@ class DependencyModel(BaseModel):
     upgrade_supported: str
     version: str
 
-    @field_validator("dependencies", "upgrade_supported")
+    @validator("dependencies", "upgrade_supported", each_item=True)
     @classmethod
     def dependencies_validator(cls, value):
         """Validates values with dependencies for multiple special characters."""
@@ -291,7 +293,7 @@ class DependencyModel(BaseModel):
 
         return value
 
-    @model_validator(mode="before")
+    @root_validator(skip_on_failure=True)
     @classmethod
     def version_upgrade_supported_validator(cls, values):
         """Validates specified `version` meets `upgrade_supported` requirement."""
@@ -476,7 +478,7 @@ class DataUpgrade(Object, ABC):
         if not (deps := self.peer_relation.data[self.charm.app].get("dependencies", "")):
             return None
 
-        return type(self.dependency_model).model_validate_json(deps)
+        return type(self.dependency_model)(**json.loads(deps))
 
     @property
     def upgrade_stack(self) -> Optional[List[int]]:
@@ -596,7 +598,7 @@ class DataUpgrade(Object, ABC):
 
         logger.info("Setting charm dependencies to relation data...")
         self.peer_relation.data[self.charm.app].update(
-            {"dependencies": self.dependency_model.model_dump_json()}
+            {"dependencies": json.dumps(self.dependency_model.dict())}
         )
 
     def _on_pre_upgrade_check_action(self, event: ActionEvent) -> None:
