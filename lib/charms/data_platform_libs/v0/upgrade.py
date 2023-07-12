@@ -23,7 +23,6 @@ from ops.charm import (
     ActionEvent,
     CharmBase,
     CharmEvents,
-    RelationChangedEvent,
     RelationCreatedEvent,
     UpgradeCharmEvent,
 )
@@ -39,7 +38,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 PYDEPS = ["pydantic>=1.10,<2"]
 
@@ -432,6 +431,7 @@ class DataUpgrade(Object, ABC):
         self.dependency_model = dependency_model
         self.relation_name = relation_name
         self.substrate = substrate
+        self._upgrade_stack = None
 
         # events
         self.framework.observe(
@@ -495,7 +495,7 @@ class DataUpgrade(Object, ABC):
             return None
 
         # lazy-load
-        if not self._upgrade_stack:
+        if self._upgrade_stack is None:
             self._upgrade_stack = (
                 json.loads(self.peer_relation.data[self.charm.app].get("upgrade-stack", "[]"))
                 or None
@@ -589,17 +589,18 @@ class DataUpgrade(Object, ABC):
 
     def _on_upgrade_created(self, event: RelationCreatedEvent) -> None:
         """Handler for `upgrade-relation-created` events."""
-        if not self.charm.unit.is_leader():
-            return
-
         if not self.peer_relation:
             event.defer()
             return
 
-        logger.info("Setting charm dependencies to relation data...")
-        self.peer_relation.data[self.charm.app].update(
-            {"dependencies": json.dumps(self.dependency_model.dict())}
-        )
+        # setting initial idle state needed to avoid execution on upgrade-changed events
+        self.peer_relation.data[self.charm.unit].update({"state": "idle"})
+
+        if self.charm.unit.is_leader():
+            logger.debug("Persisting dependencies to upgrade relation data...")
+            self.peer_relation.data[self.charm.app].update(
+                {"dependencies": json.dumps(self.dependency_model.dict())}
+            )
 
     def _on_pre_upgrade_check_action(self, event: ActionEvent) -> None:
         """Handler for `pre-upgrade-check-action` events."""
@@ -707,7 +708,7 @@ class DataUpgrade(Object, ABC):
         # all units sets state to ready
         self.peer_relation.data[self.charm.unit].update({"state": "ready"})
 
-    def on_upgrade_changed(self, event: RelationChangedEvent) -> None:
+    def on_upgrade_changed(self, event: EventBase) -> None:
         """Handler for `upgrade-relation-changed` events."""
         if not self.peer_relation:
             return
@@ -721,27 +722,30 @@ class DataUpgrade(Object, ABC):
 
         # if all units completed, mark as complete
         if not self.upgrade_stack:
-            if self.cluster_state == "completed":
+            if self.cluster_state == "idle":
+                logger.debug("upgrade-changed event handled before pre-checks, exiting...")
+                return
+            elif self.cluster_state == "completed":
                 logger.info("All units completed upgrade, setting idle upgrade state...")
                 self.peer_relation.data[self.charm.unit].update({"state": "idle"})
                 return
-            else:  # in case event was handled before pre-checks
+            else:
                 logger.debug("Did not find upgrade-stack or completed cluster state, deferring...")
                 event.defer()
                 return
 
         # pop mutates the `upgrade_stack` attr
         top_unit_id = self.upgrade_stack.pop()
-        top_unit = self.charm.model.get_unit(f"{self.charm.app}/{top_unit_id}")
+        top_unit = self.charm.model.get_unit(f"{self.charm.app.name}/{top_unit_id}")
         top_state = self.peer_relation.data[top_unit].get("state")
 
         # if top of stack is completed, leader pops it
         if self.charm.unit.is_leader() and top_state == "completed":
-            logger.info(f"{top_unit} has completed upgrading. Removing from stack...")
+            logger.debug(f"{top_unit} has finished upgrading, updating stack...")
+
+            # writes the mutated attr back to rel data
             self.peer_relation.data[self.charm.app].update(
-                {
-                    "upgrade-stack": json.dumps(self.upgrade_stack)
-                }  # writes the mutated attr back to rel data
+                {"upgrade-stack": json.dumps(self.upgrade_stack)}
             )
 
             # recurse on leader to ensure relation changed event not lost
@@ -750,12 +754,11 @@ class DataUpgrade(Object, ABC):
 
         # if unit top of stack, emit granted event
         if self.charm.unit == top_unit and top_state in ["ready", "upgrading"]:
-            logger.info(
+            logger.debug(
                 f"{top_unit} is next to upgrade, emitting `upgrade_granted` event and upgrading..."
             )
             self.peer_relation.data[self.charm.unit].update({"state": "upgrading"})
             getattr(self.on, "upgrade_granted").emit()
-            return
 
     @abstractmethod
     def _on_upgrade_granted(self, event: UpgradeGrantedEvent) -> None:
