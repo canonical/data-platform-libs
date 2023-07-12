@@ -708,7 +708,7 @@ class DataUpgrade(Object, ABC):
         # all units sets state to ready
         self.peer_relation.data[self.charm.unit].update({"state": "ready"})
 
-    def on_upgrade_changed(self, event: RelationChangedEvent) -> None:
+    def on_upgrade_changed(self, event: EventBase) -> None:
         """Handler for `upgrade-relation-changed` events."""
         if not self.peer_relation:
             return
