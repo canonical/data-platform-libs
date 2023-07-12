@@ -23,7 +23,6 @@ from ops.charm import (
     ActionEvent,
     CharmBase,
     CharmEvents,
-    RelationChangedEvent,
     RelationCreatedEvent,
     UpgradeCharmEvent,
 )
@@ -496,7 +495,7 @@ class DataUpgrade(Object, ABC):
             return None
 
         # lazy-load
-        if not self._upgrade_stack:
+        if self._upgrade_stack is None:
             self._upgrade_stack = (
                 json.loads(self.peer_relation.data[self.charm.app].get("upgrade-stack", "[]"))
                 or None
