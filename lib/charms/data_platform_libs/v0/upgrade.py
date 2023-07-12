@@ -745,9 +745,7 @@ class DataUpgrade(Object, ABC):
 
             # writes the mutated attr back to rel data
             self.peer_relation.data[self.charm.app].update(
-                {
-                    "upgrade-stack": json.dumps(self.upgrade_stack)
-                }
+                {"upgrade-stack": json.dumps(self.upgrade_stack)}
             )
 
             # recurse on leader to ensure relation changed event not lost
