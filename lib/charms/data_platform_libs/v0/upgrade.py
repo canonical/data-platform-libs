@@ -593,16 +593,14 @@ class DataUpgrade(Object, ABC):
             event.defer()
             return
 
-        logger.info("Setting upgrade state to idle...")
+        # setting initial idle state needed to avoid execution on upgrade-changed events
         self.peer_relation.data[self.charm.unit].update({"state": "idle"})
 
-        if not self.charm.unit.is_leader():
-            return
-
-        logger.info("Setting charm dependencies to relation data...")
-        self.peer_relation.data[self.charm.app].update(
-            {"dependencies": json.dumps(self.dependency_model.dict())}
-        )
+        if self.charm.unit.is_leader():
+            logger.debug("Persisting dependencies to upgrade relation data...")
+            self.peer_relation.data[self.charm.app].update(
+                {"dependencies": json.dumps(self.dependency_model.dict())}
+            )
 
     def _on_pre_upgrade_check_action(self, event: ActionEvent) -> None:
         """Handler for `pre-upgrade-check-action` events."""
