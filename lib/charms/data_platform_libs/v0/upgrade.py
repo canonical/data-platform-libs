@@ -741,11 +741,13 @@ class DataUpgrade(Object, ABC):
 
         # if top of stack is completed, leader pops it
         if self.charm.unit.is_leader() and top_state == "completed":
-            logger.info(f"{top_unit} has completed upgrading. Removing from stack...")
+            logger.debug(f"{top_unit} has finished upgrading, updating stack...")
+
+            # writes the mutated attr back to rel data
             self.peer_relation.data[self.charm.app].update(
                 {
                     "upgrade-stack": json.dumps(self.upgrade_stack)
-                }  # writes the mutated attr back to rel data
+                }
             )
 
             # recurse on leader to ensure relation changed event not lost
@@ -754,12 +756,11 @@ class DataUpgrade(Object, ABC):
 
         # if unit top of stack, emit granted event
         if self.charm.unit == top_unit and top_state in ["ready", "upgrading"]:
-            logger.info(
+            logger.debug(
                 f"{top_unit} is next to upgrade, emitting `upgrade_granted` event and upgrading..."
             )
             self.peer_relation.data[self.charm.unit].update({"state": "upgrading"})
             getattr(self.on, "upgrade_granted").emit()
-            return
 
     @abstractmethod
     def _on_upgrade_granted(self, event: UpgradeGrantedEvent) -> None:
