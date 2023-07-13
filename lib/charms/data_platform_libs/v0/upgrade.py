@@ -38,7 +38,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
 
 PYDEPS = ["pydantic>=1.10,<2"]
 
@@ -415,7 +415,7 @@ class UpgradeEvents(CharmEvents):
 class DataUpgrade(Object, ABC):
     """Manages `upgrade` relation operators for in-place upgrades."""
 
-    STATES = ["failed", "idle", "ready", "upgrading", "completed"]
+    STATES = ["failed", "idle", "recovering", "ready", "upgrading", "completed"]
 
     on = UpgradeEvents()  # pyright: ignore [reportGeneralTypeIssues]
 
@@ -608,13 +608,23 @@ class DataUpgrade(Object, ABC):
             event.fail(message="Could not find upgrade relation.")
             return
 
-        if not self.charm.unit.is_leader():
-            event.fail(message="Action must be ran on the Juju leader.")
+        # if check ran after failed upgrade, set recovery state to unblock failed unit
+        if self.peer_relation.data[self.charm.unit].get("state") == "failed":
+            self.peer_relation.data[self.charm.unit].update({"state": "recovering"})
+            return
+
+        # in case recovery was ran on non-failed unit
+        if self.cluster_state == "failed":
+            event.fail("Please run pre-upgrade-check action on failed unit to start recovery")
             return
 
         # checking if upgrade in progress
-        if self.cluster_state != "idle":
-            event.fail("Cannot run pre-upgrade checks, cluster already upgrading.")
+        if self.cluster_state not in ["idle", "recovering"]:
+            event.fail("Cannot run pre-upgrade checks, upgrade already in progress")
+            return
+
+        # only run important checks on leader
+        if not self.charm.unit.is_leader():
             return
 
         try:
@@ -713,10 +723,8 @@ class DataUpgrade(Object, ABC):
         if not self.peer_relation:
             return
 
-        # if any other unit failed, mark as failed
+        # if any other unit failed, don't execute upgrade events and log rollback
         if self.cluster_state == "failed":
-            logger.error("Cluster upgrade failed. Setting failed upgrade state...")
-            self.set_unit_failed()
             self.log_rollback_instructions()
             return
 
@@ -753,7 +761,7 @@ class DataUpgrade(Object, ABC):
             self.on_upgrade_changed(event)
 
         # if unit top of stack, emit granted event
-        if self.charm.unit == top_unit and top_state in ["ready", "upgrading"]:
+        if self.charm.unit == top_unit and top_state in ["recovering", "ready", "upgrading"]:
             logger.debug(
                 f"{top_unit} is next to upgrade, emitting `upgrade_granted` event and upgrading..."
             )
