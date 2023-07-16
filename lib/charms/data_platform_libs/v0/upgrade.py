@@ -585,6 +585,11 @@ class DataUpgrade(Object, ABC):
         if not self.peer_relation:
             return None
 
+        # needed to refresh the stack
+        # now leader pulls a fresh stack from newly updated relation data
+        if self.charm.unit.is_leader():
+            self._upgrade_stack = None
+
         self.peer_relation.data[self.charm.unit].update({"state": "completed"})
 
     def _on_upgrade_created(self, event: RelationCreatedEvent) -> None:
