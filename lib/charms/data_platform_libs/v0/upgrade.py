@@ -598,9 +598,6 @@ class DataUpgrade(Object, ABC):
 
         self.peer_relation.data[self.charm.unit].update({"state": "failed"})
 
-        if self.substrate == "k8s":
-            self.on_upgrade_changed(EventBase(self.handle))
-
     def set_unit_completed(self) -> None:
         """Sets unit `state=completed` to the upgrade peer data."""
         if not self.peer_relation:
