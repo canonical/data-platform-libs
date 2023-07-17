@@ -2,10 +2,13 @@
 # See LICENSE file for licensing details.
 
 import pytest
+from ops.charm import CharmBase
+from ops.testing import Harness
 from pydantic import ValidationError
 
 from charms.data_platform_libs.v0.upgrade import (
     BaseModel,
+    DataUpgrade,
     DependencyModel,
     build_complete_sem_ver,
     verify_caret_requirements,
@@ -14,9 +17,33 @@ from charms.data_platform_libs.v0.upgrade import (
     verify_wildcard_requirements,
 )
 
+GANDALF_METADATA = """
+name: gandalf
+peers:
+  upgrade:
+    interface: upgrade
+"""
+
+GANDALF_ACTIONS = """
+pre-upgrade-check:
+  description: "YOU SHALL NOT PASS"
+"""
+
 
 class GandalfModel(BaseModel):
     gandalf_the_white: DependencyModel
+
+
+class GandalfCharm(CharmBase):
+    def __init__(self, *args):
+        super().__init__(*args)
+
+
+@pytest.fixture
+def harness():
+    harness = Harness(GandalfCharm, meta=GANDALF_METADATA, actions=GANDALF_ACTIONS)
+    harness.begin()
+    return harness
 
 
 @pytest.mark.parametrize(
@@ -268,3 +295,91 @@ def test_dependency_model_succeeds_nested():
     }
 
     GandalfModel(**deps)
+
+
+def test_data_upgrade_raises_on_init(harness):
+    # nothing implemented
+    class GandalfUpgrade(DataUpgrade):
+        pass
+
+    with pytest.raises(TypeError):
+        GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+
+    # missing pre-upgrade-check
+    class GandalfUpgrade(DataUpgrade):
+        def log_rollback_instructions(self):
+            pass
+
+        def _on_upgrade_granted(self, _):
+            pass
+
+    with pytest.raises(TypeError):
+        GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+
+    # missing missing log-rollback-instructions
+    class GandalfUpgrade(DataUpgrade):
+        def pre_upgrade_check(self):
+            pass
+
+        def _on_upgrade_granted(self, _):
+            pass
+
+    with pytest.raises(TypeError):
+        GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+
+    # missing on-upgrade-granted
+    class GandalfUpgrade(DataUpgrade):
+        def pre_upgrade_check(self):
+            pass
+
+        def log_rollback_instructions(self):
+            pass
+
+    with pytest.raises(TypeError):
+        GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+
+    # all present
+    class GandalfUpgrade(DataUpgrade):
+        def pre_upgrade_check(self):
+            pass
+
+        def log_rollback_instructions(self):
+            pass
+
+        def _on_upgrade_granted(self, _):
+            pass
+
+    GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+
+
+def test_build_upgrade_stack_raises_not_implemented_vm(harness):
+    class GandalfUpgrade(DataUpgrade):
+        def pre_upgrade_check(self):
+            pass
+
+        def log_rollback_instructions(self):
+            pass
+
+        def _on_upgrade_granted(self, _):
+            pass
+
+    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+
+    with pytest.raises(NotImplementedError):
+        gandalf.build_upgrade_stack()
+
+
+def test_build_upgrade_stack_succeeds_k8s(harness):
+    class GandalfUpgrade(DataUpgrade):
+        def pre_upgrade_check(self):
+            pass
+
+        def log_rollback_instructions(self):
+            pass
+
+        def _on_upgrade_granted(self, _):
+            pass
+
+    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
+
+    gandalf.build_upgrade_stack()
