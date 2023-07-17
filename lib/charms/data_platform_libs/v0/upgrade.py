@@ -38,7 +38,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
 
 PYDEPS = ["pydantic>=1.10,<2"]
 
@@ -578,12 +578,22 @@ class DataUpgrade(Object, ABC):
         if not self.peer_relation:
             return None
 
+        # needed to refresh the stack
+        # now leader pulls a fresh stack from newly updated relation data
+        if self.charm.unit.is_leader():
+            self._upgrade_stack = None
+
         self.peer_relation.data[self.charm.unit].update({"state": "failed"})
 
     def set_unit_completed(self) -> None:
         """Sets unit `state=completed` to the upgrade peer data."""
         if not self.peer_relation:
             return None
+
+        # needed to refresh the stack
+        # now leader pulls a fresh stack from newly updated relation data
+        if self.charm.unit.is_leader():
+            self._upgrade_stack = None
 
         self.peer_relation.data[self.charm.unit].update({"state": "completed"})
 
@@ -622,12 +632,12 @@ class DataUpgrade(Object, ABC):
             self.pre_upgrade_check()
 
             if self.substrate == "k8s":
-                logger.info("Building upgrade stack for K8s...")
+                logger.info("Building upgrade-stack for K8s...")
                 built_upgrade_stack = sorted(
                     [int(unit.name.split("/")[1]) for unit in self.app_units]
                 )
             else:
-                logger.info("Building upgrade stack for VMs...")
+                logger.info("Building upgrade-stack for VMs...")
                 built_upgrade_stack = self.build_upgrade_stack()
 
             logger.debug(f"Built upgrade stack of {built_upgrade_stack}")
@@ -722,12 +732,12 @@ class DataUpgrade(Object, ABC):
 
         # if all units completed, mark as complete
         if not self.upgrade_stack:
-            if self.cluster_state == "idle":
-                logger.debug("upgrade-changed event handled before pre-checks, exiting...")
-                return
-            elif self.cluster_state == "completed":
+            if self.state == "completed" and self.cluster_state in ["idle", "completed"]:
                 logger.info("All units completed upgrade, setting idle upgrade state...")
                 self.peer_relation.data[self.charm.unit].update({"state": "idle"})
+                return
+            if self.cluster_state == "idle":
+                logger.debug("upgrade-changed event handled before pre-checks, exiting...")
                 return
             else:
                 logger.debug("Did not find upgrade-stack or completed cluster state, deferring...")
