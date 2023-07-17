@@ -6,6 +6,7 @@ parts:
   charm:
     charm-binary-python-packages:
       - pydantic
+      - PyYAML # https://github.com/yaml/pyyaml/issues/601
     build-packages:
       - rustc
       - cargo

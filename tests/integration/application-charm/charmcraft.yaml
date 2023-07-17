@@ -13,3 +13,4 @@ parts:
   charm:
     charm-binary-python-packages:
       - psycopg[binary]
+      - PyYAML # https://github.com/yaml/pyyaml/issues/601

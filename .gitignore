@@ -13,3 +13,4 @@ tests/integration/database-charm/lib/charms/data_platform_libs/v0/data_interface
 tests/integration/kafka-charm/lib/charms/data_platform_libs/v0/data_interfaces.py
 tests/integration/s3-charm/lib/charms/data_platform_libs/v0/s3.py'
 .vscode/
+.idea/
