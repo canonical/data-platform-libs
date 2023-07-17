@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import json
+
 import pytest
 from ops.charm import CharmBase
 from ops.testing import Harness
@@ -490,7 +491,7 @@ def test_pre_upgrade_check_action_builds_upgrade_stack_k8s(harness, mocker):
 
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
     harness.update_relation_data(
-        harness.charm.upgrade.peer_relation.id, f"gandalf/1", {"state": "idle"}
+        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
     )
 
     mock_event = mocker.MagicMock()
