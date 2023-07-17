@@ -470,16 +470,13 @@ def test_pre_upgrade_check_action_builds_upgrade_stack_vm(harness, mocker):
 
         harness.charm.upgrade.build_upgrade_stack.assert_called_once()
 
-    assert harness.charm.upgrade.peer_relation.data[harness.charm.app].get("upgrade-stack", "")
-    assert (
-        json.loads(
-            harness.charm.upgrade.peer_relation.data[harness.charm.app].get("upgrade-stack", "")
-        )
-        == harness.charm.upgrade.upgrade_stack
+    relation_stack = harness.charm.upgrade.peer_relation.data[harness.charm.app].get(
+        "upgrade-stack", ""
     )
-    assert json.loads(
-        harness.charm.upgrade.peer_relation.data[harness.charm.app].get("upgrade-stack", "")
-    ) == [1, 2, 3]
+
+    assert relation_stack
+    assert json.loads(relation_stack) == harness.charm.upgrade.upgrade_stack
+    assert json.loads(relation_stack) == [1, 2, 3]
 
 
 def test_pre_upgrade_check_action_builds_upgrade_stack_k8s(harness, mocker):
@@ -499,13 +496,10 @@ def test_pre_upgrade_check_action_builds_upgrade_stack_k8s(harness, mocker):
     mock_event = mocker.MagicMock()
     harness.charm.upgrade._on_pre_upgrade_check_action(mock_event)
 
-    assert harness.charm.upgrade.peer_relation.data[harness.charm.app].get("upgrade-stack", "")
-    assert (
-        json.loads(
-            harness.charm.upgrade.peer_relation.data[harness.charm.app].get("upgrade-stack", "")
-        )
-        == harness.charm.upgrade.upgrade_stack
+    relation_stack = harness.charm.upgrade.peer_relation.data[harness.charm.app].get(
+        "upgrade-stack", ""
     )
-    assert json.loads(
-        harness.charm.upgrade.peer_relation.data[harness.charm.app].get("upgrade-stack", "")
-    ) == [0, 1]
+
+    assert relation_stack
+    assert json.loads(relation_stack) == harness.charm.upgrade.upgrade_stack
+    assert json.loads(relation_stack) == [0, 1]
