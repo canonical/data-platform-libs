@@ -487,11 +487,11 @@ def test_pre_upgrade_check_action_runs_pre_upgrade_checks(harness, mocker):
 
     harness.set_leader(True)
 
-    with mocker.patch.object(harness.charm.upgrade, "pre_upgrade_check"):
-        mock_event = mocker.MagicMock()
-        harness.charm.upgrade._on_pre_upgrade_check_action(mock_event)
+    mocker.patch.object(harness.charm.upgrade, "pre_upgrade_check")
+    mock_event = mocker.MagicMock()
+    harness.charm.upgrade._on_pre_upgrade_check_action(mock_event)
 
-        harness.charm.upgrade.pre_upgrade_check.assert_called_once()
+    harness.charm.upgrade.pre_upgrade_check.assert_called_once()
 
 
 def test_pre_upgrade_check_action_builds_upgrade_stack_vm(harness, mocker):
@@ -501,11 +501,11 @@ def test_pre_upgrade_check_action_builds_upgrade_stack_vm(harness, mocker):
 
     harness.set_leader(True)
 
-    with mocker.patch.object(harness.charm.upgrade, "build_upgrade_stack", return_value=[1, 2, 3]):
-        mock_event = mocker.MagicMock()
-        harness.charm.upgrade._on_pre_upgrade_check_action(mock_event)
+    mocker.patch.object(harness.charm.upgrade, "build_upgrade_stack", return_value=[1, 2, 3])
+    mock_event = mocker.MagicMock()
+    harness.charm.upgrade._on_pre_upgrade_check_action(mock_event)
 
-        harness.charm.upgrade.build_upgrade_stack.assert_called_once()
+    harness.charm.upgrade.build_upgrade_stack.assert_called_once()
 
     relation_stack = harness.charm.upgrade.peer_relation.data[harness.charm.app].get(
         "upgrade-stack", ""
@@ -594,27 +594,24 @@ def test_upgrade_charm_sets_failed_and_logs(harness, mocker):
     harness.add_relation("upgrade", "gandalf")
 
     # if not upgrade stack
-    with (
-        mocker.patch.object(harness.charm.upgrade, "log_rollback_instructions"),
-        mocker.patch.object(harness.charm.upgrade, "set_unit_failed"),
-    ):
-        harness.charm.on.upgrade_charm.emit()
+    mocker.patch.object(harness.charm.upgrade, "log_rollback_instructions")
+    mocker.patch.object(harness.charm.upgrade, "set_unit_failed")
+    harness.charm.on.upgrade_charm.emit()
 
-        harness.charm.upgrade.log_rollback_instructions.assert_called_once()
-        harness.charm.upgrade.set_unit_failed.assert_called_once()
+    harness.charm.upgrade.log_rollback_instructions.assert_called_once()
+    harness.charm.upgrade.set_unit_failed.assert_called_once()
 
     # if cluster state failed
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "failed"})
     harness.charm.upgrade.upgrade_stack = [0]
 
-    with (
-        mocker.patch.object(harness.charm.upgrade, "log_rollback_instructions"),
-        mocker.patch.object(harness.charm.upgrade, "set_unit_failed"),
-    ):
-        harness.charm.on.upgrade_charm.emit()
+    mocker.patch.object(harness.charm.upgrade, "log_rollback_instructions")
+    mocker.patch.object(harness.charm.upgrade, "set_unit_failed")
 
-        harness.charm.upgrade.log_rollback_instructions.assert_called_once()
-        harness.charm.upgrade.set_unit_failed.assert_called_once()
+    harness.charm.on.upgrade_charm.emit()
+
+    harness.charm.upgrade.log_rollback_instructions.assert_called_once()
+    harness.charm.upgrade.set_unit_failed.assert_called_once()
 
 
 def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
@@ -625,15 +622,15 @@ def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "idle"})
     harness.charm.upgrade.upgrade_stack = [0]
 
-    with mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check"):
-        harness.charm.on.upgrade_charm.emit()
+    mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
+    harness.charm.on.upgrade_charm.emit()
 
-        harness.charm.upgrade._upgrade_supported_check.assert_not_called()
+    harness.charm.upgrade._upgrade_supported_check.assert_not_called()
 
-        harness.set_leader(True)
-        harness.charm.on.upgrade_charm.emit()
+    harness.set_leader(True)
+    harness.charm.on.upgrade_charm.emit()
 
-        harness.charm.upgrade._upgrade_supported_check.assert_called_once()
+    harness.charm.upgrade._upgrade_supported_check.assert_called_once()
 
 
 def test_upgrade_charm_sets_ready(harness, mocker):
@@ -645,10 +642,10 @@ def test_upgrade_charm_sets_ready(harness, mocker):
     harness.charm.upgrade.upgrade_stack = [0]
     harness.set_leader(True)
 
-    with mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check"):
-        harness.charm.on.upgrade_charm.emit()
+    mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
+    harness.charm.on.upgrade_charm.emit()
 
-        assert harness.charm.upgrade.state == "ready"
+    assert harness.charm.upgrade.state == "ready"
 
 
 def test_upgrade_changed_fails_unit_if_any_failed(harness, mocker):
@@ -660,16 +657,15 @@ def test_upgrade_changed_fails_unit_if_any_failed(harness, mocker):
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "completed"})
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
 
-    with (
-        mocker.patch.object(harness.charm.upgrade, "log_rollback_instructions"),
-        mocker.patch.object(harness.charm.upgrade, "set_unit_failed"),
-    ):
-        harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "failed"}
-        )
+    mocker.patch.object(harness.charm.upgrade, "log_rollback_instructions")
+    mocker.patch.object(harness.charm.upgrade, "set_unit_failed")
 
-        harness.charm.upgrade.log_rollback_instructions.assert_called_once()
-        harness.charm.upgrade.set_unit_failed.assert_called_once()
+    harness.update_relation_data(
+        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "failed"}
+    )
+
+    harness.charm.upgrade.log_rollback_instructions.assert_called_once()
+    harness.charm.upgrade.set_unit_failed.assert_called_once()
 
 
 def test_upgrade_changed_sets_idle_if_all_completed(harness):
@@ -712,12 +708,12 @@ def test_upgrade_changed_does_not_recurse_if_called_all_idle(harness, mocker):
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
     harness.set_leader(True)
 
-    with mocker.patch.object(harness.charm.upgrade, "on_upgrade_changed"):
-        harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
-        )
+    mocker.patch.object(harness.charm.upgrade, "on_upgrade_changed")
+    harness.update_relation_data(
+        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
+    )
 
-        harness.charm.upgrade.on_upgrade_changed.assert_called_once()
+    harness.charm.upgrade.on_upgrade_changed.assert_called_once()
 
 
 @pytest.mark.parametrize(
