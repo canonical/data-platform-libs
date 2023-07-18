@@ -12,6 +12,7 @@ from charms.data_platform_libs.v0.upgrade import (
     BaseModel,
     DataUpgrade,
     DependencyModel,
+    VersionError,
     build_complete_sem_ver,
     verify_caret_requirements,
     verify_inequality_requirements,
@@ -536,3 +537,48 @@ def test_pre_upgrade_check_action_builds_upgrade_stack_k8s(harness, mocker):
     assert relation_stack
     assert json.loads(relation_stack) == harness.charm.upgrade.upgrade_stack
     assert json.loads(relation_stack) == [0, 1]
+
+
+def test_upgrade_suppported_check_fails(harness):
+    bad_deps = {
+        "gandalf_the_white": {
+            "dependencies": {"gandalf_the_grey": ">5"},
+            "name": "gandalf",
+            "upgrade_supported": "~0.2",
+            "version": "0.2.1",
+        },
+    }
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+    )
+
+    harness.add_relation("upgrade", "gandalf")
+
+    harness.update_relation_data(
+        harness.charm.upgrade.peer_relation.id, "gandalf", {"dependencies": json.dumps(bad_deps)}
+    )
+
+    with pytest.raises(VersionError):
+        harness.charm.upgrade._upgrade_supported_check()
+
+
+def test_upgrade_suppported_check_succeeds(harness):
+    good_deps = {
+        "gandalf_the_white": {
+            "dependencies": {"gandalf_the_grey": ">5"},
+            "name": "gandalf",
+            "upgrade_supported": ">0.2",
+            "version": "1.3",
+        },
+    }
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+    )
+
+    harness.add_relation("upgrade", "gandalf")
+
+    harness.update_relation_data(
+        harness.charm.upgrade.peer_relation.id, "gandalf", {"dependencies": json.dumps(good_deps)}
+    )
+
+    harness.charm.upgrade._upgrade_supported_check()
