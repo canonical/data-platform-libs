@@ -11,7 +11,3 @@ bases:
       - name: "ubuntu"
         channel: "20.04"
         architectures: [amd64]
-parts:
-  charm:
-    charm-binary-python-packages:
-      - PyYAML # https://github.com/yaml/pyyaml/issues/601

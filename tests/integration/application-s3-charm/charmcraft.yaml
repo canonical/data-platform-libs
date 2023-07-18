@@ -9,7 +9,3 @@ bases:
     run-on:
       - name: "ubuntu"
         channel: "22.04"
-parts:
-  charm:
-    charm-binary-python-packages:
-      - PyYAML # https://github.com/yaml/pyyaml/issues/601

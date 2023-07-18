@@ -11,6 +11,4 @@ bases:
         channel: "22.04"
 parts:
   charm:
-    charm-binary-python-packages:
-      - psycopg2-binary==2.9.3
-      - PyYAML # https://github.com/yaml/pyyaml/issues/601
+    charm-binary-python-packages: [psycopg2-binary==2.9.3]
