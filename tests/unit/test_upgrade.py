@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import json
+import logging
 
 import pytest
 from ops.charm import CharmBase
@@ -19,6 +20,8 @@ from charms.data_platform_libs.v0.upgrade import (
     verify_tilde_requirements,
     verify_wildcard_requirements,
 )
+
+logger = logging.getLogger(__name__)
 
 GANDALF_METADATA = """
 name: gandalf
