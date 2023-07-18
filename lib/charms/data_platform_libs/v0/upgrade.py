@@ -803,7 +803,29 @@ class DataUpgrade(Object, ABC):
         raise NotImplementedError
 
     def _on_upgrade_finished(self, event: UpgradeFinishedEvent) -> None:
-        """Handler for `upgrade-finished` events."""
+        """Handler for `upgrade-finished` events.
+
+        K8s only. It should decrement the rolling update strategy partition by using a code
+        like the following:
+
+            from lightkube.core.client import Client
+            from lightkube.core.exceptions import ApiError
+            from lightkube.resources.apps_v1 import StatefulSet
+
+            partition = self.upgrade_stack[-1]
+            try:
+                patch = {"spec": {"updateStrategy": {"rollingUpdate": {"partition": partition}}}}
+                Client().patch(StatefulSet, name=self.app_name, namespace=self.namespace, obj=patch)
+                logger.debug(f"Kubernetes StatefulSet partition set to {partition}")
+            except ApiError as e:
+                if e.status.code == 403:
+                    logger.error("Kubernetes StatefulSet patch failed: `juju trust` needed")
+                else:
+                    logger.exception("Kubernetes StatefulSet patch failed")
+
+        That shouldn't happen for the last unit (the first that is upgraded). For that unit it
+        should be done through an action after the upgrade success on that unit is double-checked.
+        """
         # don't raise if vm substrate, only return
         if self.substrate == "vm":
             return
