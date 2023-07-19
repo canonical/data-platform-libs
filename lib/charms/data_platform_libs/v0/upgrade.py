@@ -353,6 +353,21 @@ class ClusterNotReadyError(UpgradeError):
         super().__init__(message, cause=cause, resolution=resolution)
 
 
+class KubernetesClientError(UpgradeError):
+    """Exception flagging that a call to Kubernetes API failed.
+
+    For example, if the cluster fails :class:`DataUpgrade._set_rolling_update_partition`
+
+    Args:
+        message: string message to be logged out
+        cause: short human-readable description of the cause of the error
+        resolution: short human-readable instructions for manual error resolution (optional)
+    """
+
+    def __init__(self, message: str, cause: str, resolution: Optional[str] = None):
+        super().__init__(message, cause=cause, resolution=resolution)
+
+
 class VersionError(UpgradeError):
     """Exception flagging that the old `version` fails to meet the new `upgrade_supported`s.
 
@@ -401,14 +416,7 @@ class UpgradeGrantedEvent(EventBase):
 
 
 class UpgradeFinishedEvent(EventBase):
-    """Used to tell units that they finished the upgrade.
-
-    Handlers of this event must meet the following:
-        - MUST trigger the upgrade in the next unit by, for example, decrementing the partition
-            value from the rolling update strategy
-        - MUST update unit `state` if the previous operation fails, calling
-            :class:`DataUpgrade.set_unit_failed`
-    """
+    """Used to tell units that they finished the upgrade."""
 
 
 class UpgradeEvents(CharmEvents):
@@ -801,7 +809,33 @@ class DataUpgrade(Object, ABC):
         raise NotImplementedError
 
     def _on_upgrade_finished(self, event: UpgradeFinishedEvent) -> None:
-        """Handler for `upgrade-finished` events.
+        """Handler for `upgrade-finished` events."""
+        if self.substrate == "vm" or not self.peer_relation or not self.upgrade_stack:
+            return
+
+        # This hook shouldn't run for the last unit (the first that is upgraded). For that unit it
+        # should be done through an action after the upgrade success on that unit is double-checked.
+        if len(self.upgrade_stack) == len({self.charm.unit}.union(self.peer_relation.units)):
+            # Skip auto setting of partition for last unit (first to be upgraded).
+            logger.info(
+                f"{self.charm.unit.name} unit upgraded. Evaluate and run `resume-upgrade` action to continue upgrade"
+            )
+            return
+
+        try:
+            next_partition = self.upgrade_stack.pop()
+            logger.debug(f"Set rolling update partition to unit {next_partition}")
+            self._set_rolling_update_partition(partition=next_partition)
+        except KubernetesClientError:
+            logger.exception("Cannot set rolling update partition")
+            self.set_unit_failed()
+            self.log_rollback_instructions()
+
+    def _set_rolling_update_partition(self, partition: int) -> None:
+        """Patch the StatefulSet's `spec.updateStrategy.rollingUpdate.partition`.
+
+        Args:
+            partition: partition to set.
 
         K8s only. It should decrement the rolling update strategy partition by using a code
         like the following:
@@ -810,21 +844,17 @@ class DataUpgrade(Object, ABC):
             from lightkube.core.exceptions import ApiError
             from lightkube.resources.apps_v1 import StatefulSet
 
-            partition = self.upgrade_stack[-1]
             try:
                 patch = {"spec": {"updateStrategy": {"rollingUpdate": {"partition": partition}}}}
-                Client().patch(StatefulSet, name=self.app_name, namespace=self.namespace, obj=patch)
+                Client().patch(StatefulSet, name=self.charm.model.app.name, namespace=self.charm.model.name, obj=patch)
                 logger.debug(f"Kubernetes StatefulSet partition set to {partition}")
             except ApiError as e:
                 if e.status.code == 403:
-                    logger.error("Kubernetes StatefulSet patch failed: `juju trust` needed")
+                    cause = "`juju trust` needed"
                 else:
-                    logger.exception("Kubernetes StatefulSet patch failed")
-
-        That shouldn't happen for the last unit (the first that is upgraded). For that unit it
-        should be done through an action after the upgrade success on that unit is double-checked.
+                    cause = str(e)
+                raise KubernetesClientError("Kubernetes StatefulSet patch failed", cause)
         """
-        # don't raise if vm substrate, only return
         if self.substrate == "vm":
             return
 
