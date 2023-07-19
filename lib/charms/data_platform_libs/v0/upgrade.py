@@ -784,13 +784,13 @@ class DataUpgrade(Object, ABC):
         if self.charm.unit == top_unit:
             if self.substrate == "vm" and top_state in ["ready", "upgrading"]:
                 logger.debug(
-                    f"{top_unit} is next to upgrade, emitting `upgrade_granted` event and upgrading..."
+                    f"{top_unit.name} is next to upgrade, emitting `upgrade_granted` event and upgrading..."
                 )
                 self.peer_relation.data[self.charm.unit].update({"state": "upgrading"})
                 getattr(self.on, "upgrade_granted").emit()
             if self.substrate == "k8s" and top_state == "completed":
                 logger.debug(
-                    f"{top_unit} has completed the upgrade, emitting `upgrade_finished` event..."
+                    f"{top_unit.name} has completed the upgrade, emitting `upgrade_finished` event..."
                 )
                 getattr(self.on, "upgrade_finished").emit()
 
