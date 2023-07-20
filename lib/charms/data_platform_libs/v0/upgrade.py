@@ -703,6 +703,9 @@ class DataUpgrade(Object, ABC):
             event.fail(message="Nothing to resume, upgrade stack unset.")
             return
 
+        # Check whether this is being run after juju refresh was called
+        # (the size of the upgrade stack should match the number of total
+        # unit minus one).
         if len(self.upgrade_stack) != len(self.peer_relation.units):
             event.fail(message="Upgrade can be resumed only once after juju refresh is called.")
             return
@@ -866,6 +869,8 @@ class DataUpgrade(Object, ABC):
             return
 
         try:
+            # Use the unit number instead of the upgrade stack to avoid race conditions
+            # (i.e. the leader updates the upgrade stack after this hook runs).
             next_partition = unit_number - 1
             logger.debug(f"Set rolling update partition to unit {next_partition}")
             self._set_rolling_update_partition(partition=next_partition)
