@@ -33,6 +33,8 @@ peers:
 GANDALF_ACTIONS = """
 pre-upgrade-check:
   description: "YOU SHALL NOT PASS"
+resume-upgrade:
+  description: "LET IT PASS"
 """
 
 GANDALF_DEPS = {
@@ -376,6 +378,8 @@ def test_data_upgrade_raises_on_init(harness):
     with pytest.raises(TypeError):
         GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
 
+
+def test_on_upgrade_granted_raises_not_implemented_vm(harness, mocker):
     # missing on-upgrade-granted
     class GandalfUpgrade(DataUpgrade):
         def pre_upgrade_check(self):
@@ -384,8 +388,23 @@ def test_data_upgrade_raises_on_init(harness):
         def log_rollback_instructions(self):
             pass
 
-    with pytest.raises(TypeError):
-        GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+    with pytest.raises(NotImplementedError):
+        mock_event = mocker.MagicMock()
+        gandalf._on_upgrade_granted(mock_event)
+
+
+def test_on_upgrade_granted_succeeds_k8s(harness, mocker):
+    class GandalfUpgrade(DataUpgrade):
+        def pre_upgrade_check(self):
+            pass
+
+        def log_rollback_instructions(self):
+            pass
+
+    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
+    mock_event = mocker.MagicMock()
+    gandalf._on_upgrade_granted(mock_event)
 
 
 def test_data_upgrade_succeeds(harness):
@@ -403,6 +422,12 @@ def test_build_upgrade_stack_succeeds_k8s(harness):
     gandalf.build_upgrade_stack()
 
 
+def test_set_rolling_update_partition_raises_not_implemented_k8s(harness):
+    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
+    with pytest.raises(NotImplementedError):
+        gandalf._set_rolling_update_partition(0)
+
+
 def test_set_unit_failed_resets_stack(harness):
     gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
     harness.add_relation("upgrade", "gandalf")
@@ -416,17 +441,24 @@ def test_set_unit_failed_resets_stack(harness):
     assert not gandalf._upgrade_stack
 
 
-def test_set_unit_completed_resets_stack(harness):
-    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
+@pytest.mark.parametrize("substrate,upgrade_finished_call_count", [("vm", 0), ("k8s", 1)])
+def test_set_unit_completed_resets_stack(harness, mocker, substrate, upgrade_finished_call_count):
+    gandalf = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel, substrate=substrate
+    )
     harness.add_relation("upgrade", "gandalf")
     gandalf._upgrade_stack = ["1", "2", "3"]
     harness.set_leader(True)
 
     assert gandalf._upgrade_stack
 
+    upgrade_finished_spy = mocker.spy(gandalf, "_on_upgrade_finished")
+
     gandalf.set_unit_completed()
 
     assert not gandalf._upgrade_stack
+
+    assert upgrade_finished_spy.call_count == upgrade_finished_call_count
 
 
 def test_upgrade_created_sets_idle_and_deps(harness):
@@ -633,9 +665,10 @@ def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
     harness.charm.upgrade._upgrade_supported_check.assert_called_once()
 
 
-def test_upgrade_charm_sets_ready(harness, mocker):
+@pytest.mark.parametrize("substrate,state", [("vm", "ready"), ("k8s", "upgrading")])
+def test_upgrade_charm_sets_right_state(harness, mocker, substrate, state):
     harness.charm.upgrade = GandalfUpgrade(
-        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate=substrate
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "idle"})
@@ -645,7 +678,7 @@ def test_upgrade_charm_sets_ready(harness, mocker):
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
     harness.charm.on.upgrade_charm.emit()
 
-    assert harness.charm.upgrade.state == "ready"
+    assert harness.charm.upgrade.state == state
 
 
 def test_upgrade_changed_fails_unit_if_any_failed(harness, mocker):
