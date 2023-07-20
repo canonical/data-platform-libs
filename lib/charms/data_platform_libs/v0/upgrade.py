@@ -712,8 +712,8 @@ class DataUpgrade(Object, ABC):
 
         try:
             next_partition = self.upgrade_stack[-1]
-            event.set_results({"message": f"Upgrade will resume on unit {next_partition}"})
             self._set_rolling_update_partition(partition=next_partition)
+            event.set_results({"message": f"Upgrade will resume on unit {next_partition}"})
         except KubernetesClientError:
             event.fail(message="Cannot set rolling update partition.")
 
