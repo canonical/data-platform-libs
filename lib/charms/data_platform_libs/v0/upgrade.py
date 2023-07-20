@@ -468,6 +468,10 @@ class DataUpgrade(Object, ABC):
         self.framework.observe(
             getattr(self.charm.on, "pre_upgrade_check_action"), self._on_pre_upgrade_check_action
         )
+        if self.substrate == "k8s":
+            self.framework.observe(
+                getattr(self.charm.on, "resume_upgrade_action"), self._on_resume_upgrade_action
+            )
 
     @property
     def peer_relation(self) -> Optional[Relation]:
@@ -682,6 +686,34 @@ class DataUpgrade(Object, ABC):
         logger.info("Setting upgrade-stack to relation data...")
         self.upgrade_stack = built_upgrade_stack
 
+    def _on_resume_upgrade_action(self, event: ActionEvent) -> None:
+        """Handle resume upgrade action.
+
+        Continue the upgrade by setting the partition to the next unit.
+        """
+        if not self.peer_relation:
+            event.fail(message="Could not find upgrade relation.")
+            return
+
+        if not self.charm.unit.is_leader():
+            event.fail(message="Action must be ran on the Juju leader.")
+            return
+
+        if not self.upgrade_stack:
+            event.fail(message="Nothing to resume, upgrade stack unset.")
+            return
+
+        if len(self.upgrade_stack) != len(self.peer_relation.units):
+            event.fail(message="Upgrade can be resumed only once after juju refresh is called.")
+            return
+
+        try:
+            next_partition = self.upgrade_stack[-1]
+            event.set_results({"message": f"Upgrade will resume on unit {next_partition}"})
+            self._set_rolling_update_partition(partition=next_partition)
+        except KubernetesClientError:
+            event.fail(message="Cannot set rolling update partition.")
+
     def _upgrade_supported_check(self) -> None:
         """Checks if previous versions can be upgraded to new versions.
 
@@ -808,22 +840,33 @@ class DataUpgrade(Object, ABC):
 
         raise NotImplementedError
 
-    def _on_upgrade_finished(self, event: UpgradeFinishedEvent) -> None:
+    def _on_upgrade_finished(self, _) -> None:
         """Handler for `upgrade-finished` events."""
-        if self.substrate == "vm" or not self.peer_relation or not self.upgrade_stack:
+        if self.substrate == "vm" or not self.peer_relation:
             return
+
+        # Emit the upgrade relation changed event in the leader to update the upgrade_stack.
+        if self.charm.unit.is_leader():
+            self.charm.on[self.relation_name].relation_changed.emit(
+                self.model.get_relation(self.relation_name)
+            )
 
         # This hook shouldn't run for the last unit (the first that is upgraded). For that unit it
         # should be done through an action after the upgrade success on that unit is double-checked.
-        if len(self.upgrade_stack) == len({self.charm.unit}.union(self.peer_relation.units)):
-            # Skip auto setting of partition for last unit (first to be upgraded).
+        unit_number = int(self.charm.unit.name.split("/")[1])
+        if unit_number == len(self.peer_relation.units):
             logger.info(
                 f"{self.charm.unit.name} unit upgraded. Evaluate and run `resume-upgrade` action to continue upgrade"
             )
             return
 
+        # Also, the hook shouldn't run for the first unit (the last that is upgraded).
+        if unit_number == 0:
+            logger.info(f"{self.charm.unit.name} unit upgraded. Upgrade is complete")
+            return
+
         try:
-            next_partition = self.upgrade_stack.pop()
+            next_partition = unit_number - 1
             logger.debug(f"Set rolling update partition to unit {next_partition}")
             self._set_rolling_update_partition(partition=next_partition)
         except KubernetesClientError:
