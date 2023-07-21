@@ -646,7 +646,6 @@ def test_resume_upgrade_action_succeeds_only_when_ran_at_the_right_moment(
     harness.charm.upgrade._on_resume_upgrade_action(mock_event)
 
     assert mock_event.fail.call_count == (0 if has_succeeded else 1)
-    print(mock_event.set_results.call_count)
     assert mock_event.set_results.call_count == (1 if has_succeeded else 0)
 
 
