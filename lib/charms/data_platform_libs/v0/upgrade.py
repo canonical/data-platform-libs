@@ -38,7 +38,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 PYDEPS = ["pydantic>=1.10,<2"]
 
@@ -353,6 +353,21 @@ class ClusterNotReadyError(UpgradeError):
         super().__init__(message, cause=cause, resolution=resolution)
 
 
+class KubernetesClientError(UpgradeError):
+    """Exception flagging that a call to Kubernetes API failed.
+
+    For example, if the cluster fails :class:`DataUpgrade._set_rolling_update_partition`
+
+    Args:
+        message: string message to be logged out
+        cause: short human-readable description of the cause of the error
+        resolution: short human-readable instructions for manual error resolution (optional)
+    """
+
+    def __init__(self, message: str, cause: str, resolution: Optional[str] = None):
+        super().__init__(message, cause=cause, resolution=resolution)
+
+
 class VersionError(UpgradeError):
     """Exception flagging that the old `version` fails to meet the new `upgrade_supported`s.
 
@@ -400,6 +415,10 @@ class UpgradeGrantedEvent(EventBase):
     """
 
 
+class UpgradeFinishedEvent(EventBase):
+    """Used to tell units that they finished the upgrade."""
+
+
 class UpgradeEvents(CharmEvents):
     """Upgrade events.
 
@@ -407,6 +426,7 @@ class UpgradeEvents(CharmEvents):
     """
 
     upgrade_granted = EventSource(UpgradeGrantedEvent)
+    upgrade_finished = EventSource(UpgradeFinishedEvent)
 
 
 # --- EVENT HANDLER ---
@@ -442,11 +462,16 @@ class DataUpgrade(Object, ABC):
         )
         self.framework.observe(self.charm.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(getattr(self.on, "upgrade_granted"), self._on_upgrade_granted)
+        self.framework.observe(getattr(self.on, "upgrade_finished"), self._on_upgrade_finished)
 
         # actions
         self.framework.observe(
             getattr(self.charm.on, "pre_upgrade_check_action"), self._on_pre_upgrade_check_action
         )
+        if self.substrate == "k8s":
+            self.framework.observe(
+                getattr(self.charm.on, "resume_upgrade_action"), self._on_resume_upgrade_action
+            )
 
     @property
     def peer_relation(self) -> Optional[Relation]:
@@ -556,7 +581,7 @@ class DataUpgrade(Object, ABC):
         Called by leader unit during :meth:`_on_pre_upgrade_check_action`.
 
         Returns:
-            Iterable of integeter unit.ids, LIFO ordered in upgrade order
+            Iterable of integer unit.ids, LIFO ordered in upgrade order
                 i.e `[5, 2, 4, 1, 3]`, unit `3` upgrades first, `5` upgrades last
         """
         # don't raise if k8s substrate, uses default statefulset order
@@ -596,6 +621,13 @@ class DataUpgrade(Object, ABC):
             self._upgrade_stack = None
 
         self.peer_relation.data[self.charm.unit].update({"state": "completed"})
+
+        # Emit upgrade_finished event to run unit's post upgrade operations.
+        if self.substrate == "k8s":
+            logger.debug(
+                f"{self.charm.unit.name} has completed the upgrade, emitting `upgrade_finished` event..."
+            )
+            getattr(self.on, "upgrade_finished").emit()
 
     def _on_upgrade_created(self, event: RelationCreatedEvent) -> None:
         """Handler for `upgrade-relation-created` events."""
@@ -653,6 +685,37 @@ class DataUpgrade(Object, ABC):
 
         logger.info("Setting upgrade-stack to relation data...")
         self.upgrade_stack = built_upgrade_stack
+
+    def _on_resume_upgrade_action(self, event: ActionEvent) -> None:
+        """Handle resume upgrade action.
+
+        Continue the upgrade by setting the partition to the next unit.
+        """
+        if not self.peer_relation:
+            event.fail(message="Could not find upgrade relation.")
+            return
+
+        if not self.charm.unit.is_leader():
+            event.fail(message="Action must be ran on the Juju leader.")
+            return
+
+        if not self.upgrade_stack:
+            event.fail(message="Nothing to resume, upgrade stack unset.")
+            return
+
+        # Check whether this is being run after juju refresh was called
+        # (the size of the upgrade stack should match the number of total
+        # unit minus one).
+        if len(self.upgrade_stack) != len(self.peer_relation.units):
+            event.fail(message="Upgrade can be resumed only once after juju refresh is called.")
+            return
+
+        try:
+            next_partition = self.upgrade_stack[-1]
+            self._set_rolling_update_partition(partition=next_partition)
+            event.set_results({"message": f"Upgrade will resume on unit {next_partition}"})
+        except KubernetesClientError:
+            event.fail(message="Cannot set rolling update partition.")
 
     def _upgrade_supported_check(self) -> None:
         """Checks if previous versions can be upgraded to new versions.
@@ -716,7 +779,9 @@ class DataUpgrade(Object, ABC):
                 return
 
         # all units sets state to ready
-        self.peer_relation.data[self.charm.unit].update({"state": "ready"})
+        self.peer_relation.data[self.charm.unit].update(
+            {"state": "ready" if self.substrate == "vm" else "upgrading"}
+        )
 
     def on_upgrade_changed(self, event: EventBase) -> None:
         """Handler for `upgrade-relation-changed` events."""
@@ -765,11 +830,80 @@ class DataUpgrade(Object, ABC):
         # if unit top of stack, emit granted event
         if self.charm.unit == top_unit and top_state in ["ready", "upgrading"]:
             logger.debug(
-                f"{top_unit} is next to upgrade, emitting `upgrade_granted` event and upgrading..."
+                f"{top_unit.name} is next to upgrade, emitting `upgrade_granted` event and upgrading..."
             )
             self.peer_relation.data[self.charm.unit].update({"state": "upgrading"})
             getattr(self.on, "upgrade_granted").emit()
 
-    @abstractmethod
     def _on_upgrade_granted(self, event: UpgradeGrantedEvent) -> None:
         """Handler for `upgrade-granted` events."""
+        # don't raise if k8s substrate, only return
+        if self.substrate == "k8s":
+            return
+
+        raise NotImplementedError
+
+    def _on_upgrade_finished(self, _) -> None:
+        """Handler for `upgrade-finished` events."""
+        if self.substrate == "vm" or not self.peer_relation:
+            return
+
+        # Emit the upgrade relation changed event in the leader to update the upgrade_stack.
+        if self.charm.unit.is_leader():
+            self.charm.on[self.relation_name].relation_changed.emit(
+                self.model.get_relation(self.relation_name)
+            )
+
+        # This hook shouldn't run for the last unit (the first that is upgraded). For that unit it
+        # should be done through an action after the upgrade success on that unit is double-checked.
+        unit_number = int(self.charm.unit.name.split("/")[1])
+        if unit_number == len(self.peer_relation.units):
+            logger.info(
+                f"{self.charm.unit.name} unit upgraded. Evaluate and run `resume-upgrade` action to continue upgrade"
+            )
+            return
+
+        # Also, the hook shouldn't run for the first unit (the last that is upgraded).
+        if unit_number == 0:
+            logger.info(f"{self.charm.unit.name} unit upgraded. Upgrade is complete")
+            return
+
+        try:
+            # Use the unit number instead of the upgrade stack to avoid race conditions
+            # (i.e. the leader updates the upgrade stack after this hook runs).
+            next_partition = unit_number - 1
+            logger.debug(f"Set rolling update partition to unit {next_partition}")
+            self._set_rolling_update_partition(partition=next_partition)
+        except KubernetesClientError:
+            logger.exception("Cannot set rolling update partition")
+            self.set_unit_failed()
+            self.log_rollback_instructions()
+
+    def _set_rolling_update_partition(self, partition: int) -> None:
+        """Patch the StatefulSet's `spec.updateStrategy.rollingUpdate.partition`.
+
+        Args:
+            partition: partition to set.
+
+        K8s only. It should decrement the rolling update strategy partition by using a code
+        like the following:
+
+            from lightkube.core.client import Client
+            from lightkube.core.exceptions import ApiError
+            from lightkube.resources.apps_v1 import StatefulSet
+
+            try:
+                patch = {"spec": {"updateStrategy": {"rollingUpdate": {"partition": partition}}}}
+                Client().patch(StatefulSet, name=self.charm.model.app.name, namespace=self.charm.model.name, obj=patch)
+                logger.debug(f"Kubernetes StatefulSet partition set to {partition}")
+            except ApiError as e:
+                if e.status.code == 403:
+                    cause = "`juju trust` needed"
+                else:
+                    cause = str(e)
+                raise KubernetesClientError("Kubernetes StatefulSet patch failed", cause)
+        """
+        if self.substrate == "vm":
+            return
+
+        raise NotImplementedError
