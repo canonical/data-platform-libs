@@ -6,6 +6,8 @@ import logging
 
 import pytest
 from ops.charm import CharmBase
+from ops.framework import EventBase
+from ops.model import BlockedStatus
 from ops.testing import Harness
 from pydantic import ValidationError
 
@@ -403,17 +405,21 @@ def test_build_upgrade_stack_succeeds_k8s(harness):
     gandalf.build_upgrade_stack()
 
 
-def test_set_unit_failed_resets_stack(harness):
+def test_set_unit_failed_resets_stack(harness, mocker):
     gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
     harness.add_relation("upgrade", "gandalf")
     gandalf._upgrade_stack = ["1", "2", "3"]
     harness.set_leader(True)
+    log_spy = mocker.spy(GandalfUpgrade, "log_rollback_instructions")
 
     assert gandalf._upgrade_stack
 
     gandalf.set_unit_failed()
 
     assert not gandalf._upgrade_stack
+
+    assert isinstance(harness.charm.unit.status, BlockedStatus)
+    assert log_spy.call_count == 1
 
 
 def test_set_unit_completed_resets_stack(harness):
@@ -542,6 +548,26 @@ def test_pre_upgrade_check_action_builds_upgrade_stack_k8s(harness, mocker):
     assert json.loads(relation_stack) == [0, 1]
 
 
+def test_pre_upgrade_check_recovers_stack(harness, mocker):
+    gandalf_model = GandalfModel(**GANDALF_DEPS)
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=gandalf_model, substrate="k8s"
+    )
+    harness.add_relation("upgrade", "gandalf")
+
+    mocker.patch.object(GandalfUpgrade, "_repair_upgrade_stack")
+
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "failed"})
+    harness.set_leader(True)
+
+    mock_event = mocker.MagicMock()
+    harness.charm.upgrade._on_pre_upgrade_check_action(mock_event)
+
+    GandalfUpgrade._repair_upgrade_stack.assert_called_once()
+    assert isinstance(harness.charm.unit.status, BlockedStatus)
+    assert harness.charm.upgrade.state == "recovery"
+
+
 def test_upgrade_suppported_check_fails(harness):
     bad_deps = {
         "gandalf_the_white": {
@@ -587,33 +613,6 @@ def test_upgrade_suppported_check_succeeds(harness):
     harness.charm.upgrade._upgrade_supported_check()
 
 
-def test_upgrade_charm_sets_failed_and_logs(harness, mocker):
-    harness.charm.upgrade = GandalfUpgrade(
-        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
-    )
-    harness.add_relation("upgrade", "gandalf")
-
-    # if not upgrade stack
-    mocker.patch.object(harness.charm.upgrade, "log_rollback_instructions")
-    mocker.patch.object(harness.charm.upgrade, "set_unit_failed")
-    harness.charm.on.upgrade_charm.emit()
-
-    harness.charm.upgrade.log_rollback_instructions.assert_called_once()
-    harness.charm.upgrade.set_unit_failed.assert_called_once()
-
-    # if cluster state failed
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "failed"})
-    harness.charm.upgrade.upgrade_stack = [0]
-
-    mocker.patch.object(harness.charm.upgrade, "log_rollback_instructions")
-    mocker.patch.object(harness.charm.upgrade, "set_unit_failed")
-
-    harness.charm.on.upgrade_charm.emit()
-
-    harness.charm.upgrade.log_rollback_instructions.assert_called_once()
-    harness.charm.upgrade.set_unit_failed.assert_called_once()
-
-
 def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
     harness.charm.upgrade = GandalfUpgrade(
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
@@ -648,24 +647,22 @@ def test_upgrade_charm_sets_ready(harness, mocker):
     assert harness.charm.upgrade.state == "ready"
 
 
-def test_upgrade_changed_fails_unit_if_any_failed(harness, mocker):
+def test_upgrade_changed_defers_if_recovery(harness, mocker):
     harness.charm.upgrade = GandalfUpgrade(
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
     )
     harness.add_relation("upgrade", "gandalf")
-    harness.charm.upgrade.upgrade_stack = [0]
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "completed"})
-    harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "recovery"})
 
-    mocker.patch.object(harness.charm.upgrade, "log_rollback_instructions")
-    mocker.patch.object(harness.charm.upgrade, "set_unit_failed")
+    with harness.hooks_disabled():
+        harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
 
+    defer_spy = mocker.spy(EventBase, "defer")
     harness.update_relation_data(
         harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "failed"}
     )
 
-    harness.charm.upgrade.log_rollback_instructions.assert_called_once()
-    harness.charm.upgrade.set_unit_failed.assert_called_once()
+    assert defer_spy.call_count == 1
 
 
 def test_upgrade_changed_sets_idle_if_all_completed(harness):
@@ -748,6 +745,27 @@ def test_upgrade_changed_emits_upgrade_granted_only_if_top_of_stack(
     assert harness.charm.upgrade.state == post_state
 
 
+def test_upgrade_changed_emits_upgrade_granted_only_if_all_ready(harness, mocker):
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+    )
+
+    with harness.hooks_disabled():
+        harness.add_relation("upgrade", "gandalf")
+        harness.charm.upgrade.upgrade_stack = [1, 0]
+        harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
+        harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "ready"})
+
+    upgrade_granted_spy = mocker.spy(harness.charm.upgrade, "_on_upgrade_granted")
+
+    harness.update_relation_data(
+        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
+    )
+
+    assert upgrade_granted_spy.call_count == 0
+    assert harness.charm.upgrade.state == "ready"
+
+
 def test_upgrade_changed_recurses_on_leader_and_clears_stack(harness, mocker):
     harness.charm.upgrade = GandalfUpgrade(
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
@@ -792,3 +810,51 @@ def test_upgrade_changed_does_not_recurse_or_change_stack_non_leader(harness, mo
     assert json.loads(
         harness.charm.upgrade.peer_relation.data[harness.charm.app].get("upgrade-stack", "")
     ) == [0, 1]
+
+
+def test_repair_upgrade_stack_puts_failed_unit_first_in_stack(harness):
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+    )
+    harness.add_relation("upgrade", "gandalf")
+    harness.charm.upgrade.upgrade_stack = [0, 2]
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "ready"})
+    harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
+    harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/2")
+    harness.set_leader(True)
+
+    with harness.hooks_disabled():
+        harness.update_relation_data(
+            harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "completed"}
+        )
+        harness.update_relation_data(
+            harness.charm.upgrade.peer_relation.id, "gandalf/2", {"state": "failed"}
+        )
+
+    harness.charm.upgrade._repair_upgrade_stack()
+
+    assert harness.charm.upgrade.upgrade_stack == [0, 1, 2]
+
+
+def test_repair_upgrade_stack_does_not_modify_existing_stack(harness):
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+    )
+    harness.add_relation("upgrade", "gandalf")
+    harness.charm.upgrade.upgrade_stack = [0, 2, 1]
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "ready"})
+    harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
+    harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/2")
+    harness.set_leader(True)
+
+    with harness.hooks_disabled():
+        harness.update_relation_data(
+            harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "failed"}
+        )
+        harness.update_relation_data(
+            harness.charm.upgrade.peer_relation.id, "gandalf/2", {"state": "ready"}
+        )
+
+    harness.charm.upgrade._repair_upgrade_stack()
+
+    assert harness.charm.upgrade.upgrade_stack == [0, 2, 1]
