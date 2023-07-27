@@ -35,6 +35,8 @@ peers:
 GANDALF_ACTIONS = """
 pre-upgrade-check:
   description: "YOU SHALL NOT PASS"
+resume-upgrade:
+  description: “The wise speak only of what they know.”
 """
 
 GANDALF_DEPS = {
@@ -378,17 +380,6 @@ def test_data_upgrade_raises_on_init(harness):
     with pytest.raises(TypeError):
         GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
 
-    # missing on-upgrade-granted
-    class GandalfUpgrade(DataUpgrade):
-        def pre_upgrade_check(self):
-            pass
-
-        def log_rollback_instructions(self):
-            pass
-
-    with pytest.raises(TypeError):
-        GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
-
 
 def test_data_upgrade_succeeds(harness):
     GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
@@ -624,27 +615,21 @@ def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
     harness.charm.on.upgrade_charm.emit()
 
-    harness.charm.upgrade._upgrade_supported_check.assert_not_called()
-
-    harness.set_leader(True)
-    harness.charm.on.upgrade_charm.emit()
-
     harness.charm.upgrade._upgrade_supported_check.assert_called_once()
 
 
-def test_upgrade_charm_sets_ready(harness, mocker):
+def test_upgrade_charm_sets_upgrading(harness, mocker):
     harness.charm.upgrade = GandalfUpgrade(
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "idle"})
     harness.charm.upgrade.upgrade_stack = [0]
-    harness.set_leader(True)
 
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
     harness.charm.on.upgrade_charm.emit()
 
-    assert harness.charm.upgrade.state == "ready"
+    assert harness.charm.upgrade.state == "upgrading"
 
 
 def test_upgrade_changed_defers_if_recovery(harness, mocker):

@@ -435,7 +435,7 @@ class UpgradeEvents(CharmEvents):
 class DataUpgrade(Object, ABC):
     """Manages `upgrade` relation operators for in-place upgrades."""
 
-    STATES = ["recovery", "failed", "ready", "upgrading", "idle", "completed"]
+    STATES = ["recovery", "failed", "idle", "ready", "upgrading", "completed"]
 
     on = UpgradeEvents()  # pyright: ignore [reportGeneralTypeIssues]
 
@@ -543,6 +543,13 @@ class DataUpgrade(Object, ABC):
         self._upgrade_stack = stack
 
     @property
+    def unit_states(self) -> list:
+        if not self.peer_relation:
+            return []
+
+        return [self.peer_relation.data[unit].get("state", "") for unit in self.app_units]
+
+    @property
     def cluster_state(self) -> Optional[str]:
         """Current upgrade state for cluster units.
 
@@ -554,13 +561,11 @@ class DataUpgrade(Object, ABC):
         Returns:
             String of upgrade state from the furthest behind unit.
         """
-        if not self.peer_relation:
+        if not self.unit_states:
             return None
 
-        states = [self.peer_relation.data[unit].get("state", "") for unit in self.app_units]
-
         try:
-            return sorted(states, key=self.STATES.index)[0]
+            return sorted(self.unit_states, key=self.STATES.index)[0]
         except (ValueError, KeyError):
             return None
 
@@ -859,7 +864,7 @@ class DataUpgrade(Object, ABC):
                 return
         else:
             # upgrade ongoing, set status for waiting units
-            if self.cluster_state == "upgrading" and self.state in ["idle", "ready"]:
+            if "upgrading" in self.unit_states and self.state in ["idle", "ready"]:
                 self.charm.unit.status = WaitingStatus("other units upgrading first...")
 
         # pop mutates the `upgrade_stack` attr
