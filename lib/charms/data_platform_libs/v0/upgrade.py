@@ -544,6 +544,11 @@ class DataUpgrade(Object, ABC):
 
     @property
     def unit_states(self) -> list:
+        """Current upgrade state for all units.
+
+        Returns:
+            Unsorted list of upgrade states for all units.
+        """
         if not self.peer_relation:
             return []
 
