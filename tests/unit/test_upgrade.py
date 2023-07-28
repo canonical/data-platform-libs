@@ -15,6 +15,7 @@ from charms.data_platform_libs.v0.upgrade import (
     BaseModel,
     DataUpgrade,
     DependencyModel,
+    KubernetesClientError,
     VersionError,
     build_complete_sem_ver,
     verify_caret_requirements,
@@ -35,6 +36,8 @@ peers:
 GANDALF_ACTIONS = """
 pre-upgrade-check:
   description: "YOU SHALL NOT PASS"
+resume-upgrade:
+  description: “The wise speak only of what they know.”
 """
 
 GANDALF_DEPS = {
@@ -378,6 +381,8 @@ def test_data_upgrade_raises_on_init(harness):
     with pytest.raises(TypeError):
         GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
 
+
+def test_on_upgrade_granted_raises_not_implemented_vm(harness, mocker):
     # missing on-upgrade-granted
     class GandalfUpgrade(DataUpgrade):
         def pre_upgrade_check(self):
@@ -386,8 +391,23 @@ def test_data_upgrade_raises_on_init(harness):
         def log_rollback_instructions(self):
             pass
 
-    with pytest.raises(TypeError):
-        GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+    with pytest.raises(NotImplementedError):
+        mock_event = mocker.MagicMock()
+        gandalf._on_upgrade_granted(mock_event)
+
+
+def test_on_upgrade_granted_succeeds_k8s(harness, mocker):
+    class GandalfUpgrade(DataUpgrade):
+        def pre_upgrade_check(self):
+            pass
+
+        def log_rollback_instructions(self):
+            pass
+
+    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
+    mock_event = mocker.MagicMock()
+    gandalf._on_upgrade_granted(mock_event)
 
 
 def test_data_upgrade_succeeds(harness):
@@ -403,6 +423,17 @@ def test_build_upgrade_stack_raises_not_implemented_vm(harness):
 def test_build_upgrade_stack_succeeds_k8s(harness):
     gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
     gandalf.build_upgrade_stack()
+
+
+def test_set_rolling_update_partition_succeeds_vm(harness):
+    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel)
+    gandalf._set_rolling_update_partition(0)
+
+
+def test_set_rolling_update_partition_raises_not_implemented_k8s(harness):
+    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
+    with pytest.raises(NotImplementedError):
+        gandalf._set_rolling_update_partition(0)
 
 
 def test_set_unit_failed_resets_stack(harness, mocker):
@@ -422,17 +453,24 @@ def test_set_unit_failed_resets_stack(harness, mocker):
     assert log_spy.call_count == 1
 
 
-def test_set_unit_completed_resets_stack(harness):
-    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
+@pytest.mark.parametrize("substrate,upgrade_finished_call_count", [("vm", 0), ("k8s", 1)])
+def test_set_unit_completed_resets_stack(harness, mocker, substrate, upgrade_finished_call_count):
+    gandalf = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel, substrate=substrate
+    )
     harness.add_relation("upgrade", "gandalf")
     gandalf._upgrade_stack = ["1", "2", "3"]
     harness.set_leader(True)
 
     assert gandalf._upgrade_stack
 
+    upgrade_finished_spy = mocker.spy(gandalf, "_on_upgrade_finished")
+
     gandalf.set_unit_completed()
 
     assert not gandalf._upgrade_stack
+
+    assert upgrade_finished_spy.call_count == upgrade_finished_call_count
 
 
 def test_upgrade_created_sets_idle_and_deps(harness):
@@ -568,6 +606,75 @@ def test_pre_upgrade_check_recovers_stack(harness, mocker):
     assert harness.charm.upgrade.state == "recovery"
 
 
+def test_resume_upgrade_action_fails_non_leader(harness, mocker):
+    gandalf_model = GandalfModel(**GANDALF_DEPS)
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=gandalf_model, substrate="k8s"
+    )
+    harness.add_relation("upgrade", "gandalf")
+
+    mock_event = mocker.MagicMock()
+    harness.charm.upgrade._on_resume_upgrade_action(mock_event)
+
+    mock_event.fail.assert_called_once()
+
+
+def test_resume_upgrade_action_fails_without_upgrade_stack(harness, mocker):
+    gandalf_model = GandalfModel(**GANDALF_DEPS)
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=gandalf_model, substrate="k8s"
+    )
+    harness.add_relation("upgrade", "gandalf")
+
+    harness.set_leader(True)
+
+    mock_event = mocker.MagicMock()
+    harness.charm.upgrade._on_resume_upgrade_action(mock_event)
+
+    mock_event.fail.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "upgrade_stack, has_k8s_error, has_succeeded",
+    [([0], False, False), ([0, 1, 2], False, False), ([0, 1], False, True), ([0, 1], True, False)],
+)
+def test_resume_upgrade_action_succeeds_only_when_ran_at_the_right_moment(
+    harness, mocker, upgrade_stack, has_k8s_error, has_succeeded
+):
+    class GandalfUpgrade(DataUpgrade):
+        def pre_upgrade_check(self):
+            pass
+
+        def log_rollback_instructions(self):
+            pass
+
+        def _set_rolling_update_partition(self, partition: int):
+            if has_k8s_error:
+                raise KubernetesClientError("fake message", "fake cause")
+
+    gandalf_model = GandalfModel(**GANDALF_DEPS)
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=gandalf_model, substrate="k8s"
+    )
+    harness.add_relation("upgrade", "gandalf")
+    for number in range(1, 3):
+        harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, f"gandalf/{number}")
+
+    harness.set_leader(True)
+
+    harness.update_relation_data(
+        harness.charm.upgrade.peer_relation.id,
+        "gandalf",
+        {"upgrade-stack": json.dumps(upgrade_stack)},
+    )
+
+    mock_event = mocker.MagicMock()
+    harness.charm.upgrade._on_resume_upgrade_action(mock_event)
+
+    assert mock_event.fail.call_count == (0 if has_succeeded else 1)
+    assert mock_event.set_results.call_count == (1 if has_succeeded else 0)
+
+
 def test_upgrade_suppported_check_fails(harness):
     bad_deps = {
         "gandalf_the_white": {
@@ -591,7 +698,7 @@ def test_upgrade_suppported_check_fails(harness):
         harness.charm.upgrade._upgrade_supported_check()
 
 
-def test_upgrade_suppported_check_succeeds(harness):
+def test_upgrade_supported_check_succeeds(harness):
     good_deps = {
         "gandalf_the_white": {
             "dependencies": {"gandalf_the_grey": ">5"},
@@ -624,27 +731,22 @@ def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
     harness.charm.on.upgrade_charm.emit()
 
-    harness.charm.upgrade._upgrade_supported_check.assert_not_called()
-
-    harness.set_leader(True)
-    harness.charm.on.upgrade_charm.emit()
-
     harness.charm.upgrade._upgrade_supported_check.assert_called_once()
 
 
-def test_upgrade_charm_sets_ready(harness, mocker):
+@pytest.mark.parametrize("substrate,state", [("vm", "ready"), ("k8s", "upgrading")])
+def test_upgrade_charm_sets_right_state(harness, mocker, substrate, state):
     harness.charm.upgrade = GandalfUpgrade(
-        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate=substrate
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "idle"})
     harness.charm.upgrade.upgrade_stack = [0]
-    harness.set_leader(True)
 
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
     harness.charm.on.upgrade_charm.emit()
 
-    assert harness.charm.upgrade.state == "ready"
+    assert harness.charm.upgrade.state == state
 
 
 def test_upgrade_changed_defers_if_recovery(harness, mocker):
@@ -764,6 +866,61 @@ def test_upgrade_changed_emits_upgrade_granted_only_if_all_ready(harness, mocker
 
     assert upgrade_granted_spy.call_count == 0
     assert harness.charm.upgrade.state == "ready"
+
+
+@pytest.mark.parametrize(
+    "substrate,is_leader,unit_number,call_count,has_k8s_error",
+    [
+        ("vm", False, 1, 0, False),
+        ("k8s", True, 3, 0, False),
+        ("k8s", True, 0, 0, False),
+        ("k8s", True, 1, 1, False),
+        ("k8s", True, 2, 1, False),
+        ("k8s", False, 1, 1, False),
+        ("k8s", False, 1, 1, True),
+    ],
+)
+def test_upgrade_finished_calls_set_rolling_update_partition_only_for_right_units_on_k8s(
+    harness, mocker, substrate, is_leader, unit_number, call_count, has_k8s_error
+):
+    class GandalfUpgrade(DataUpgrade):
+        def pre_upgrade_check(self):
+            pass
+
+        def log_rollback_instructions(self):
+            pass
+
+        def _set_rolling_update_partition(self, partition: int):
+            if has_k8s_error:
+                raise KubernetesClientError("fake message", "fake cause")
+
+        def set_unit_failed(self):
+            pass
+
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate=substrate
+    )
+
+    with harness.hooks_disabled():
+        harness.set_leader(is_leader)
+        harness.add_relation("upgrade", "gandalf")
+        harness.charm.unit.name = f"gandalf/{unit_number}"
+        for number in range(4):
+            if number != unit_number:
+                harness.add_relation_unit(
+                    harness.charm.upgrade.peer_relation.id, f"gandalf/{number}"
+                )
+
+    set_partition_spy = mocker.spy(harness.charm.upgrade, "_set_rolling_update_partition")
+    set_unit_failed_spy = mocker.spy(harness.charm.upgrade, "set_unit_failed")
+    log_rollback_instructions_spy = mocker.spy(harness.charm.upgrade, "log_rollback_instructions")
+
+    mock_event = mocker.MagicMock()
+    harness.charm.upgrade._on_upgrade_finished(mock_event)
+
+    assert set_partition_spy.call_count == call_count
+    assert set_unit_failed_spy.call_count == (1 if has_k8s_error else 0)
+    assert log_rollback_instructions_spy.call_count == (1 if has_k8s_error else 0)
 
 
 def test_upgrade_changed_recurses_on_leader_and_clears_stack(harness, mocker):
