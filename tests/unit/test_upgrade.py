@@ -675,7 +675,7 @@ def test_resume_upgrade_action_succeeds_only_when_ran_at_the_right_moment(
     assert mock_event.set_results.call_count == (1 if has_succeeded else 0)
 
 
-def test_upgrade_suppported_check_fails(harness):
+def test_upgrade_supported_check_fails(harness):
     bad_deps = {
         "gandalf_the_white": {
             "dependencies": {"gandalf_the_grey": ">5"},
