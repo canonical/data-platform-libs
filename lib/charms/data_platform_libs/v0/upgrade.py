@@ -1105,18 +1105,25 @@ class DataUpgrade(Object, ABC):
                 logger.info("All units completed upgrade, setting idle upgrade state...")
                 self.charm.unit.status = ActiveStatus()
                 self.peer_relation.data[self.charm.unit].update({"state": "idle"})
+
+                if self.charm.unit.is_leader():
+                    logger.debug("Persisting new dependencies to upgrade relation data...")
+                    self.peer_relation.data[self.charm.app].update(
+                        {"dependencies": json.dumps(self.dependency_model.dict())}
+                    )
                 return
+
             if self.cluster_state == "idle":
                 logger.debug("upgrade-changed event handled before pre-checks, exiting...")
                 return
-            else:
-                logger.debug("Did not find upgrade-stack or completed cluster state, deferring...")
-                event.defer()
-                return
-        else:
-            # upgrade ongoing, set status for waiting units
-            if "upgrading" in self.unit_states and self.state in ["idle", "ready"]:
-                self.charm.unit.status = WaitingStatus("other units upgrading first...")
+
+            logger.debug("Did not find upgrade-stack or completed cluster state, deferring...")
+            event.defer()
+            return
+
+        # upgrade ongoing, set status for waiting units
+        if "upgrading" in self.unit_states and self.state in ["idle", "ready"]:
+            self.charm.unit.status = WaitingStatus("other units upgrading first...")
 
         # pop mutates the `upgrade_stack` attr
         top_unit_id = self.upgrade_stack.pop()
