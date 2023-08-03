@@ -437,17 +437,19 @@ def test_set_rolling_update_partition_raises_not_implemented_k8s(harness):
 
 
 def test_set_unit_failed_resets_stack(harness, mocker):
-    gandalf = GandalfUpgrade(charm=harness.charm, dependency_model=GandalfModel, substrate="k8s")
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+    )
     harness.add_relation("upgrade", "gandalf")
-    gandalf._upgrade_stack = ["1", "2", "3"]
+    harness.charm.upgrade.upgrade_stack = [0]
     harness.set_leader(True)
     log_spy = mocker.spy(GandalfUpgrade, "log_rollback_instructions")
 
-    assert gandalf._upgrade_stack
+    assert harness.charm.upgrade._upgrade_stack
 
-    gandalf.set_unit_failed()
+    harness.charm.upgrade.set_unit_failed()
 
-    assert not gandalf._upgrade_stack
+    assert not harness.charm.upgrade._upgrade_stack
 
     assert isinstance(harness.charm.unit.status, BlockedStatus)
     assert log_spy.call_count == 1
@@ -455,20 +457,20 @@ def test_set_unit_failed_resets_stack(harness, mocker):
 
 @pytest.mark.parametrize("substrate,upgrade_finished_call_count", [("vm", 0), ("k8s", 1)])
 def test_set_unit_completed_resets_stack(harness, mocker, substrate, upgrade_finished_call_count):
-    gandalf = GandalfUpgrade(
-        charm=harness.charm, dependency_model=GandalfModel, substrate=substrate
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate=substrate
     )
     harness.add_relation("upgrade", "gandalf")
-    gandalf._upgrade_stack = ["1", "2", "3"]
+    harness.charm.upgrade.upgrade_stack = [0]
     harness.set_leader(True)
 
-    assert gandalf._upgrade_stack
+    assert harness.charm.upgrade._upgrade_stack
 
-    upgrade_finished_spy = mocker.spy(gandalf, "_on_upgrade_finished")
+    upgrade_finished_spy = mocker.spy(harness.charm.upgrade, "_on_upgrade_finished")
 
-    gandalf.set_unit_completed()
+    harness.charm.upgrade.set_unit_completed()
 
-    assert not gandalf._upgrade_stack
+    assert not harness.charm.upgrade._upgrade_stack
 
     assert upgrade_finished_spy.call_count == upgrade_finished_call_count
 
@@ -767,34 +769,44 @@ def test_upgrade_changed_defers_if_recovery(harness, mocker):
     assert defer_spy.call_count == 1
 
 
-def test_upgrade_changed_sets_idle_if_all_completed(harness):
+def test_upgrade_changed_sets_idle_and_deps_if_all_completed(harness):
     harness.charm.upgrade = GandalfUpgrade(
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
     )
     harness.add_relation("upgrade", "gandalf")
+
+    assert not harness.charm.upgrade.stored_dependencies
+
     harness.charm.upgrade.upgrade_stack = []
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "completed"})
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
+    harness.set_leader()
     harness.update_relation_data(
         harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "completed"}
     )
 
     assert harness.charm.upgrade.state == "idle"
+    assert harness.charm.upgrade.stored_dependencies == GandalfModel(**GANDALF_DEPS)
 
 
-def test_upgrade_changed_sets_idle_if_some_completed_idle(harness):
+def test_upgrade_changed_sets_idle_and_deps_if_some_completed_idle(harness):
     harness.charm.upgrade = GandalfUpgrade(
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
     )
     harness.add_relation("upgrade", "gandalf")
+
+    assert not harness.charm.upgrade.stored_dependencies == GandalfModel(**GANDALF_DEPS)
+
     harness.charm.upgrade.upgrade_stack = []
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "completed"})
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
+    harness.set_leader()
     harness.update_relation_data(
         harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
     )
 
     assert harness.charm.upgrade.state == "idle"
+    assert harness.charm.upgrade.stored_dependencies == GandalfModel(**GANDALF_DEPS)
 
 
 def test_upgrade_changed_does_not_recurse_if_called_all_idle(harness, mocker):
