@@ -705,10 +705,9 @@ class DataUpgrade(Object, ABC):
         self.framework.observe(
             getattr(self.charm.on, "pre_upgrade_check_action"), self._on_pre_upgrade_check_action
         )
-        if self.substrate == "k8s":
-            self.framework.observe(
-                getattr(self.charm.on, "resume_upgrade_action"), self._on_resume_upgrade_action
-            )
+        self.framework.observe(
+            getattr(self.charm.on, "resume_upgrade_action"), self._on_resume_upgrade_action
+        )
 
     @property
     def peer_relation(self) -> Optional[Relation]:
@@ -790,6 +789,33 @@ class DataUpgrade(Object, ABC):
             return []
 
         return [self.peer_relation.data[unit].get("state", "") for unit in self.app_units]
+
+    @property
+    def resume_strategy(self) -> Optional[str]:
+        """Gets upgrade resume-strategy requested during pre-upgrade-check action.
+
+        Returns:
+            String of "auto" or "safe" resume-strategy
+        """
+        if not self.peer_relation:
+            return None
+
+        if self.substrate == "k8s":
+            return "safe"
+
+        return self.peer_relation.data[self.charm.app].get("resume-strategy", "auto")
+
+    @property
+    def first_unit(self) -> bool:
+        """TODO.
+
+        Returns:
+            String of TODO
+        """
+        if not self.peer_relation or not self.upgrade_stack:
+            return True
+
+        return len(self.upgrade_stack) == len(self.peer_relation.units)
 
     @property
     def cluster_state(self) -> Optional[str]:
@@ -977,6 +1003,11 @@ class DataUpgrade(Object, ABC):
             event.fail(message="Unknown error found.")
             return
 
+        resume_strategy = (
+            "safe" if self.substrate == "k8s" else event.params.get("resume-strategy", "auto")
+        )
+        self.peer_relation.data[self.charm.app].update({"resume-strategy": resume_strategy})
+
         logger.info("Setting upgrade-stack to relation data...")
         self.upgrade_stack = built_upgrade_stack
 
@@ -1000,16 +1031,21 @@ class DataUpgrade(Object, ABC):
         # Check whether this is being run after juju refresh was called
         # (the size of the upgrade stack should match the number of total
         # unit minus one).
-        if len(self.upgrade_stack) != len(self.peer_relation.units):
+        if not self.first_unit:
             event.fail(message="Upgrade can be resumed only once after juju refresh is called.")
             return
 
-        try:
-            next_partition = self.upgrade_stack[-1]
-            self._set_rolling_update_partition(partition=next_partition)
-            event.set_results({"message": f"Upgrade will resume on unit {next_partition}"})
-        except KubernetesClientError:
-            event.fail(message="Cannot set rolling update partition.")
+        if self.substrate == "vm":
+            self._update_stack()
+            return
+
+        if self.substrate == "k8s":
+            try:
+                next_partition = self.upgrade_stack[-1]
+                self._set_rolling_update_partition(partition=next_partition)
+                event.set_results({"message": f"Upgrade will resume on unit {next_partition}"})
+            except KubernetesClientError:
+                event.fail(message="Cannot set rolling update partition.")
 
     def _upgrade_supported_check(self) -> None:
         """Checks if previous versions can be upgraded to new versions.
@@ -1125,23 +1161,22 @@ class DataUpgrade(Object, ABC):
         if "upgrading" in self.unit_states and self.state in ["idle", "ready"]:
             self.charm.unit.status = WaitingStatus("other units upgrading first...")
 
+        # pause upgrade after first unit if 'safe' resume-strategy
+        if self.first_unit and self.resume_strategy == "safe" and self.charm.unit.is_leader():
+            logger.info(
+                f"{self.charm.unit.name} unit upgraded. Evaluate and run `resume-upgrade` action to continue upgrade"
+            )
+            self.charm.unit.status = BlockedStatus("awaiting resume-upgrade action...")
+            return
+
         # pop mutates the `upgrade_stack` attr
         top_unit_id = self.upgrade_stack.pop()
         top_unit = self.charm.model.get_unit(f"{self.charm.app.name}/{top_unit_id}")
         top_state = self.peer_relation.data[top_unit].get("state")
 
-        # if top of stack is completed, leader pops it
-        if self.charm.unit.is_leader() and top_state == "completed":
-            logger.debug(f"{top_unit} has finished upgrading, updating stack...")
-
-            # writes the mutated attr back to rel data
-            self.peer_relation.data[self.charm.app].update(
-                {"upgrade-stack": json.dumps(self.upgrade_stack)}
-            )
-
-            # recurse on leader to ensure relation changed event not lost
-            # in case leader is next or the last unit to complete
-            self.on_upgrade_changed(event)
+        # persist the new popped stack to relation data
+        if top_state == "completed":
+            self._update_stack()
 
         # if unit top of stack and all units ready (i.e stack), emit granted event
         if (
@@ -1214,6 +1249,22 @@ class DataUpgrade(Object, ABC):
             logger.exception("Cannot set rolling update partition")
             self.set_unit_failed()
             self.log_rollback_instructions()
+
+    def _update_stack(self) -> None:
+        """Updates the upgrade-stack on the leader unit."""
+        if not self.peer_relation or not self.charm.unit.is_leader():
+            return
+
+        # writes the mutated attr back to rel data
+        self.peer_relation.data[self.charm.app].update(
+            {"upgrade-stack": json.dumps(self.upgrade_stack)}
+        )
+
+        # recurse on leader to ensure relation changed event not lost
+        # in case leader is next or the last unit to complete
+        self.charm.on[self.relation_name].relation_changed.emit(
+            self.model.get_relation(self.relation_name)
+        )
 
     def _set_rolling_update_partition(self, partition: int) -> None:
         """Patch the StatefulSet's `spec.updateStrategy.rollingUpdate.partition`.
