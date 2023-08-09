@@ -801,10 +801,10 @@ class DataUpgrade(Object, ABC):
 
     @property
     def first_unit(self) -> bool:
-        """TODO.
+        """Flag to check if the current top-of-stack unit is the first to upgrade.
 
         Returns:
-            String of TODO
+            True if top-of-stack unit is the first to upgrade. Otherwise False
         """
         if not self.peer_relation or not self.upgrade_stack:
             return True
