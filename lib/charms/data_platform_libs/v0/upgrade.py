@@ -1132,14 +1132,6 @@ class DataUpgrade(Object, ABC):
         if "upgrading" in self.unit_states and self.state in ["idle", "ready"]:
             self.charm.unit.status = WaitingStatus("other units upgrading first...")
 
-        # pause upgrade after first unit if 'safe' resume-strategy
-        if self.first_unit and self.resume_strategy == "safe" and self.charm.unit.is_leader():
-            logger.info(
-                f"{self.charm.unit.name} unit upgraded. Evaluate and run `resume-upgrade` action to continue upgrade"
-            )
-            self.charm.unit.status = BlockedStatus("awaiting resume-upgrade action...")
-            return
-
         # pop mutates the `upgrade_stack` attr
         top_unit_id = self.upgrade_stack.pop()
         top_unit = self.charm.model.get_unit(f"{self.charm.app.name}/{top_unit_id}")
@@ -1147,9 +1139,19 @@ class DataUpgrade(Object, ABC):
 
         # persist the new popped stack to relation data
         if top_state == "completed":
+            # don't modify stack and trigger new unit upgrades if 'safe' resume-strategy
+            # only pause on first unit
+            if self.first_unit and self.resume_strategy == "safe":
+                logger.info(
+                    f"Please evaluate unit {self.charm.app}/{self.upgrade_stack[-1]}, and run `resume-upgrade` action to continue upgrade"
+                )
+                self.charm.unit.status = BlockedStatus("awaiting resume-upgrade action...")
+                return
+
             self._update_stack()
 
         # if unit top of stack and all units ready (i.e stack), emit granted event
+        # only runs on VM, as K8s units will be 'idle' due to not setting 'ready' in upgrade-charm
         if (
             self.charm.unit == top_unit
             and top_state in ["ready", "upgrading"]
