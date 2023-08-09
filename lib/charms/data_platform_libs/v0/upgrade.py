@@ -1110,7 +1110,13 @@ class DataUpgrade(Object, ABC):
                 if self.charm.unit.is_leader():
                     logger.debug("Persisting new dependencies to upgrade relation data...")
                     self.peer_relation.data[self.charm.app].update(
-                        {"dependencies": json.dumps(self.dependency_model.dict())}
+                        {
+                            "dependencies": json.dumps(
+                                self.dependency_model.dict()
+                            ),  # persisting new deps
+                            "resume-strategy": "",  # resetting resume-strategy for future upgrades
+                            "upgrade-stack": "",  # resetting upgrade-stack for future upgrades
+                        }
                     )
                 return
 
