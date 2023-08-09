@@ -990,6 +990,7 @@ class DataUpgrade(Object, ABC):
             event.fail(message="Unknown error found.")
             return
 
+        # always 'safe' on k8s, default to 'auto' on vm
         resume_strategy = (
             "safe" if self.substrate == "k8s" else event.params.get("resume-strategy", "auto")
         )
