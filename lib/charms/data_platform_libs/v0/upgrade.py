@@ -1004,36 +1004,21 @@ class DataUpgrade(Object, ABC):
 
         Continue the upgrade by setting the partition to the next unit.
         """
-        if not self.peer_relation:
-            event.fail(message="Could not find upgrade relation.")
-            return
+        # FIXME: use switch-case here when 3.10
 
-        if not self.charm.unit.is_leader():
-            event.fail(message="Action must be ran on the Juju leader.")
-            return
+        checks = [
+            (self.peer_relation, "Could not find upgrade relation."),
+            (self.charm.unit.is_leader(), "Action must be ran on the Juju leader."),
+            (self.upgrade_stack, "Nothing to resume, upgrade-stack unset."),
+            (self.first_unit, "Upgrade can be resumed only once after juju refresh is called."),
+        ]
 
-        if not self.upgrade_stack:
-            event.fail(message="Nothing to resume, upgrade stack unset.")
-            return
+        for check in checks:
+            if not check[0]:
+                event.fail(message=check[1])
+                return
 
-        # Check whether this is being run after juju refresh was called
-        # (the size of the upgrade stack should match the number of total
-        # unit minus one).
-        if not self.first_unit:
-            event.fail(message="Upgrade can be resumed only once after juju refresh is called.")
-            return
-
-        if self.substrate == "vm":
-            self._update_stack()
-            return
-
-        if self.substrate == "k8s":
-            try:
-                next_partition = self.upgrade_stack[-1]
-                self._set_rolling_update_partition(partition=next_partition)
-                event.set_results({"message": f"Upgrade will resume on unit {next_partition}"})
-            except KubernetesClientError:
-                event.fail(message="Cannot set rolling update partition.")
+        self._update_stack()
 
     def _upgrade_supported_check(self) -> None:
         """Checks if previous versions can be upgraded to new versions.
