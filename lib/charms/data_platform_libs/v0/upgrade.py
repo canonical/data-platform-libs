@@ -652,10 +652,6 @@ class UpgradeGrantedEvent(EventBase):
     """Used to tell units that they can process an upgrade."""
 
 
-class UpgradeFinishedEvent(EventBase):
-    """Used to tell units that they finished the upgrade."""
-
-
 class UpgradeEvents(CharmEvents):
     """Upgrade events.
 
@@ -663,7 +659,6 @@ class UpgradeEvents(CharmEvents):
     """
 
     upgrade_granted = EventSource(UpgradeGrantedEvent)
-    upgrade_finished = EventSource(UpgradeFinishedEvent)
 
 
 # --- EVENT HANDLER ---
@@ -699,7 +694,6 @@ class DataUpgrade(Object, ABC):
         )
         self.framework.observe(self.charm.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(getattr(self.on, "upgrade_granted"), self._on_upgrade_granted)
-        self.framework.observe(getattr(self.on, "upgrade_finished"), self._on_upgrade_finished)
 
         # actions
         self.framework.observe(
@@ -934,13 +928,6 @@ class DataUpgrade(Object, ABC):
 
         self.charm.unit.status = MaintenanceStatus("upgrade completed")
         self.peer_relation.data[self.charm.unit].update({"state": "completed"})
-
-        # Emit upgrade_finished event to run unit's post upgrade operations.
-        if self.substrate == "k8s":
-            logger.debug(
-                f"{self.charm.unit.name} has completed the upgrade, emitting `upgrade_finished` event..."
-            )
-            getattr(self.on, "upgrade_finished").emit()
 
     def _on_upgrade_created(self, event: RelationCreatedEvent) -> None:
         """Handler for `upgrade-relation-created` events."""
@@ -1213,58 +1200,6 @@ class DataUpgrade(Object, ABC):
             return
 
         raise NotImplementedError
-
-    def _on_upgrade_finished(self, _) -> None:
-        """Handler for `upgrade-finished` events."""
-        if self.substrate == "vm" or not self.peer_relation:
-            return
-
-        # Emit the upgrade relation changed event in the leader to update the upgrade_stack.
-        if self.charm.unit.is_leader():
-            self.charm.on[self.relation_name].relation_changed.emit(
-                self.model.get_relation(self.relation_name)
-            )
-
-        # This hook shouldn't run for the last unit (the first that is upgraded). For that unit it
-        # should be done through an action after the upgrade success on that unit is double-checked.
-        unit_number = int(self.charm.unit.name.split("/")[1])
-        if unit_number == len(self.peer_relation.units):
-            logger.info(
-                f"{self.charm.unit.name} unit upgraded. Evaluate and run `resume-upgrade` action to continue upgrade"
-            )
-            return
-
-        # Also, the hook shouldn't run for the first unit (the last that is upgraded).
-        if unit_number == 0:
-            logger.info(f"{self.charm.unit.name} unit upgraded. Upgrade is complete")
-            return
-
-        try:
-            # Use the unit number instead of the upgrade stack to avoid race conditions
-            # (i.e. the leader updates the upgrade stack after this hook runs).
-            next_partition = unit_number - 1
-            logger.debug(f"Set rolling update partition to unit {next_partition}")
-            self._set_rolling_update_partition(partition=next_partition)
-        except KubernetesClientError:
-            logger.exception("Cannot set rolling update partition")
-            self.set_unit_failed()
-            self.log_rollback_instructions()
-
-    def _update_stack(self) -> None:
-        """Updates the upgrade-stack on the leader unit."""
-        if not self.peer_relation or not self.charm.unit.is_leader():
-            return
-
-        # writes the mutated attr back to rel data
-        self.peer_relation.data[self.charm.app].update(
-            {"upgrade-stack": json.dumps(self.upgrade_stack)}
-        )
-
-        # recurse on leader to ensure relation changed event not lost
-        # in case leader is next or the last unit to complete
-        self.charm.on[self.relation_name].relation_changed.emit(
-            self.model.get_relation(self.relation_name)
-        )
 
     def _set_rolling_update_partition(self, partition: int) -> None:
         """Patch the StatefulSet's `spec.updateStrategy.rollingUpdate.partition`.
