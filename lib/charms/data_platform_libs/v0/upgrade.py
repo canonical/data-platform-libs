@@ -1065,32 +1065,24 @@ class DataUpgrade(Object, ABC):
             logger.error("Cluster upgrade failed, ensure pre-upgrade checks are ran first.")
             return
 
+        # for VM, run version checks on leader only
+        # for K8s, run version checks on first unit only
+        if (self.charm.unit.is_leader() and self.substrate == "vm") or (
+            self.first_unit and self.substrate == "k8s"
+        ):
+            try:
+                self._upgrade_supported_check()
+            except VersionError as e:  # not ready if not passed check
+                logger.error(e)
+                self.set_unit_failed()
+                return
+
         if self.substrate == "vm":
-            # for VM run version checks on leader only
-            if self.charm.unit.is_leader():
-                try:
-                    self._upgrade_supported_check()
-                except VersionError as e:  # not ready if not passed check
-                    logger.error(e)
-                    self.set_unit_failed()
-                    return
             self.charm.unit.status = WaitingStatus("other units upgrading first...")
             self.peer_relation.data[self.charm.unit].update({"state": "ready"})
 
-        else:
-            # for k8s run version checks only on highest ordinal unit
-            if (
-                self.charm.unit.name
-                == f"{self.charm.app.name}/{self.charm.app.planned_units() -1}"
-            ):
-                try:
-                    self._upgrade_supported_check()
-                except VersionError as e:  # not ready if not passed check
-                    logger.error(e)
-                    self.set_unit_failed()
-                    return
-            # On K8s an unit that receives the upgrade-charm event is upgrading
-            self.charm.unit.status = MaintenanceStatus("upgrading unit")
+        if self.substrate == "k8s":
+            self.charm.unit.status = MaintenanceStatus("upgrading unit...")
             self.peer_relation.data[self.charm.unit].update({"state": "upgrading"})
 
     def on_upgrade_changed(self, event: EventBase) -> None:
