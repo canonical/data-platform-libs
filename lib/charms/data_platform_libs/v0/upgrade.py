@@ -925,6 +925,11 @@ class DataUpgrade(Object, ABC):
         # now leader pulls a fresh stack from newly updated relation data
         if self.charm.unit.is_leader():
             self._upgrade_stack = None
+            # recurse on leader to ensure relation changed event not lost
+            # in case leader is next or the last unit to complete
+            self.charm.on[self.relation_name].relation_changed.emit(
+                self.model.get_relation(self.relation_name)
+            )
 
         self.charm.unit.status = MaintenanceStatus("upgrade completed")
         self.peer_relation.data[self.charm.unit].update({"state": "completed"})
