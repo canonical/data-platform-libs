@@ -1215,3 +1215,29 @@ class DataUpgrade(Object, ABC):
             return
 
         raise NotImplementedError
+
+    def _update_stack(self) -> None:
+        """Updates the upgrade-stack on the leader unit."""
+        if not self.peer_relation or not self.charm.unit.is_leader() or not self.upgrade_stack:
+            return
+
+        # don't set partition on last unit, as upgrade_stack attr should be empty
+        if self.substrate == "k8s" and self.upgrade_stack:
+            try:
+                # stack is already popped, new partition is current top of stack
+                logger.debug(f"Setting rolling update partition to unit {self.upgrade_stack[-1]}")
+                self._set_rolling_update_partition(self.upgrade_stack[-1])
+            except KubernetesClientError:
+                self.set_unit_failed()
+                return
+
+        # writes the mutated attr back to rel data
+        self.peer_relation.data[self.charm.app].update(
+            {"upgrade-stack": json.dumps(self.upgrade_stack)}
+        )
+
+        # recurse on leader to ensure relation changed event not lost
+        # in case leader is next or the last unit to complete
+        self.charm.on[self.relation_name].relation_changed.emit(
+            self.model.get_relation(self.relation_name)
+        )
