@@ -30,9 +30,11 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, kafka_charm):
             kafka_charm, application_name=KAFKA_APP_NAME, num_units=1, series="jammy"
         ),
     )
-    await ops_test.model.wait_for_idle(apps=[KAFKA_APP_NAME], status="active", wait_for_units=1)
     await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_APP_NAME], status="active", wait_for_units=1
+        apps=[KAFKA_APP_NAME], status="active", wait_for_exact_units=1
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_APP_NAME], status="active", wait_for_exact_units=1
     )
 
 
