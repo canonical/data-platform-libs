@@ -32,9 +32,9 @@ async def test_deploy_charms(ops_test: OpsTest, application_s3_charm, s3_charm):
         ),
         ops_test.model.deploy(s3_charm, application_name=S3_APP_NAME, num_units=2, series="jammy"),
     )
-    await ops_test.model.wait_for_idle(apps=[S3_APP_NAME], status="active", wait_for_units=1)
+    await ops_test.model.wait_for_idle(apps=[S3_APP_NAME], status="active", wait_for_exact_units=2)
     await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_APP_NAME], status="waiting", wait_for_units=1
+        apps=[APPLICATION_APP_NAME], status="waiting", wait_for_exact_units=2
     )
 
 

@@ -57,13 +57,13 @@ jobs:
           - integration-opensearch
           - integration-kafka
         juju-version:
-          - juju-bootstrap-option: "3.1.5"
-            juju-snap-channel: "3.1/stable"
-            libjuju-version: "==3.2.0.1"
           - juju-bootstrap-option: "2.9.38"
             juju-snap-channel: "2.9/stable"
-            libjuju-version: "==2.9.42.4"
-    name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.juju-version.libjuju-version }}
+            libjuju-version: "2.9.42.4"
+          - juju-bootstrap-option: "3.1.5"
+            juju-snap-channel: "3.1/stable"
+            libjuju-version: "3.2.0.1"
+    name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- libjuju ${{ matrix.juju-version.libjuju-version }}
     needs:
       - lint
       - unit-test
@@ -101,7 +101,7 @@ jobs:
         run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
-          LIBJUJU_VERSION_SPECIFIER: ${{ matrix.juju-version.libjuju-version }}
+          LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
       - name: Dump logs
         uses: canonical/charm-logdump-action@main
         if: failure()
