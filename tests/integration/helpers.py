@@ -39,6 +39,8 @@ async def build_connection_string(
     endpoints = await get_application_relation_data(
         ops_test, application_name, relation_name, "endpoints", relation_id, relation_alias
     )
+    if not endpoints:
+        raise Exception(f"No endpoints returned {database}")
     host = endpoints.split(",")[0].split(":")[0]
 
     # Build the complete connection string to connect to the database.

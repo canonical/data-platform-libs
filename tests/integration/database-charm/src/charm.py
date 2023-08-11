@@ -100,6 +100,13 @@ class DatabaseCharm(CharmBase):
         # Share the credentials with the application.
         self.database.set_credentials(event.relation.id, username, password)
 
+        assert self.model.get_binding("database")
+        assert self.model.get_binding("database").network
+        assert self.model.get_binding("database").network.bind_address
+        logger.info(
+            f"Charm binding {self.model.get_binding('database')}, network: {self.model.get_binding('database').network}, IP:  self.model.get_binding('database').network.bind_address"
+        )
+
         # Set the read/write endpoint.
         self.database.set_endpoints(
             event.relation.id, f'{self.model.get_binding("database").network.bind_address}:5432'
