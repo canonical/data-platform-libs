@@ -97,7 +97,7 @@ jobs:
             echo "mark_expression=not unstable" >> $GITHUB_OUTPUT
           fi
       - name: Setup upterm session
-          uses: lhotari/action-upterm@v1
+        uses: lhotari/action-upterm@v1
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing
