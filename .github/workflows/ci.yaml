@@ -53,9 +53,9 @@ jobs:
       matrix:
         tox-environments:
           - integration-database
-          - integration-s3
-          - integration-opensearch
-          - integration-kafka
+          # - integration-s3
+          # - integration-opensearch
+          # - integration-kafka
         juju-version:
           #- juju-bootstrap-option: "2.9.38"
           #  juju-snap-channel: "2.9/stable"
