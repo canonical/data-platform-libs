@@ -99,11 +99,16 @@ class DatabaseCharm(CharmBase):
 
         # Share the credentials with the application.
         self.database.set_credentials(event.relation.id, username, password)
-
+        print("HERE")
         assert self.model.get_binding("database")
         assert self.model.get_binding("database").network
-        assert self.model.get_binding("database").network.bind_address
+        # assert self.model.get_binding("database").network.bind_address
+        address = self.model.get_binding("database").network.bind_address
+        print(f"ADDRESS: {address}")
         logger.info(
+            f"Charm binding {self.model.get_binding('database')}, network: {self.model.get_binding('database').network}, IP:  self.model.get_binding('database').network.bind_address"
+        )
+        print(
             f"Charm binding {self.model.get_binding('database')}, network: {self.model.get_binding('database').network}, IP:  self.model.get_binding('database').network.bind_address"
         )
 
