@@ -367,15 +367,37 @@ def test_cluster_state(harness, min_state):
 
     assert harness.charm.upgrade.cluster_state == min_state
 
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        ("failed"),
+        ("idle"),
+        ("ready"),
+        ("upgrading"),
+        ("completed"),
+    ],
+)
+def test_idle(harness, state):
+    gandalf_model = GandalfModel(**GANDALF_DEPS)
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=gandalf_model, substrate="k8s"
+    )
+    harness.add_relation("upgrade", "gandalf")
+
+    harness.set_leader(True)
+
+    harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
+
     with harness.hooks_disabled():
         harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/0", {"state": min_state}
+            harness.charm.upgrade.peer_relation.id, "gandalf/0", {"state": state}
         )
         harness.update_relation_data(
             harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
         )
 
-    assert harness.charm.upgrade.idle == (min_state == "idle")
+    assert harness.charm.upgrade.idle == (state == "idle")
 
 
 def test_data_upgrade_raises_on_init(harness):
