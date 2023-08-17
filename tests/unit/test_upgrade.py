@@ -367,6 +367,16 @@ def test_cluster_state(harness, min_state):
 
     assert harness.charm.upgrade.cluster_state == min_state
 
+    with harness.hooks_disabled():
+        harness.update_relation_data(
+            harness.charm.upgrade.peer_relation.id, "gandalf/0", {"state": min_state}
+        )
+        harness.update_relation_data(
+            harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
+        )
+
+    assert harness.charm.upgrade.idle == (min_state == "idle")
+
 
 def test_data_upgrade_raises_on_init(harness):
     # nothing implemented
