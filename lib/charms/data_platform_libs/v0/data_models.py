@@ -179,6 +179,7 @@ UnitModel = TypeVar("UnitModel", bound=BaseModel)
 
 DataBagNativeTypes = (int, str, float)
 
+
 class BaseConfigModel(BaseModel):
     """Class to be used for defining the structured configuration options."""
 

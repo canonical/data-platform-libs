@@ -18,7 +18,7 @@ from charms.data_platform_libs.v0.data_models import (
     get_relation_data_as,
     parse_relation_data,
     validate_params,
-    write
+    write,
 )
 
 METADATA = """
@@ -129,7 +129,10 @@ class TestCharmCharm(TypedCharmBase[CharmConfig]):
         app_data: Optional[Union[ProviderDataBag, ValidationError]] = None,
         _=None,
     ):
-        logger.info(type(app_data.key))
+        if isinstance(app_data, ProviderDataBag):
+            logger.info("Field type: %s", type(app_data.key))
+        elif isinstance(app_data, ValidationError):
+            logger.info("Exception: %s", type(app_data))
 
 
 class TestCharm(unittest.TestCase):
@@ -190,7 +193,7 @@ class TestCharm(unittest.TestCase):
 
         with self.assertLogs(level="INFO") as logger:
             self.harness.update_relation_data(relation_id, "mongodb", {"key": "1.0"})
-        self.assertEqual(logger.output, ["INFO:unit.test_data_models:<class 'float'>"])
+        self.assertEqual(logger.output, ["INFO:unit.test_data_models:Field type: <class 'float'>"])
 
     def test_relation_databag_merged(self):
         relation = self.harness.charm.model.get_relation("database")
@@ -210,17 +213,17 @@ class TestCharm(unittest.TestCase):
         self.assertIsNone(merged_obj.option_int)
         self.assertIsNone(merged_obj.option_str)
 
-    @parameterized.expand([
-        ("option-float", "1.0", float),
-        ("option-float", "1", float),
-        ("option-int", "1", int),
-        ("option-str", "1", str),
-        ("option-str", "test", str),
-    ])
+    @parameterized.expand(
+        [
+            ("option-float", "1.0", float),
+            ("option-float", "1", float),
+            ("option-int", "1", int),
+            ("option-str", "1", str),
+            ("option-str", "test", str),
+        ]
+    )
     def test_relation_databag_merged_with_option(self, option_key, option_value, _type):
         relation = self.harness.charm.model.get_relation("database")
-
-        # base = {"option_float": "", "option_int": "", "option_str": ""}
 
         self.harness.update_relation_data(
             relation.id, "mongodb", {"key": "1.0", option_key: option_value}
@@ -237,11 +240,13 @@ class TestCharm(unittest.TestCase):
         self.assertIsNotNone(getattr(merged_obj, option_key.replace("-", "_")))
         self.assertIsInstance(getattr(merged_obj, option_key.replace("-", "_")), _type)
 
-    @parameterized.expand([
-        (ProviderDataBag(key=1.0, option_float=2.0), "option-float", "2.0"),
-        (ProviderDataBag(key=1.0, option_int=2.0), "option-int", "2"),
-        (ProviderDataBag(key=1.0, option_str="test"), "option-str", "test"),
-    ])
+    @parameterized.expand(
+        [
+            (ProviderDataBag(key=1.0, option_float=2.0), "option-float", "2.0"),
+            (ProviderDataBag(key=1.0, option_int=2.0), "option-int", "2"),
+            (ProviderDataBag(key=1.0, option_str="test"), "option-str", "test"),
+        ]
+    )
     def test_relation_databag_write_with_option(self, databag, expected_key, expected_value):
         relation = self.harness.charm.model.get_relation("database")
 
@@ -252,3 +257,16 @@ class TestCharm(unittest.TestCase):
         self.assertIn(expected_key, relation_data)
         self.assertEqual(expected_value, relation_data[expected_key])
 
+    def test_databag_parse_with_exception(self):
+        merged_obj = get_relation_data_as(
+            ProviderDataBag,
+            {"key": "test"},
+        )
+        self.assertIsInstance(merged_obj, ValidationError)
+
+    def test_relation_databag_parse_with_exception(self):
+        relation = self.harness.charm.model.get_relation("database")
+
+        with self.assertLogs(level="INFO") as logger:
+            self.harness.update_relation_data(relation.id, "mongodb", {"key": "test"})
+        self.assertTrue("Exception" in logger.output[0])
