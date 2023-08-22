@@ -8,6 +8,7 @@ from unittest.mock import Mock
 
 from ops.charm import ActionEvent, RelationEvent
 from ops.testing import Harness
+from parameterized import parameterized
 from pydantic import BaseModel, ValidationError, validator
 
 from charms.data_platform_libs.v0.data_models import (
@@ -75,6 +76,7 @@ class NestedDataBag(RelationDataModel):
 
 class ProviderDataBag(BaseModel):
     key: float
+    option: Optional[float] = None
 
 
 class MergedDataBag(NestedDataBag, ProviderDataBag):
@@ -201,3 +203,23 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(merged_obj, MergedDataBag)
         self.assertEqual(merged_obj.key, 1.0)
         self.assertEqual(merged_obj.nested_field.key, [1, 2, 3])
+        self.assertIsNone(merged_obj.option)
+
+    @parameterized.expand([("1.0",), ("1",)])
+    def test_relation_databag_merged_with_option(self, option_value):
+        relation = self.harness.charm.model.get_relation("database")
+
+        self.harness.update_relation_data(
+            relation.id, "mongodb", {"key": "2.0", "option": option_value}
+        )
+
+        relation_data = relation.data
+
+        merged_obj = get_relation_data_as(
+            MergedDataBag,
+            relation_data[self.harness.charm.app],
+            relation_data[relation.app],
+        )
+
+        self.assertIsNotNone(merged_obj.option)
+        self.assertIsInstance(merged_obj.option, float)
