@@ -18,6 +18,7 @@ from charms.data_platform_libs.v0.data_models import (
     get_relation_data_as,
     parse_relation_data,
     validate_params,
+    write
 )
 
 METADATA = """
@@ -76,7 +77,9 @@ class NestedDataBag(RelationDataModel):
 
 class ProviderDataBag(BaseModel):
     key: float
-    option: Optional[float] = None
+    option_float: Optional[float] = None
+    option_int: Optional[int] = None
+    option_str: Optional[str] = None
 
 
 class MergedDataBag(NestedDataBag, ProviderDataBag):
@@ -203,14 +206,24 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(merged_obj, MergedDataBag)
         self.assertEqual(merged_obj.key, 1.0)
         self.assertEqual(merged_obj.nested_field.key, [1, 2, 3])
-        self.assertIsNone(merged_obj.option)
+        self.assertIsNone(merged_obj.option_float)
+        self.assertIsNone(merged_obj.option_int)
+        self.assertIsNone(merged_obj.option_str)
 
-    @parameterized.expand([("1.0",), ("1",)])
-    def test_relation_databag_merged_with_option(self, option_value):
+    @parameterized.expand([
+        ("option-float", "1.0", float),
+        ("option-float", "1", float),
+        ("option-int", "1", int),
+        ("option-str", "1", str),
+        ("option-str", "test", str),
+    ])
+    def test_relation_databag_merged_with_option(self, option_key, option_value, _type):
         relation = self.harness.charm.model.get_relation("database")
 
+        # base = {"option_float": "", "option_int": "", "option_str": ""}
+
         self.harness.update_relation_data(
-            relation.id, "mongodb", {"key": "2.0", "option": option_value}
+            relation.id, "mongodb", {"key": "1.0", option_key: option_value}
         )
 
         relation_data = relation.data
@@ -221,5 +234,21 @@ class TestCharm(unittest.TestCase):
             relation_data[relation.app],
         )
 
-        self.assertIsNotNone(merged_obj.option)
-        self.assertIsInstance(merged_obj.option, float)
+        self.assertIsNotNone(getattr(merged_obj, option_key.replace("-", "_")))
+        self.assertIsInstance(getattr(merged_obj, option_key.replace("-", "_")), _type)
+
+    @parameterized.expand([
+        (ProviderDataBag(key=1.0, option_float=2.0), "option-float", "2.0"),
+        (ProviderDataBag(key=1.0, option_int=2.0), "option-int", "2"),
+        (ProviderDataBag(key=1.0, option_str="test"), "option-str", "test"),
+    ])
+    def test_relation_databag_write_with_option(self, databag, expected_key, expected_value):
+        relation = self.harness.charm.model.get_relation("database")
+
+        relation_data = relation.data[relation.app]
+
+        write(relation_data, databag)
+
+        self.assertIn(expected_key, relation_data)
+        self.assertEqual(expected_value, relation_data[expected_key])
+

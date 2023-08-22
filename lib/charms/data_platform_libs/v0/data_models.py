@@ -177,9 +177,7 @@ T = TypeVar("T", bound=BaseModel)
 AppModel = TypeVar("AppModel", bound=BaseModel)
 UnitModel = TypeVar("UnitModel", bound=BaseModel)
 
-_DataBagNativeTypes = (int, str, float)
-DataBagNativeTypes = _DataBagNativeTypes + tuple(Optional[k] for k in _DataBagNativeTypes)
-
+DataBagNativeTypes = (int, str, float)
 
 class BaseConfigModel(BaseModel):
     """Class to be used for defining the structured configuration options."""
@@ -234,12 +232,15 @@ def write(relation_data: RelationDataContent, model: BaseModel):
         relation_data: pointer to the relation databag
         model: instance of pydantic model to be written
     """
-    for key, value in model.dict(exclude_none=True).items():
-        relation_data[key.replace("_", "-")] = (
-            str(value)
-            if any(isinstance(value, _type) for _type in _DataBagNativeTypes)
-            else json.dumps(value)
-        )
+    for key, value in model.dict(exclude_none=False).items():
+        if value:
+            relation_data[key.replace("_", "-")] = (
+                str(value)
+                if any(isinstance(value, _type) for _type in DataBagNativeTypes)
+                else json.dumps(value)
+            )
+        else:
+            relation_data[key.replace("_", "-")] = ""
 
 
 def read(relation_data: MutableMapping[str, str], obj: Type[T]) -> T:
@@ -253,7 +254,7 @@ def read(relation_data: MutableMapping[str, str], obj: Type[T]) -> T:
         **{
             field_name: (
                 relation_data[parsed_key]
-                if field.annotation in DataBagNativeTypes
+                if field.outer_type_ in DataBagNativeTypes
                 else json.loads(relation_data[parsed_key])
             )
             for field_name, field in obj.__fields__.items()
