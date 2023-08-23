@@ -151,6 +151,7 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(self.harness.charm, TestCharmCharm)
 
     def test_config_parsing_ok(self):
+        """Test that Config parameters can be correctly parsed into pydantic classes."""
         self.assertIsInstance(self.harness.charm.config, CharmConfig)
 
         self.assertIsInstance(self.harness.charm.config.float_config, float)
@@ -159,6 +160,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(self.harness.charm.config["low-value-config"], 1)
 
     def test_config_parsing_ko(self):
+        """Test that Config parameters validation would raise an exception."""
         self.harness.update_config({"low-value-config": 200})
 
         self.assertRaises(ValueError, lambda: self.harness.charm.config)
@@ -166,6 +168,7 @@ class TestCharm(unittest.TestCase):
         self.harness.update_config({"low-value-config": 10})
 
     def test_action_params_parsing_ok(self):
+        """Test that action parameters are parsed correctly into pydantic classes."""
         mock_event = Mock()
         mock_event.params = {"host": "my-host"}
         with self.assertLogs(level="INFO") as logger:
@@ -173,6 +176,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(sorted(logger.output), ["INFO:unit.test_data_models:my-host:80"])
 
     def test_action_params_parsing_ko(self):
+        """Test that action parameters validation would raise an exception."""
         mock_event = Mock()
         mock_event.params = {"port": 8080}
         with self.assertLogs(level="ERROR") as logger:
@@ -181,6 +185,7 @@ class TestCharm(unittest.TestCase):
         self.assertTrue("field required" in logger.output[0])
 
     def test_relation_databag_io(self):
+        """Test that relation databag can be read and written into pydantic classes with nested structure."""
         relation_id = self.harness.add_relation("database", "mongodb")
         self.harness.set_leader(True)
         self.harness.add_relation_unit(relation_id, "mongodb/0")
@@ -196,6 +201,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(logger.output, ["INFO:unit.test_data_models:Field type: <class 'float'>"])
 
     def test_relation_databag_merged(self):
+        """Test that relation databag of unit and app can be read and merged into a single pydantic object."""
         relation = self.harness.charm.model.get_relation("database")
 
         relation_data = relation.data
@@ -223,6 +229,7 @@ class TestCharm(unittest.TestCase):
         ]
     )
     def test_relation_databag_merged_with_option(self, option_key, option_value, _type):
+        """Test that relation databag with optional values can be correctly parsed into pydantic objects."""
         relation = self.harness.charm.model.get_relation("database")
 
         self.harness.update_relation_data(
@@ -248,6 +255,7 @@ class TestCharm(unittest.TestCase):
         ]
     )
     def test_relation_databag_write_with_option(self, databag, expected_key, expected_value):
+        """Test that pydantic objects with optional values can be de-serialized in relation databag correctly."""
         relation = self.harness.charm.model.get_relation("database")
 
         relation_data = relation.data[relation.app]
@@ -258,6 +266,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(expected_value, relation_data[expected_key])
 
     def test_databag_parse_with_exception(self):
+        """Test that invalid dictionaries (string where it should be float) cannot be parsed and return a ValidationError exception."""
         merged_obj = get_relation_data_as(
             ProviderDataBag,
             {"key": "test"},
@@ -265,6 +274,7 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(merged_obj, ValidationError)
 
     def test_relation_databag_parse_with_exception(self):
+        """Test that invalid databag (string where it should be float) cannot be parsed and return a ValidationError exception."""
         relation = self.harness.charm.model.get_relation("database")
 
         with self.assertLogs(level="INFO") as logger:
