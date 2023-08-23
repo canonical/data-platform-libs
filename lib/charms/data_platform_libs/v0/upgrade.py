@@ -1117,7 +1117,6 @@ class DataUpgrade(Object, ABC):
                 return
 
             logger.debug("Did not find upgrade-stack or completed cluster state, deferring...")
-            event.defer()
             return
 
         # upgrade ongoing, set status for waiting units
