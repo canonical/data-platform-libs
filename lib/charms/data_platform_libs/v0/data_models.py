@@ -168,7 +168,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 PYDEPS = ["ops>=2.0.0", "pydantic>=1.10,<2"]
 
@@ -176,6 +176,8 @@ G = TypeVar("G")
 T = TypeVar("T", bound=BaseModel)
 AppModel = TypeVar("AppModel", bound=BaseModel)
 UnitModel = TypeVar("UnitModel", bound=BaseModel)
+
+DataBagNativeTypes = (int, str, float)
 
 
 class BaseConfigModel(BaseModel):
@@ -231,10 +233,15 @@ def write(relation_data: RelationDataContent, model: BaseModel):
         relation_data: pointer to the relation databag
         model: instance of pydantic model to be written
     """
-    for key, value in model.dict(exclude_none=True).items():
-        relation_data[key.replace("_", "-")] = (
-            str(value) if isinstance(value, str) or isinstance(value, int) else json.dumps(value)
-        )
+    for key, value in model.dict(exclude_none=False).items():
+        if value:
+            relation_data[key.replace("_", "-")] = (
+                str(value)
+                if any(isinstance(value, _type) for _type in DataBagNativeTypes)
+                else json.dumps(value)
+            )
+        else:
+            relation_data[key.replace("_", "-")] = ""
 
 
 def read(relation_data: MutableMapping[str, str], obj: Type[T]) -> T:
@@ -248,10 +255,11 @@ def read(relation_data: MutableMapping[str, str], obj: Type[T]) -> T:
         **{
             field_name: (
                 relation_data[parsed_key]
-                if field.annotation in [int, str, float]
+                if field.outer_type_ in DataBagNativeTypes
                 else json.loads(relation_data[parsed_key])
             )
-            for field_name, field in obj.__fields__.items()  # pyright: ignore[reportGeneralTypeIssues]
+            for field_name, field in obj.__fields__.items()
+            # pyright: ignore[reportGeneralTypeIssues]
             if (parsed_key := field_name.replace("_", "-")) in relation_data
             if relation_data[parsed_key]
         }

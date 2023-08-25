@@ -8,6 +8,7 @@ from unittest.mock import Mock
 
 from ops.charm import ActionEvent, RelationEvent
 from ops.testing import Harness
+from parameterized import parameterized
 from pydantic import BaseModel, ValidationError, validator
 
 from charms.data_platform_libs.v0.data_models import (
@@ -17,6 +18,7 @@ from charms.data_platform_libs.v0.data_models import (
     get_relation_data_as,
     parse_relation_data,
     validate_params,
+    write,
 )
 
 METADATA = """
@@ -75,6 +77,9 @@ class NestedDataBag(RelationDataModel):
 
 class ProviderDataBag(BaseModel):
     key: float
+    option_float: Optional[float] = None
+    option_int: Optional[int] = None
+    option_str: Optional[str] = None
 
 
 class MergedDataBag(NestedDataBag, ProviderDataBag):
@@ -124,7 +129,10 @@ class TestCharmCharm(TypedCharmBase[CharmConfig]):
         app_data: Optional[Union[ProviderDataBag, ValidationError]] = None,
         _=None,
     ):
-        logger.info(type(app_data.key))
+        if isinstance(app_data, ProviderDataBag):
+            logger.info("Field type: %s", type(app_data.key))
+        elif isinstance(app_data, ValidationError):
+            logger.info("Exception: %s", type(app_data))
 
 
 class TestCharm(unittest.TestCase):
@@ -143,6 +151,7 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(self.harness.charm, TestCharmCharm)
 
     def test_config_parsing_ok(self):
+        """Test that Config parameters can be correctly parsed into pydantic classes."""
         self.assertIsInstance(self.harness.charm.config, CharmConfig)
 
         self.assertIsInstance(self.harness.charm.config.float_config, float)
@@ -151,6 +160,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(self.harness.charm.config["low-value-config"], 1)
 
     def test_config_parsing_ko(self):
+        """Test that Config parameters validation would raise an exception."""
         self.harness.update_config({"low-value-config": 200})
 
         self.assertRaises(ValueError, lambda: self.harness.charm.config)
@@ -158,6 +168,7 @@ class TestCharm(unittest.TestCase):
         self.harness.update_config({"low-value-config": 10})
 
     def test_action_params_parsing_ok(self):
+        """Test that action parameters are parsed correctly into pydantic classes."""
         mock_event = Mock()
         mock_event.params = {"host": "my-host"}
         with self.assertLogs(level="INFO") as logger:
@@ -165,6 +176,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(sorted(logger.output), ["INFO:unit.test_data_models:my-host:80"])
 
     def test_action_params_parsing_ko(self):
+        """Test that action parameters validation would raise an exception."""
         mock_event = Mock()
         mock_event.params = {"port": 8080}
         with self.assertLogs(level="ERROR") as logger:
@@ -173,6 +185,7 @@ class TestCharm(unittest.TestCase):
         self.assertTrue("field required" in logger.output[0])
 
     def test_relation_databag_io(self):
+        """Test that relation databag can be read and written into pydantic classes with nested structure."""
         relation_id = self.harness.add_relation("database", "mongodb")
         self.harness.set_leader(True)
         self.harness.add_relation_unit(relation_id, "mongodb/0")
@@ -185,9 +198,10 @@ class TestCharm(unittest.TestCase):
 
         with self.assertLogs(level="INFO") as logger:
             self.harness.update_relation_data(relation_id, "mongodb", {"key": "1.0"})
-        self.assertEqual(logger.output, ["INFO:unit.test_data_models:<class 'float'>"])
+        self.assertEqual(logger.output, ["INFO:unit.test_data_models:Field type: <class 'float'>"])
 
     def test_relation_databag_merged(self):
+        """Test that relation databag of unit and app can be read and merged into a single pydantic object."""
         relation = self.harness.charm.model.get_relation("database")
 
         relation_data = relation.data
@@ -201,3 +215,68 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(merged_obj, MergedDataBag)
         self.assertEqual(merged_obj.key, 1.0)
         self.assertEqual(merged_obj.nested_field.key, [1, 2, 3])
+        self.assertIsNone(merged_obj.option_float)
+        self.assertIsNone(merged_obj.option_int)
+        self.assertIsNone(merged_obj.option_str)
+
+    @parameterized.expand(
+        [
+            ("option-float", "1.0", float),
+            ("option-float", "1", float),
+            ("option-int", "1", int),
+            ("option-str", "1", str),
+            ("option-str", "test", str),
+        ]
+    )
+    def test_relation_databag_merged_with_option(self, option_key, option_value, _type):
+        """Test that relation databag with optional values can be correctly parsed into pydantic objects."""
+        relation = self.harness.charm.model.get_relation("database")
+
+        self.harness.update_relation_data(
+            relation.id, "mongodb", {"key": "1.0", option_key: option_value}
+        )
+
+        relation_data = relation.data
+
+        merged_obj = get_relation_data_as(
+            MergedDataBag,
+            relation_data[self.harness.charm.app],
+            relation_data[relation.app],
+        )
+
+        self.assertIsNotNone(getattr(merged_obj, option_key.replace("-", "_")))
+        self.assertIsInstance(getattr(merged_obj, option_key.replace("-", "_")), _type)
+
+    @parameterized.expand(
+        [
+            (ProviderDataBag(key=1.0, option_float=2.0), "option-float", "2.0"),
+            (ProviderDataBag(key=1.0, option_int=2.0), "option-int", "2"),
+            (ProviderDataBag(key=1.0, option_str="test"), "option-str", "test"),
+        ]
+    )
+    def test_relation_databag_write_with_option(self, databag, expected_key, expected_value):
+        """Test that pydantic objects with optional values can be de-serialized in relation databag correctly."""
+        relation = self.harness.charm.model.get_relation("database")
+
+        relation_data = relation.data[relation.app]
+
+        write(relation_data, databag)
+
+        self.assertIn(expected_key, relation_data)
+        self.assertEqual(expected_value, relation_data[expected_key])
+
+    def test_databag_parse_with_exception(self):
+        """Test that invalid dictionaries (string where it should be float) cannot be parsed and return a ValidationError exception."""
+        merged_obj = get_relation_data_as(
+            ProviderDataBag,
+            {"key": "test"},
+        )
+        self.assertIsInstance(merged_obj, ValidationError)
+
+    def test_relation_databag_parse_with_exception(self):
+        """Test that invalid databag (string where it should be float) cannot be parsed and return a ValidationError exception."""
+        relation = self.harness.charm.model.get_relation("database")
+
+        with self.assertLogs(level="INFO") as logger:
+            self.harness.update_relation_data(relation.id, "mongodb", {"key": "test"})
+        self.assertTrue("Exception" in logger.output[0])
