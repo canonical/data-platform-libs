@@ -15,7 +15,7 @@ from random import randrange
 from time import sleep
 
 import psycopg2
-from ops.charm import CharmBase, WorkloadEvent
+from ops.charm import ActionEvent, CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
@@ -45,6 +45,23 @@ class DatabaseCharm(CharmBase):
 
         # Stored state is used to track the password of the database superuser.
         self._stored.set_default(password=self._new_password())
+        self.framework.observe(
+            self.on.change_admin_password_action, self._on_change_admin_password
+        )
+        self.framework.observe(self.on.set_secret_action, self._on_set_secret_action)
+
+    def _on_change_admin_password(self, event: ActionEvent):
+        """Change the admin password."""
+        password = self._new_password()
+        for relation in self.database.relations:
+            self.database.set_relation_fields(relation.id, {"password": password})
+
+    def _on_set_secret_action(self, event: ActionEvent):
+        """Change the admin password."""
+        secret_field = event.params.get("field")
+        password = self._new_password()
+        for relation in self.database.relations:
+            self.database.set_relation_fields(relation.id, {secret_field: password})
 
     def _on_database_pebble_ready(self, event: WorkloadEvent) -> None:
         """Define and start the database using the Pebble API."""

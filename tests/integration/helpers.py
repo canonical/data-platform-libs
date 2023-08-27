@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-from typing import Optional
+import json
+from typing import Dict, Optional
 
 import yaml
+from ops import JujuVersion
 from pytest_operator.plugin import OpsTest
+
+
+async def get_juju_secret(ops_test: OpsTest, secret_uri: str) -> Dict[str, str]:
+    """Retrieve juju secret."""
+    secret_unique_id = secret_uri.split("/")[-1]
+    complete_command = f"show-secret {secret_uri} --reveal --format=json"
+    _, stdout, _ = await ops_test.juju(*complete_command.split())
+    return json.loads(stdout)[secret_unique_id]["content"]["Data"]
 
 
 async def build_connection_string(
@@ -30,12 +40,22 @@ async def build_connection_string(
     """
     # Get the connection data exposed to the application through the relation.
     database = f'{application_name.replace("-", "_")}_{relation_name.replace("-", "_")}'
-    username = await get_application_relation_data(
-        ops_test, application_name, relation_name, "username", relation_id, relation_alias
-    )
-    password = await get_application_relation_data(
-        ops_test, application_name, relation_name, "password", relation_id, relation_alias
-    )
+
+    if JujuVersion.from_environ().has_secrets:
+        secret_uri = await get_application_relation_data(
+            ops_test, application_name, relation_name, "secret-user", relation_id, relation_alias
+        )
+        secret_data = await get_juju_secret(ops_test, secret_uri)
+        username = secret_data["username"]
+        password = secret_data["password"]
+
+    else:
+        username = await get_application_relation_data(
+            ops_test, application_name, relation_name, "username", relation_id, relation_alias
+        )
+        password = await get_application_relation_data(
+            ops_test, application_name, relation_name, "password", relation_id, relation_alias
+        )
     endpoints = await get_application_relation_data(
         ops_test, application_name, relation_name, "endpoints", relation_id, relation_alias
     )
@@ -160,6 +180,7 @@ async def get_application_relation_data(
     key: str,
     relation_id: str = None,
     relation_alias: str = None,
+    related_endpoint: str = None,
 ) -> Optional[str]:
     """Get relation data for an application.
 
@@ -171,6 +192,7 @@ async def get_application_relation_data(
         relation_id: id of the relation to get connection data from
         relation_alias: alias of the relation (like a connection name)
             to get connection data from
+        related_endpoint: the related endpoint, i.e. the "other side" of the relation
 
     Returns:
         the data that was requested or None
@@ -188,6 +210,7 @@ async def get_application_relation_data(
     data = yaml.safe_load(raw_data)
     # Filter the data based on the relation name.
     relation_data = [v for v in data[unit_name]["relation-info"] if v["endpoint"] == relation_name]
+
     if relation_id:
         # Filter the data based on the relation id.
         relation_data = [v for v in relation_data if v["relation-id"] == relation_id]
@@ -200,6 +223,12 @@ async def get_application_relation_data(
                 ops_test, unit_name, next(iter(v["related-units"]))
             )
             == relation_alias
+        ]
+    if related_endpoint:
+        relation_data = [
+            v
+            for v in data[unit_name]["relation-info"]
+            if v["related-endpoint"] == related_endpoint
         ]
     if len(relation_data) == 0:
         raise ValueError(

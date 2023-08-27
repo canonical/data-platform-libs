@@ -8,6 +8,8 @@ This charm is meant to be used only for testing the libraries in this repository
 """
 
 import logging
+import secrets
+import string
 from typing import Dict, Optional
 
 from ops.charm import ActionEvent, CharmBase
@@ -40,6 +42,9 @@ class OpenSearchCharm(CharmBase):
             self.opensearch_provider.on.index_requested, self._on_index_requested
         )
         self.framework.observe(self.on[PEER].relation_joined, self._on_peer_relation_joined)
+        self.framework.observe(
+            self.on.change_admin_password_action, self._on_change_admin_password
+        )
 
     def _on_peer_relation_joined(self, _):
         pass
@@ -74,6 +79,12 @@ class OpenSearchCharm(CharmBase):
         """Only sets an active status."""
         self.unit.status = ActiveStatus("OpenSearch Ready!")
 
+    def _on_change_admin_password(self, event: ActionEvent):
+        """Change the admin password."""
+        password = self._new_password()
+        for relation in self.opensearch_provider.relations:
+            self.opensearch_provider.set_relation_fields(relation.id, {"password": password})
+
     def _on_index_requested(self, event: IndexRequestedEvent):
         """Handle the on_index_requested event."""
         self.unit.status = MaintenanceStatus("Creating connection")
@@ -99,6 +110,15 @@ class OpenSearchCharm(CharmBase):
         """Reset the status message of the unit."""
         self.unit.status = ActiveStatus()
         event.set_results({"Status": "Reset unit status message"})
+
+    def _new_password(self) -> str:
+        """Generate a random password string.
+
+        Returns:
+           A random password string.
+        """
+        choices = string.ascii_letters + string.digits
+        return "".join([secrets.choice(choices) for i in range(16)])
 
 
 if __name__ == "__main__":
