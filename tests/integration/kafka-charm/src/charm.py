@@ -108,7 +108,13 @@ class KafkaCharm(CharmBase):
     def _on_sync_password(self, event: ActionEvent):
         """Set the password in the data relation databag."""
         logger.info("On sync password")
-        password = event.params["password"]
+
+        password = event.params.get("password")
+        if not password:
+            secret_uri = event.params.get("secret")
+            secret_contents = self.charm.model.get_secret(id=secret_uri).get_content()
+            password = secret_contents.get("password")
+
         self.set_secret("app", "password", password)
         logger.info(f"New password: {password}")
         # set parameters in the secrets
@@ -125,7 +131,13 @@ class KafkaCharm(CharmBase):
     def _on_sync_username(self, event: ActionEvent):
         """Set the username in the data relation databag."""
         username = event.params["username"]
+        if not username:
+            secret_uri = event.params.get("secret")
+            secret_contents = self.charm.model.get_secret(id=secret_uri).get_content()
+            username = secret_contents.get("username")
+
         self.set_secret("app", "username", username)
+
         # set parameters in the secrets
         # update relation data if the relation is present
         if len(self.kafka_provider.relations) > 0:
