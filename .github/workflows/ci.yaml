@@ -64,7 +64,7 @@ jobs:
           - integration-opensearch
           - integration-kafka
         juju-version:
-          - juju-bootstrap-option: "2.9.38"
+          - juju-bootstrap-option: "2.9.44"
             juju-snap-channel: "2.9/stable"
             libjuju-version: "2.9.42.4"
           - juju-bootstrap-option: "3.1.5"
