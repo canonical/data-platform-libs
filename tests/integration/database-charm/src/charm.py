@@ -109,7 +109,11 @@ class DatabaseCharm(CharmBase):
         assert self.model.get_binding("database").network
         assert self.model.get_binding("database").network.bind_address
         logger.info(
-            f"Charm binding {self.model.get_binding('database')}, network: {self.model.get_binding('database').network}, IP:  self.model.get_binding('database').network.bind_address"
+            (
+                f"Charm binding {self.model.get_binding('database')}, "
+                f"network: {self.model.get_binding('database').network}, "
+                f"IP: {self.model.get_binding('database').network.bind_address}"
+            )
         )
 
         # Set the read/write endpoint.
