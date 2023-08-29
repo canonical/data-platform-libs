@@ -113,7 +113,7 @@ class OpenSearchCharm(CharmBase):
 
 
 class DataProvidesBaseTests(ABC):
-    SECRET_FIELDS = "username password tls tls-ca"
+    SECRET_FIELDS = "username password tls tls-ca endpoints uris"
 
     @abstractmethod
     def get_harness(self) -> Tuple[Harness, int]:
@@ -178,7 +178,7 @@ class DataProvidesBaseTests(ABC):
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_set_credentials_secrets(self):
-        """Asserts that the database name is in the relation databag when it's requested."""
+        """Asserts that credentials are set up as secrets if possible."""
         # Set the credentials in the relation using the provides charm library.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
 
@@ -188,11 +188,25 @@ class DataProvidesBaseTests(ABC):
             + f"{self.SECRET_FIELDS}"
             + '"}'  # Data is the diff stored between multiple relation changed events.   # noqa
         )
-        secret_id = self.harness.get_relation_data(self.rel_id, self.app_name)["secret"]
+        secret_id = self.harness.get_relation_data(self.rel_id, self.app_name)["secret-user"]
         assert secret_id
 
         secret = self.harness.charm.model.get_secret(id=secret_id)
         assert secret.get_content() == {"username": "test-username", "password": "test-password"}
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_set_credentials_secrets_provides_juju3_requires_juju2(self):
+        """Asserts that the databag is used if one side of the relation is on Juju2."""
+        self.harness.update_relation_data(self.rel_id, "application", {"secret_fields": ""})
+        # Set the credentials in the relation using the provides charm library.
+        self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
+
+        # Check that the credentials are present in the relation.
+        assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
+            "data": "{}",  # Data is the diff stored between multiple relation changed events.
+            "username": "test-username",
+            "password": "test-password",
+        }
 
 
 class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
@@ -241,6 +255,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         assert event.database == DATABASE
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
+    @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_endpoints(self):
         """Asserts that the endpoints are in the relation databag when they change."""
         # Set the endpoints in the relation using the provides charm library.
@@ -251,6 +266,17 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             self.harness.get_relation_data(self.rel_id, "database")["endpoints"]
             == "host1:port,host2:port"
         )
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_set_endpoints_secrets(self):
+        """Asserts that the endpoints are in the relation databag when they change."""
+        # Set the endpoints in the relation using the provides charm library.
+        self.harness.charm.provider.set_endpoints(self.rel_id, "host1:port,host2:port")
+
+        # Check that the endpoints are present in the relation.
+        secret_uri = self.harness.get_relation_data(self.rel_id, self.app_name)["secret-endpoints"]
+        secret = self.harness.charm.model.get_secret(id=secret_uri)
+        assert secret.get_content() == {"endpoints": "host1:port,host2:port"}
 
     def test_set_read_only_endpoints(self):
         """Asserts that the read only endpoints are in the relation databag when they change."""
@@ -295,7 +321,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         relation_data = self.harness.get_relation_data(self.rel_id, "database")
-        secret_id = relation_data.pop("secret")
+        secret_id = relation_data.pop("secret-tls")
         assert secret_id
 
         relation_data == {
@@ -396,6 +422,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         assert event.topic == TOPIC
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
+    @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_bootstrap_server(self):
         """Asserts that the bootstrap-server are in the relation databag when they change."""
         # Set the bootstrap-server in the relation using the provides charm library.
@@ -406,6 +433,17 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
             self.harness.get_relation_data(self.rel_id, self.app_name)["endpoints"]
             == "host1:port,host2:port"
         )
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_set_bootstrap_server_secrets(self):
+        """Asserts that the bootstrap-server are in the relation databag when they change."""
+        # Set the bootstrap-server in the relation using the provides charm library.
+        self.harness.charm.provider.set_bootstrap_server(self.rel_id, "host1:port,host2:port")
+
+        # Check that the bootstrap-server is present in the relation.
+        secret_uri = self.harness.get_relation_data(self.rel_id, self.app_name)["secret-endpoints"]
+        secret = self.harness.charm.model.get_secret(id=secret_uri)
+        assert secret.get_content() == {"endpoints": "host1:port,host2:port"}
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_additional_fields(self):
@@ -436,7 +474,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         relation_data = self.harness.get_relation_data(self.rel_id, self.app_name)
-        secret_id = relation_data.pop("secret")
+        secret_id = relation_data.pop("secret-tls")
         assert secret_id
 
         relation_data == {
@@ -556,7 +594,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         relation_data = self.harness.get_relation_data(self.rel_id, self.app_name)
-        secret_id = relation_data.pop("secret")
+        secret_id = relation_data.pop("secret-tls")
         assert secret_id
 
         relation_data == {
@@ -857,6 +895,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.begin_with_initial_hooks()
 
     @patch.object(charm, "_on_database_created")
+    @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_on_database_created(self, _on_database_created):
         """Asserts on_database_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created database.
@@ -902,6 +941,72 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
 
+    @patch.object(charm, "_on_database_created")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_on_database_created_secrets(self, _on_database_created):
+        """Asserts on_database_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created database.
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        secret = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+
+        # Assert the correct hook is called.
+        _on_database_created.assert_called_once()
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_database_created.call_args[0][0]
+        assert event.relation.data[event.relation.app]["secret-user"] == secret.id
+
+        assert self.harness.charm.requirer.is_resource_created()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        secret2 = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+        self.harness.update_relation_data(rel_id, self.provider, {"secret-user": secret2.id})
+
+        # Assert the correct hook is called.
+        assert _on_database_created.call_count == 2
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_database_created.call_args[0][0]
+        assert event.relation.data[event.relation.app]["secret-user"] == secret2.id
+
+        assert self.harness.charm.requirer.is_resource_created(rel_id)
+        assert self.harness.charm.requirer.is_resource_created()
+
+    @patch.object(charm, "_on_database_created")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_on_database_created_requires_juju3_provides_juju2(self, _on_database_created):
+        """Asserts that the databag is used if one side of the relation is on Juju2."""
+        # Simulate sharing the credentials of a new created database.
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {"username": "test-username", "password": "test-password"},
+        )
+
+        # Assert the correct hook is called.
+        _on_database_created.assert_called_once()
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_database_created.call_args[0][0]
+        assert event.username == "test-username"
+        assert event.password == "test-password"
+
     @patch.object(charm, "_on_endpoints_changed")
     def test_on_endpoints_changed(self, _on_endpoints_changed):
         """Asserts the correct call to on_endpoints_changed."""
@@ -941,6 +1046,42 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         )
 
         # Assert the hook is called now.
+        _on_endpoints_changed.assert_called_once()
+
+    @patch.object(charm, "_on_endpoints_changed")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_on_endpoints_changed_secrets(self, _on_endpoints_changed):
+        """Asserts the correct call to on_endpoints_changed."""
+        # Simulate adding endpoints to the relation.
+        secret = self.harness.charm.app.add_secret({"endpoints": "host1:port,host2:port"})
+
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {"secret-endpoints": secret.id}
+        )
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {"secret-endpoints-revision": "1"}
+        )
+
+        # Assert the correct hook is called.
+        _on_endpoints_changed.assert_called_once()
+
+        # Check that the endpoints are present in the relation
+        # using the requires charm library event.
+        event = _on_endpoints_changed.call_args[0][0]
+        assert event.relation.data[event.relation.app]["secret-endpoints"] == secret.id
+
+        # Reset the mock call count.
+        _on_endpoints_changed.reset_mock()
+
+        # NOTE: Unlike for Juju2 databag tests, here we can't really simulate
+        # that there was an attempt to re-set the secret with equal contents
+
+        # Then, change the endpoints in the relation.
+        secret.set_content({"endpoints": "host1:port,host2:port,host3:port"})
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {"secret-endpoints-revision": "2"}
+        )
+
         _on_endpoints_changed.assert_called_once()
 
     @patch.object(charm, "_on_read_only_endpoints_changed")
@@ -1092,6 +1233,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert self.harness.charm.requirer._get_relation_alias(self.rel_id) == CLUSTER_ALIASES[0]
 
     @patch("psycopg.connect")
+    @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_is_postgresql_plugin_enabled(self, _connect):
         """Asserts that the function correctly returns whether a plugin is enabled."""
         plugin = "citext"
@@ -1104,6 +1246,35 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         with self.harness.hooks_disabled():
             self.harness.update_relation_data(
                 self.rel_id, self.provider, {"endpoints": "test-endpoint:5432"}
+            )
+        assert not self.harness.charm.requirer.is_postgresql_plugin_enabled(plugin)
+
+        _connect.side_effect = None
+        # Assert False when the plugin is disabled.
+        connect_cursor = _connect.return_value.__enter__.return_value.cursor
+        connect_cursor.return_value.__enter__.return_value.fetchone.return_value = None
+        assert not self.harness.charm.requirer.is_postgresql_plugin_enabled(plugin)
+
+        # Assert True when the plugin is enabled.
+        connect_cursor.return_value.__enter__.return_value.fetchone.return_value = True
+        assert self.harness.charm.requirer.is_postgresql_plugin_enabled(plugin)
+
+    @patch("psycopg.connect")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_is_postgresql_plugin_enabled_secrets(self, _connect):
+        """Asserts that the function correctly returns whether a plugin is enabled."""
+        plugin = "citext"
+
+        # Assert False is returned when there is no endpoint available.
+        assert not self.harness.charm.requirer.is_postgresql_plugin_enabled(plugin)
+
+        secret = self.harness.charm.app.add_secret({"endpoints": "test-endpoint:5432"})
+
+        # Assert False when the connection to the database fails.
+        _connect.side_effect = psycopg.Error
+        with self.harness.hooks_disabled():
+            self.harness.update_relation_data(
+                self.rel_id, self.provider, {"secret-endpoints": secret.id}
             )
         assert not self.harness.charm.requirer.is_postgresql_plugin_enabled(plugin)
 
@@ -1217,6 +1388,7 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.begin_with_initial_hooks()
 
     @patch.object(charm, "_on_topic_created")
+    @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_on_topic_created(
         self,
         _on_topic_created,
@@ -1262,6 +1434,55 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         event = _on_topic_created.call_args[0][0]
         assert event.username == "test-username-2"
         assert event.password == "test-password-2"
+
+        assert self.harness.charm.requirer.is_resource_created(rel_id)
+        assert self.harness.charm.requirer.is_resource_created()
+
+    @patch.object(charm, "_on_topic_created")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_on_topic_created_secret(
+        self,
+        _on_topic_created,
+    ):
+        """Asserts on_topic_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created topic.
+
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        secret = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+
+        # Assert the correct hook is called.
+        _on_topic_created.assert_called_once()
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_topic_created.call_args[0][0]
+        assert event.relation.data[event.relation.app]["secret-user"] == secret.id
+
+        assert self.harness.charm.requirer.is_resource_created()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        secret2 = self.harness.charm.app.add_secret(
+            {"username": "test-username2", "password": "test-password2"}
+        )
+
+        self.harness.update_relation_data(rel_id, self.provider, {"secret-user": secret2.id})
+
+        # Assert the correct hook is called.
+        assert _on_topic_created.call_count == 2
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_topic_created.call_args[0][0]
+        assert event.relation.data[event.relation.app]["secret-user"] == secret2.id
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
@@ -1380,6 +1601,7 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.begin_with_initial_hooks()
 
     @patch.object(charm, "_on_index_created")
+    @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_on_index_created(
         self,
         _on_index_created,
@@ -1407,7 +1629,6 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         assert self.harness.charm.requirer.is_resource_created()
 
         rel_id = self.add_relation(self.harness, self.provider)
-
         assert not self.harness.charm.requirer.is_resource_created()
         assert not self.harness.charm.requirer.is_resource_created(rel_id)
 
@@ -1425,6 +1646,55 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         event = _on_index_created.call_args[0][0]
         assert event.username == "test-username-2"
         assert event.password == "test-password-2"
+
+        assert self.harness.charm.requirer.is_resource_created(rel_id)
+        assert self.harness.charm.requirer.is_resource_created()
+
+    @patch.object(charm, "_on_index_created")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_on_index_created_secret(
+        self,
+        _on_index_created,
+    ):
+        """Asserts on_index_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created topic.
+
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        secret = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+
+        # Assert the correct hook is called.
+        _on_index_created.assert_called_once()
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_index_created.call_args[0][0]
+        assert event.relation.data[event.relation.app]["secret-user"] == secret.id
+
+        assert self.harness.charm.requirer.is_resource_created()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        secret2 = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+
+        self.harness.update_relation_data(rel_id, self.provider, {"secret-user": secret2.id})
+
+        # Assert the correct hook is called.
+        assert _on_index_created.call_count == 2
+
+        # Check that the username and the password are present in the relation
+        # using the requires charm library event.
+        event = _on_index_created.call_args[0][0]
+        assert event.relation.data[event.relation.app]["secret-user"] == secret2.id
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
