@@ -90,16 +90,19 @@ async def test_opensearch_relation_with_charm_libraries_secrets(ops_test: OpsTes
         assert "granted" in unit.workload_status_message
 
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret"
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret-user"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
     username = secret_content["username"]
     password = secret_content["password"]
 
-    endpoints = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "endpoints"
+    secret_uri = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret-endpoints"
     )
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    endpoints = secret_content["endpoints"]
+
     index = await get_application_relation_data(
         ops_test, APPLICATION_APP_NAME, RELATION_NAME, "index"
     )

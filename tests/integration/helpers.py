@@ -43,11 +43,23 @@ async def build_connection_string(
 
     if JujuVersion.from_environ().has_secrets:
         secret_uri = await get_application_relation_data(
-            ops_test, application_name, relation_name, "secret", relation_id, relation_alias
+            ops_test, application_name, relation_name, "secret-user", relation_id, relation_alias
         )
         secret_data = await get_juju_secret(ops_test, secret_uri)
         username = secret_data["username"]
         password = secret_data["password"]
+
+        secret_uri = await get_application_relation_data(
+            ops_test,
+            application_name,
+            relation_name,
+            "secret-endpoints",
+            relation_id,
+            relation_alias,
+        )
+        secret_data = await get_juju_secret(ops_test, secret_uri)
+        endpoints = secret_data["endpoints"]
+
     else:
         username = await get_application_relation_data(
             ops_test, application_name, relation_name, "username", relation_id, relation_alias
@@ -55,9 +67,9 @@ async def build_connection_string(
         password = await get_application_relation_data(
             ops_test, application_name, relation_name, "password", relation_id, relation_alias
         )
-    endpoints = await get_application_relation_data(
-        ops_test, application_name, relation_name, "endpoints", relation_id, relation_alias
-    )
+        endpoints = await get_application_relation_data(
+            ops_test, application_name, relation_name, "endpoints", relation_id, relation_alias
+        )
     host = endpoints.split(",")[0].split(":")[0]
 
     # Build the complete connection string to connect to the database.
