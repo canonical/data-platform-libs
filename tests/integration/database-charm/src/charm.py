@@ -11,6 +11,8 @@ of the libraries in this repository.
 import logging
 import secrets
 import string
+from random import randrange
+from time import sleep
 
 import psycopg2
 from ops.charm import CharmBase, WorkloadEvent
@@ -99,6 +101,20 @@ class DatabaseCharm(CharmBase):
 
         # Share the credentials with the application.
         self.database.set_credentials(event.relation.id, username, password)
+
+        # Temporary hack to avoid https://bugs.launchpad.net/juju/+bug/2031631
+        sleep(randrange(3))
+
+        assert self.model.get_binding("database")
+        assert self.model.get_binding("database").network
+        assert self.model.get_binding("database").network.bind_address
+        logger.info(
+            (
+                f"Charm binding {self.model.get_binding('database')}, "
+                f"network: {self.model.get_binding('database').network}, "
+                f"IP: {self.model.get_binding('database').network.bind_address}"
+            )
+        )
 
         # Set the read/write endpoint.
         self.database.set_endpoints(
