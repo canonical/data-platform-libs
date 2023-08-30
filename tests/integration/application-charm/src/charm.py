@@ -195,7 +195,9 @@ class ApplicationCharm(CharmBase):
         """Event triggered when a database was created for this application."""
         # Retrieve the credentials using the charm library.
         username, password = self._get_username_password(self.database_clusters, event)
-        logger.info(f"cluster {event.relation.app.name} credentials: {username} {password}")
+        logger.info(
+            f"cluster {event.relation.app.name} credentials: {username} {password}"
+        )
         self.unit.status = ActiveStatus(
             f"received database credentials for cluster {event.relation.app.name}"
         )
@@ -247,7 +249,9 @@ class ApplicationCharm(CharmBase):
     def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
         """Event triggered when a bootstrap server was changed for this application."""
         bootstrap_server = self._get_bootstrap_server(self.kafka, event)
-        logger.info(f"On kafka boostrap-server changed: bootstrap-server: {bootstrap_server}")
+        logger.info(
+            f"On kafka boostrap-server changed: bootstrap-server: {bootstrap_server}"
+        )
         self.unit.status = ActiveStatus("kafka_bootstrap_server_changed")
 
     def _on_kafka_topic_created(self, _: TopicCreatedEvent):
