@@ -28,7 +28,6 @@ jobs:
         run: tox run -e lint
 
   unit-test:
-    name: Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -36,6 +35,8 @@ jobs:
         juju-version:
           - libjuju-version: "2.9.42.4"
           - libjuju-version: "3.2.0.1"
+        lib-version: ["v0", "v1"]
+    name: Unit test ( ${{ matrix.lib-version }} - ${{ matrix.juju-version.libjuju-version }} )
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -43,9 +44,10 @@ jobs:
         # TODO: Consider replacing with custom image on self-hosted runner OR pinning version
         run: python3 -m pip install tox
       - name: Run tests
-        run: tox run -e unit
+        run: tox run -e unit-${{ matrix.lib-version }}
         env:
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
+          LIB_VERSION: "${{ matrix.lib-version }}"
 
   build:
     name: Build charms
@@ -60,7 +62,6 @@ jobs:
       matrix:
         tox-environments:
           - integration-database
-          - integration-s3
           - integration-opensearch
           - integration-kafka
         juju-version:
@@ -70,7 +71,28 @@ jobs:
           - juju-bootstrap-option: "3.1.5"
             juju-snap-channel: "3.1/stable"
             libjuju-version: "3.2.0.1"
-    name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- libjuju ${{ matrix.juju-version.libjuju-version }}
+        lib-version: ["v0", "v1"]
+        # s3 tests are independent, shouldn't run for both vesions
+        include:
+          - {
+            tox-environments: integration-s3,
+            lib-version: "v0",
+            juju-version: {
+              juju-snap-channel: "2.9/stable",
+              libjuju-version: "2.9.42.4",
+              juju-bootstrap-option: "2.9.44",
+              }
+            }
+          - { 
+            tox-environments: integration-s3,
+            lib-version: "v0",
+            juju-version: {
+              juju-snap-channel: "3.1/stable",
+              libjuju-version: "3.2.0.1",
+              juju-bootstrap-option: "3.1.5",
+              }
+            }
+    name: ${{ matrix.lib-version }} - ${{ matrix.juju-version.juju-snap-channel}} - ${{ matrix.tox-environments }}
     needs:
       - lint
       - unit-test
@@ -105,10 +127,11 @@ jobs:
           fi
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing
+        run: tox run -e ${{ matrix.tox-environments }}-${{ matrix.lib-version }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
+          LIB_VERSION: "${{ matrix.lib-version }}"
       - name: Print debug-log
         run: juju switch testing; juju debug-log --replay --no-tail
       - name: Dump logs
