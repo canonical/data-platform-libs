@@ -1,0 +1,11 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+get-plugin-status:
+  description: Get plugin status (enabled/disabled).
+  params:
+    plugin:
+      type: string
+      description: The plugin to check the status.
+
+reset-unit-status:
+  description: Set empty status message (ActiveStatus)

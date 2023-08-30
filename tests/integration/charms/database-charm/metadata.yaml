@@ -1,0 +1,30 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: database
+description: |
+  Data platform libs database charm used in integration tests.
+summary: |
+  Data platform libs database meant to be used
+  only for testing of the libs in this repository.
+
+containers:
+  database:
+    resource: database-image
+    mounts:
+      - storage: database
+        location: /var/lib/postgresql/data/pgdata
+
+resources:
+  database-image:
+    type: oci-image
+    description: OCI image for database
+    upstream-source: ubuntu/postgres@sha256:f0b7dcc3088c018ebcd90dd8b4e9007b094fd180d5a12f5be3e7120914ac159d
+
+provides:
+  database:
+    interface: database_client
+
+storage:
+  database:
+    type: filesystem
+    location: /var/lib/postgresql/data/pgdata
