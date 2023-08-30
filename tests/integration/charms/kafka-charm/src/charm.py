@@ -16,13 +16,16 @@ from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
 
+# The correct library module is supposed to be put in place by the
+# copy_data_interfaces_library_into_charm auto-applied fixture
+# using the LIB_VERSION env variable
 try:
-    df_module = import_module("charms.data_platform_libs.v0.data_interfaces")
+    data_interfaces_module = import_module("charms.data_platform_libs.v0.data_interfaces")
 except ImportError:
-    df_module = import_module("charms.data_platform_libs.v1.data_interfaces")
+    data_interfaces_module = import_module("charms.data_platform_libs.v1.data_interfaces")
 
-KafkaProvides = df_module.KafkaProvides
-TopicRequestedEvent = df_module.TopicRequestedEvent
+KafkaProvides = data_interfaces_module.KafkaProvides
+TopicRequestedEvent = data_interfaces_module.TopicRequestedEvent
 
 logger = logging.getLogger(__name__)
 

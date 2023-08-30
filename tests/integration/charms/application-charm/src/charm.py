@@ -11,26 +11,29 @@ of the libraries in this repository.
 import logging
 from importlib import import_module
 
-from ops import JujuVersion, EventBase
+from ops import EventBase, JujuVersion
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 
+# The correct library module is supposed to be put in place by the
+# copy_data_interfaces_library_into_charm auto-applied fixture
+# using the LIB_VERSION env variable
 try:
-    df_module = import_module("charms.data_platform_libs.v0.data_interfaces")
+    data_interfaces_module = import_module("charms.data_platform_libs.v0.data_interfaces")
 except ImportError:
-    df_module = import_module("charms.data_platform_libs.v1.data_interfaces")
+    data_interfaces_module = import_module("charms.data_platform_libs.v1.data_interfaces")
 
 
-BootstrapServerChangedEvent = df_module.BootstrapServerChangedEvent
-DatabaseCreatedEvent = df_module.DatabaseCreatedEvent
-DatabaseEndpointsChangedEvent = df_module.DatabaseEndpointsChangedEvent
-DatabaseRequires = df_module.DatabaseRequires
-DataRequires = df_module.DataRequires
-IndexCreatedEvent = df_module.IndexCreatedEvent
-KafkaRequires = df_module.KafkaRequires
-OpenSearchRequires = df_module.OpenSearchRequires
-TopicCreatedEvent = df_module.TopicCreatedEvent
+BootstrapServerChangedEvent = data_interfaces_module.BootstrapServerChangedEvent
+DatabaseCreatedEvent = data_interfaces_module.DatabaseCreatedEvent
+DatabaseEndpointsChangedEvent = data_interfaces_module.DatabaseEndpointsChangedEvent
+DatabaseRequires = data_interfaces_module.DatabaseRequires
+DataRequires = data_interfaces_module.DataRequires
+IndexCreatedEvent = data_interfaces_module.IndexCreatedEvent
+KafkaRequires = data_interfaces_module.KafkaRequires
+OpenSearchRequires = data_interfaces_module.OpenSearchRequires
+TopicCreatedEvent = data_interfaces_module.TopicCreatedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -158,15 +161,13 @@ class ApplicationCharm(CharmBase):
         if hasattr(event, "username"):
             return event.endpoints
         else:
-            data = requires.get_relation_field(event.relation.id, "endpoints")
-            return data.get("endpoints")
+            return requires.get_relation_field(event.relation.id, "endpoints")
 
     def _get_bootstrap_server(self, requires: DataRequires, event: EventBase):
         if hasattr(event, "username"):
             return event.bootstrap_server
         else:
-            data = requires.get_relation_field(event.relation.id, "endpoints")
-            return data.get("endpoints")
+            return requires.get_relation_field(event.relation.id, "endpoints")
 
     # First database events observers.
     def _on_first_database_created(self, event: DatabaseCreatedEvent) -> None:
@@ -199,9 +200,7 @@ class ApplicationCharm(CharmBase):
         """Event triggered when a database was created for this application."""
         # Retrieve the credentials using the charm library.
         username, password = self._get_username_password(self.database_clusters, event)
-        logger.info(
-            f"cluster {event.relation.app.name} credentials: {username} {password}"
-        )
+        logger.info(f"cluster {event.relation.app.name} credentials: {username} {password}")
         self.unit.status = ActiveStatus(
             f"received database credentials for cluster {event.relation.app.name}"
         )
@@ -253,9 +252,7 @@ class ApplicationCharm(CharmBase):
     def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
         """Event triggered when a bootstrap server was changed for this application."""
         bootstrap_server = self._get_bootstrap_server(self.kafka, event)
-        logger.info(
-            f"On kafka boostrap-server changed: bootstrap-server: {bootstrap_server}"
-        )
+        logger.info(f"On kafka boostrap-server changed: bootstrap-server: {bootstrap_server}")
         self.unit.status = ActiveStatus("kafka_bootstrap_server_changed")
 
     def _on_kafka_topic_created(self, _: TopicCreatedEvent):

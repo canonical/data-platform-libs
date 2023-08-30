@@ -11,9 +11,9 @@ of the libraries in this repository.
 import logging
 import secrets
 import string
+from importlib import import_module
 from random import randrange
 from time import sleep
-from importlib import import_module
 
 import psycopg2
 from ops.charm import CharmBase, WorkloadEvent
@@ -21,13 +21,16 @@ from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
 
+# The correct library module is supposed to be put in place by the
+# copy_data_interfaces_library_into_charm auto-applied fixture
+# using the LIB_VERSION env variable
 try:
-    df_module = import_module("charms.data_platform_libs.v0.data_interfaces")
+    data_interfaces_module = import_module("charms.data_platform_libs.v0.data_interfaces")
 except ImportError:
-    df_module = import_module("charms.data_platform_libs.v1.data_interfaces")
+    data_interfaces_module = import_module("charms.data_platform_libs.v1.data_interfaces")
 
-DatabaseProvides = df_module.DatabaseProvides
-DatabaseRequestedEvent = df_module.DatabaseRequestedEvent
+DatabaseProvides = data_interfaces_module.DatabaseProvides
+DatabaseRequestedEvent = data_interfaces_module.DatabaseRequestedEvent
 
 logger = logging.getLogger(__name__)
 

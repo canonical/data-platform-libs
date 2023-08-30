@@ -41,10 +41,14 @@ async def build_connection_string(
     # Get the connection data exposed to the application through the relation.
     database = f'{application_name.replace("-", "_")}_{relation_name.replace("-", "_")}'
 
+    secret_uri = None
     if JujuVersion.from_environ().has_secrets:
         secret_uri = await get_application_relation_data(
             ops_test, application_name, relation_name, "secret-user", relation_id, relation_alias
         )
+
+    # NOTE: the fact that we're on Juju3 doesn't mean we're using the version with secrets
+    if secret_uri:
         secret_data = await get_juju_secret(ops_test, secret_uri)
         username = secret_data["username"]
         password = secret_data["password"]
