@@ -15,6 +15,7 @@ from ops.testing import Harness
 from parameterized import parameterized
 
 from charms.data_platform_libs.v0.data_interfaces import (
+    AuthenticationEvent,
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseProvides,
@@ -913,8 +914,15 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_database_created.call_args[0][0]
-        assert event.username == "test-username"
-        assert event.password == "test-password"
+        assert isinstance(event, AuthenticationEvent)
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "username")
+            == "test-username"
+        )
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
 
         assert self.harness.charm.requirer.is_resource_created()
 
@@ -935,8 +943,13 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_database_created.call_args[0][0]
-        assert event.username == "test-username-2"
-        assert event.password == "test-password-2"
+        assert isinstance(event, AuthenticationEvent)
+        assert (
+            self.harness.charm.requirer.get_relation_field(rel_id, "username") == "test-username-2"
+        )
+        assert (
+            self.harness.charm.requirer.get_relation_field(rel_id, "password") == "test-password-2"
+        )
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
@@ -1001,11 +1014,14 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Assert the correct hook is called.
         _on_database_created.assert_called_once()
 
-        # Check that the username and the password are present in the relation
-        # using the requires charm library event.
-        event = _on_database_created.call_args[0][0]
-        assert event.username == "test-username"
-        assert event.password == "test-password"
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "username")
+            == "test-username"
+        )
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
 
     @patch.object(charm, "_on_endpoints_changed")
     def test_on_endpoints_changed(self, _on_endpoints_changed):
@@ -1157,30 +1173,82 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             self.rel_id,
             self.provider,
             {
-                "username": "test-username",
-                "password": "test-password",
-                "endpoints": "host1:port,host2:port",
                 "read-only-endpoints": "host1:port,host2:port",
                 "replset": "rs0",
-                "tls": "True",
-                "tls-ca": "Canonical",
-                "uris": "host1:port,host2:port",
                 "version": "1.0",
             },
         )
 
+        secret = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+        secret = self.harness.charm.app.add_secret({"endpoints": "host1:port,host2:port"})
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {"secret-endpoints": secret.id}
+        )
+        secret = self.harness.charm.app.add_secret({"tls": "True", "tls-ca": "Canonical"})
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-tls": secret.id})
+        secret = self.harness.charm.app.add_secret({"uris": "host1:port,host2:port"})
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-uris": secret.id})
+
         # Check that the fields are present in the relation
         # using the requires charm library event.
         event = _on_database_created.call_args[0][0]
-        assert event.username == "test-username"
-        assert event.password == "test-password"
-        assert event.endpoints == "host1:port,host2:port"
         assert event.read_only_endpoints == "host1:port,host2:port"
         assert event.replset == "rs0"
-        assert event.tls == "True"
-        assert event.tls_ca == "Canonical"
-        assert event.uris == "host1:port,host2:port"
         assert event.version == "1.0"
+
+    @patch.object(charm, "_on_database_created")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_fields_are_accessible_through_interface_functions(self, _on_database_created):
+        """Asserts fields are accessible through the requires charm library event."""
+        # Simulate setting the additional fields.
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "read-only-endpoints": "host1:port,host2:port",
+                "replset": "rs0",
+                "version": "1.0",
+            },
+        )
+
+        secret = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+        secret = self.harness.charm.app.add_secret({"endpoints": "host1:port,host2:port"})
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {"secret-endpoints": secret.id}
+        )
+        secret = self.harness.charm.app.add_secret({"tls": "True", "tls-ca": "Canonical"})
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-tls": secret.id})
+        secret = self.harness.charm.app.add_secret({"uris": "host1:port,host2:port"})
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-uris": secret.id})
+
+        # Secret fields
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "username")
+            == "test-username"
+        )
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
+        assert self.harness.charm.requirer.get_relation_fields(
+            self.rel_id, ["endpoints", "tls", "tls-ca", "uris"]
+        ) == {
+            "endpoints": "host1:port,host2:port",
+            "tls": "True",
+            "tls-ca": "Canonical",
+            "uris": "host1:port,host2:port",
+        }
+
+        # Databag fields
+        assert self.harness.charm.requirer.get_relation_fields(
+            self.rel_id, ["read-only-endpoints", "replset", "version"]
+        ) == {"read-only-endpoints": "host1:port,host2:port", "replset": "rs0", "version": "1.0"}
 
     def test_assign_relation_alias(self):
         """Asserts the correct relation alias is assigned to the relation."""
@@ -1410,8 +1478,15 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_topic_created.call_args[0][0]
-        assert event.username == "test-username"
-        assert event.password == "test-password"
+        assert isinstance(event, AuthenticationEvent)
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "username")
+            == "test-username"
+        )
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
 
         assert self.harness.charm.requirer.is_resource_created()
 
@@ -1432,8 +1507,13 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_topic_created.call_args[0][0]
-        assert event.username == "test-username-2"
-        assert event.password == "test-password-2"
+        assert isinstance(event, AuthenticationEvent)
+        assert (
+            self.harness.charm.requirer.get_relation_field(rel_id, "username") == "test-username-2"
+        )
+        assert (
+            self.harness.charm.requirer.get_relation_field(rel_id, "password") == "test-password-2"
+        )
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
@@ -1565,26 +1645,77 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
             self.rel_id,
             self.provider,
             {
-                "username": "test-username",
-                "password": "test-password",
-                "endpoints": "host1:port,host2:port",
-                "tls": "True",
-                "tls-ca": "Canonical",
                 "zookeeper-uris": "h1:port,h2:port",
                 "consumer-group-prefix": "pr1,pr2",
             },
         )
+        secret = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+        secret = self.harness.charm.app.add_secret({"endpoints": "host1:port,host2:port"})
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {"secret-endpoints": secret.id}
+        )
+        secret = self.harness.charm.app.add_secret({"tls": "True", "tls-ca": "Canonical"})
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-tls": secret.id})
+        secret = self.harness.charm.app.add_secret({"uris": "host1:port,host2:port"})
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-uris": secret.id})
 
         # Check that the fields are present in the relation
         # using the requires charm library event.
         event = _on_topic_created.call_args[0][0]
-        assert event.username == "test-username"
-        assert event.password == "test-password"
-        assert event.bootstrap_server == "host1:port,host2:port"
-        assert event.tls == "True"
-        assert event.tls_ca == "Canonical"
         assert event.zookeeper_uris == "h1:port,h2:port"
         assert event.consumer_group_prefix == "pr1,pr2"
+
+    @patch.object(charm, "_on_topic_created")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_fields_are_accessible_through_interface_functions(self, _on_topic_created):
+        """Asserts fields are accessible through the requires charm library event."""
+        # Simulate setting the additional fields.
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "zookeeper-uris": "h1:port,h2:port",
+                "consumer-group-prefix": "pr1,pr2",
+            },
+        )
+        secret = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+        secret = self.harness.charm.app.add_secret({"endpoints": "host1:port,host2:port"})
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {"secret-endpoints": secret.id}
+        )
+        secret = self.harness.charm.app.add_secret({"tls": "True", "tls-ca": "Canonical"})
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-tls": secret.id})
+        secret = self.harness.charm.app.add_secret({"uris": "host1:port,host2:port"})
+        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-uris": secret.id})
+
+        # Secret fields
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "username")
+            == "test-username"
+        )
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
+        assert self.harness.charm.requirer.get_relation_fields(
+            self.rel_id, ["endpoints", "tls", "tls-ca", "uris"]
+        ) == {
+            "endpoints": "host1:port,host2:port",
+            "tls": "True",
+            "tls-ca": "Canonical",
+            "uris": "host1:port,host2:port",
+        }
+
+        # Databag fields
+        assert self.harness.charm.requirer.get_relation_fields(
+            self.rel_id, ["zookeeper-uris", "consumer-group-prefix"]
+        ) == {"zookeeper-uris": "h1:port,h2:port", "consumer-group-prefix": "pr1,pr2"}
 
 
 class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
@@ -1623,8 +1754,15 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_index_created.call_args[0][0]
-        assert event.username == "test-username"
-        assert event.password == "test-password"
+        assert isinstance(event, AuthenticationEvent)
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "username")
+            == "test-username"
+        )
+        assert (
+            self.harness.charm.requirer.get_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
 
         assert self.harness.charm.requirer.is_resource_created()
 
@@ -1644,8 +1782,13 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_index_created.call_args[0][0]
-        assert event.username == "test-username-2"
-        assert event.password == "test-password-2"
+        assert isinstance(event, AuthenticationEvent)
+        assert (
+            self.harness.charm.requirer.get_relation_field(rel_id, "username") == "test-username-2"
+        )
+        assert (
+            self.harness.charm.requirer.get_relation_field(rel_id, "password") == "test-password-2"
+        )
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
@@ -1716,26 +1859,3 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         relation_data = self.harness.charm.requirer.fetch_relation_data()[self.rel_id]
         assert relation_data["tls-ca"] == "Canonical"
         assert relation_data["version"] == "1.0"
-
-    @patch.object(charm, "_on_index_created")
-    def test_fields_are_accessible_through_event(self, _on_index_created):
-        """Asserts fields are accessible through the requires charm library event."""
-        # Simulate setting the additional fields.
-        self.harness.update_relation_data(
-            self.rel_id,
-            self.provider,
-            {
-                "username": "test-username",
-                "password": "test-password",
-                "endpoints": "host1:port,host2:port",
-                "tls-ca": "Canonical",
-            },
-        )
-
-        # Check that the fields are present in the relation
-        # using the requires charm library event.
-        event = _on_index_created.call_args[0][0]
-        assert event.username == "test-username"
-        assert event.password == "test-password"
-        assert event.endpoints == "host1:port,host2:port"
-        assert event.tls_ca == "Canonical"
