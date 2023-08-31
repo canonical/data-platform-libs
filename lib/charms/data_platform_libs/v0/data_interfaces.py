@@ -300,7 +300,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Union
 
-from ops import Handle, JujuVersion, Secret, SecretInfo
+from ops import JujuVersion, Secret, SecretInfo
 from ops.charm import (
     CharmBase,
     CharmEvents,
@@ -699,7 +699,7 @@ class DataProvides(DataRelation):
             normal_fields = set(fields.keys()) - set(relation_secret_fields)
             secret_fields = set(fields.keys()) - set(normal_fields)
 
-            label_sorted_content = self._create_label_sorted_content(list(fields.keys()))
+            label_sorted_content = self._create_label_sorted_content(list(secret_fields))
 
             for label in label_sorted_content:
                 secret_content = {
@@ -827,12 +827,14 @@ class DataRequires(DataRelation):
             normal_fields = set(fields) - set(self.secret_fields)
             secret_fields = set(fields) - set(normal_fields)
 
-            label_sorted_content = self._create_label_sorted_content(fields)
+            label_sorted_content = self._create_label_sorted_content(list(secret_fields))
             for label in label_sorted_content:
                 if (secret := self._get_relation_secret(relation_id, label)) and (
                     secret_data := secret.get_content()
                 ):
                     result.update({k: v for k, v in secret_data.items() if k in secret_fields})
+                else:
+                    normal_fields |= set(label_sorted_content[label])
 
         result.update(
             {
@@ -906,43 +908,6 @@ class ExtraRoleEvent(RelationEvent):
 
 class AuthenticationEvent(RelationEvent):
     """Base class for authentication fields for events."""
-
-    def __init__(
-        self, handle: Handle, relation: Relation, app: Optional[Application], unit: Optional[Unit]
-    ):
-        super().__init__(handle, relation, app, unit)
-
-    @property
-    def username(self) -> Optional[str]:
-        """Returns the created username."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("username")
-
-    @property
-    def password(self) -> Optional[str]:
-        """Returns the password for the created user."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("password")
-
-    @property
-    def tls(self) -> Optional[str]:
-        """Returns whether TLS is configured."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("tls")
-
-    @property
-    def tls_ca(self) -> Optional[str]:
-        """Returns TLS CA."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("tls-ca")
 
 
 # Database related events and fields
