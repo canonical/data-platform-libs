@@ -10,15 +10,20 @@ of the libraries in this repository.
 
 import logging
 
+from ops import EventBase, JujuVersion
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 
+# The correct library module is supposed to be put in place by the
+# copy_data_interfaces_library_into_charm auto-applied fixture
+# using the LIB_VERSION env variable
 from charms.data_platform_libs.v0.data_interfaces import (
     BootstrapServerChangedEvent,
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseRequires,
+    DataRequires,
     IndexCreatedEvent,
     KafkaRequires,
     OpenSearchRequires,
@@ -134,70 +139,98 @@ class ApplicationCharm(CharmBase):
         # actions
 
         self.framework.observe(self.on.reset_unit_status_action, self._on_reset_unit_status)
+        self.has_secrets = JujuVersion.from_environ().has_secrets
 
     def _on_start(self, _) -> None:
         """Only sets an Active status."""
         self.unit.status = ActiveStatus()
 
+    def _get_username_password(self, requires: DataRequires, event: EventBase):
+        if hasattr(event, "username"):
+            return event.username, event.password
+        else:
+            data = requires.get_relation_fields(event.relation.id, ["username", "password"])
+            return data.get("username"), data.get("password")
+
+    def _get_endpoints(self, requires: DataRequires, event: EventBase):
+        if hasattr(event, "username"):
+            return event.endpoints
+        else:
+            return requires.get_relation_field(event.relation.id, "endpoints")
+
+    def _get_bootstrap_server(self, requires: DataRequires, event: EventBase):
+        if hasattr(event, "username"):
+            return event.bootstrap_server
+        else:
+            return requires.get_relation_field(event.relation.id, "endpoints")
+
     # First database events observers.
     def _on_first_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Event triggered when a database was created for this application."""
         # Retrieve the credentials using the charm library.
-        logger.info(f"first database credentials: {event.username} {event.password}")
+        username, password = self._get_username_password(self.first_database, event)
+        logger.info(f"first database credentials: {username} {password}")
         self.unit.status = ActiveStatus("received database credentials of the first database")
 
     def _on_first_database_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Event triggered when the read/write endpoints of the database change."""
-        logger.info(f"first database endpoints have been changed to: {event.endpoints}")
+        endpoints = self._get_endpoints(self.first_database, event)
+        logger.info(f"first database endpoints have been changed to: {endpoints}")
 
     # Second database events observers.
     def _on_second_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Event triggered when a database was created for this application."""
         # Retrieve the credentials using the charm library.
-        logger.info(f"second database credentials: {event.username} {event.password}")
+        username, password = self._get_username_password(self.second_database, event)
+        logger.info(f"second database credentials: {username} {password}")
         self.unit.status = ActiveStatus("received database credentials of the second database")
 
     def _on_second_database_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Event triggered when the read/write endpoints of the database change."""
-        logger.info(f"second database endpoints have been changed to: {event.endpoints}")
+        endpoints = self._get_endpoints(event)
+        logger.info(f"second database endpoints have been changed to: {endpoints}")
 
     # Multiple database clusters events observers.
     def _on_cluster_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Event triggered when a database was created for this application."""
         # Retrieve the credentials using the charm library.
-        logger.info(
-            f"cluster {event.relation.app.name} credentials: {event.username} {event.password}"
-        )
+        username, password = self._get_username_password(self.database_clusters, event)
+        logger.info(f"cluster {event.relation.app.name} credentials: {username} {password}")
         self.unit.status = ActiveStatus(
             f"received database credentials for cluster {event.relation.app.name}"
         )
 
     def _on_cluster_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Event triggered when the read/write endpoints of the database change."""
+        endpoints = self._get_endpoints(self.database_clusters, event)
         logger.info(
-            f"cluster {event.relation.app.name} endpoints have been changed to: {event.endpoints}"
+            f"cluster {event.relation.app.name} endpoints have been changed to: {endpoints}"
         )
 
     # Multiple database clusters events observers (for aliased clusters/relations).
     def _on_cluster1_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Event triggered when a database was created for this application."""
         # Retrieve the credentials using the charm library.
-        logger.info(f"cluster1 credentials: {event.username} {event.password}")
+        username, password = self._get_username_password(self.aliased_database_clusters, event)
+        logger.info(f"cluster1 credentials: {username} {password}")
         self.unit.status = ActiveStatus("received database credentials for cluster1")
 
     def _on_cluster1_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Event triggered when the read/write endpoints of the database change."""
-        logger.info(f"cluster1 endpoints have been changed to: {event.endpoints}")
+        endpoints = self._get_endpoints(self.aliased_database_clusters, event)
+        logger.info(f"cluster1 endpoints have been changed to: {endpoints}")
 
     def _on_cluster2_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Event triggered when a database was created for this application."""
         # Retrieve the credentials using the charm library.
-        logger.info(f"cluster2 credentials: {event.username} {event.password}")
+        username, password = self._get_username_password(self.aliased_database_clusters, event)
+        logger.info(f"cluster2 credentials: {username} {password}")
         self.unit.status = ActiveStatus("received database credentials for cluster2")
 
     def _on_cluster2_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Event triggered when the read/write endpoints of the database change."""
-        logger.info(f"cluster2 endpoints have been changed to: {event.endpoints}")
+        endpoints = self._get_endpoints(self.aliased_database_clusters, event)
+        logger.info(f"cluster2 endpoints have been changed to: {endpoints}")
 
     def _on_get_plugin_status(self, event: ActionEvent) -> None:
         """Returns the PostgreSQL plugin status (enabled/disabled)."""
@@ -213,9 +246,8 @@ class ApplicationCharm(CharmBase):
 
     def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
         """Event triggered when a bootstrap server was changed for this application."""
-        logger.info(
-            f"On kafka boostrap-server changed: bootstrap-server: {event.bootstrap_server}"
-        )
+        bootstrap_server = self._get_bootstrap_server(self.kafka, event)
+        logger.info(f"On kafka boostrap-server changed: bootstrap-server: {bootstrap_server}")
         self.unit.status = ActiveStatus("kafka_bootstrap_server_changed")
 
     def _on_kafka_topic_created(self, _: TopicCreatedEvent):
