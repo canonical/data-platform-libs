@@ -300,7 +300,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Union
 
-from ops import Handle, JujuVersion, Secret, SecretInfo
+from ops import JujuVersion, Secret, SecretInfo
 from ops.charm import (
     CharmBase,
     CharmEvents,
@@ -905,18 +905,60 @@ class ExtraRoleEvent(RelationEvent):
 
 
 class AuthenticationEvent(RelationEvent):
-    """Base class for authentication fields for events."""
+    """Base class for authentication fields for events.
 
-    def __init__(
-        self, handle: Handle, relation: Relation, app: Optional[Application], unit: Optional[Unit]
-    ):
-        super().__init__(handle, relation, app, unit)
+    The amount of logic added here is not ideal -- but this was the only way to preserve
+    the interface when moving to Juju Secrets
+    """
+
+    @property
+    def _secrets(self) -> dict:
+        """Caching secrets to avoid fetching them each time a field is referrd.
+
+        DON'T USE the encapsulated helper variable outside of this function
+        """
+        if not hasattr(self, "_cached_secrets"):
+            self._cached_secrets = {}
+        return self._cached_secrets
+
+    @property
+    def _jujuversion(self) -> JujuVersion:
+        """Caching jujuversion to avoid a Juju call on each field evaluation.
+
+        DON'T USE the encapsulated helper variable outside of this function
+        """
+        if not hasattr(self, "_cached_jujuversion"):
+            self._cached_jujuversion = None
+        if not self._cached_jujuversion:
+            self._cached_jujuversion = JujuVersion.from_environ()
+        return self._cached_jujuversion
+
+    def _get_secret(self, label) -> Optional[Dict[str, str]]:
+        """Retrieveing secrets."""
+        if not self.app:
+            return
+        if not self._secrets.get(label):
+            self._secrets[label] = None
+            if secret_uri := self.relation.data[self.app].get(f"secret-{label}"):
+                secret = self.framework.model.get_secret(id=secret_uri)
+                self._secrets[label] = secret.get_content()
+        return self._secrets[label]
+
+    @property
+    def secrets_enabled(self):
+        """Is this Juju version allowing for Secrets usage?"""
+        return self._jujuversion.has_secrets
 
     @property
     def username(self) -> Optional[str]:
         """Returns the created username."""
         if not self.relation.app:
             return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("user")
+            if secret:
+                return secret.get("username")
 
         return self.relation.data[self.relation.app].get("username")
 
@@ -926,6 +968,11 @@ class AuthenticationEvent(RelationEvent):
         if not self.relation.app:
             return None
 
+        if self.secrets_enabled:
+            secret = self._get_secret("user")
+            if secret:
+                return secret.get("password")
+
         return self.relation.data[self.relation.app].get("password")
 
     @property
@@ -934,6 +981,11 @@ class AuthenticationEvent(RelationEvent):
         if not self.relation.app:
             return None
 
+        if self.secrets_enabled:
+            secret = self._get_secret("tls")
+            if secret:
+                return secret.get("tls")
+
         return self.relation.data[self.relation.app].get("tls")
 
     @property
@@ -941,6 +993,11 @@ class AuthenticationEvent(RelationEvent):
         """Returns TLS CA."""
         if not self.relation.app:
             return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("tls")
+            if secret:
+                return secret.get("tls-ca")
 
         return self.relation.data[self.relation.app].get("tls-ca")
 
