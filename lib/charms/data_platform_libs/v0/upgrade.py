@@ -307,8 +307,9 @@ def verify_requirements(version: str, requirement: str) -> bool:
     Returns:
         True if `version` meets defined `requirement`. Otherwise False
     """
-    version = poetry_version.Version.parse(version)
-    return poetry_version.parse_constraint(requirement).allows(version)
+    return poetry_version.parse_constraint(requirement).allows(
+        poetry_version.Version.parse(version)
+    )
 
 
 # --- DEPENDENCY MODEL TYPES ---

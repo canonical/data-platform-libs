@@ -17,11 +17,7 @@ from charms.data_platform_libs.v0.upgrade import (
     DependencyModel,
     KubernetesClientError,
     VersionError,
-    build_complete_sem_ver,
-    verify_caret_requirements,
-    verify_inequality_requirements,
-    verify_tilde_requirements,
-    verify_wildcard_requirements,
+    verify_requirements,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,29 +74,8 @@ def harness():
 
 
 @pytest.mark.parametrize(
-    "version,output",
-    [
-        ("0.0.24.0.4", [0, 0, 24]),
-        ("3.5.3", [3, 5, 3]),
-        ("0.3", [0, 3, 0]),
-        ("1.2", [1, 2, 0]),
-        ("3.5.*", [3, 5, 0]),
-        ("0.*", [0, 0, 0]),
-        ("1.*", [1, 0, 0]),
-        ("1.2.*", [1, 2, 0]),
-        ("*", [0, 0, 0]),
-        (1, [1, 0, 0]),
-    ],
-)
-def test_build_complete_sem_ver(version, output):
-    assert build_complete_sem_ver(version) == output
-
-
-@pytest.mark.parametrize(
     "requirement,version,output",
     [
-        ("~1.2.3", "1.2.2", True),
-        ("1.2.3", "1.2.2", True),
         ("^1.2.3", "1.2.2", False),
         ("^1.2.3", "1.2.3", True),
         ("^1.2.3", "1.2.4", True),
@@ -146,14 +121,12 @@ def test_build_complete_sem_ver(version, output):
     ],
 )
 def test_verify_caret_requirements(requirement, version, output):
-    assert verify_caret_requirements(version=version, requirement=requirement) == output
+    assert verify_requirements(version=version, requirement=requirement) == output
 
 
 @pytest.mark.parametrize(
     "requirement,version,output",
     [
-        ("^1.2.3", "1.2.2", True),
-        ("1.2.3", "1.2.2", True),
         ("~1.2.3", "1.2.2", False),
         ("~1.2.3", "1.3.2", False),
         ("~1.2.3", "1.3.5", False),
@@ -180,15 +153,12 @@ def test_verify_caret_requirements(requirement, version, output):
     ],
 )
 def test_verify_tilde_requirements(requirement, version, output):
-    assert verify_tilde_requirements(version=version, requirement=requirement) == output
+    assert verify_requirements(version=version, requirement=requirement) == output
 
 
 @pytest.mark.parametrize(
     "requirement,version,output",
     [
-        ("~1", "1", True),
-        ("^0", "1", True),
-        ("0", "0.1", True),
         ("*", "1.5.6", True),
         ("*", "0.0.1", True),
         ("*", "0.2.0", True),
@@ -209,15 +179,14 @@ def test_verify_tilde_requirements(requirement, version, output):
     ],
 )
 def test_verify_wildcard_requirements(requirement, version, output):
-    assert verify_wildcard_requirements(version=version, requirement=requirement) == output
+    assert verify_requirements(version=version, requirement=requirement) == output
 
 
 @pytest.mark.parametrize(
     "requirement,version,output",
     [
-        ("~1", "1", True),
-        ("^0", "1", True),
-        ("0", "0.1", True),
+        ("0.1", "0.1", True),
+        ("0.1", "0.2", False),
         (">1", "1.8", True),
         (">1", "8.8.0", True),
         (">0", "8.8.0", True),
@@ -257,7 +226,7 @@ def test_verify_wildcard_requirements(requirement, version, output):
     ],
 )
 def test_verify_inequality_requirements(requirement, version, output):
-    assert verify_inequality_requirements(version=version, requirement=requirement) == output
+    assert verify_requirements(version=version, requirement=requirement) == output
 
 
 def test_dependency_model_raises_for_incompatible_version():
@@ -274,7 +243,7 @@ def test_dependency_model_raises_for_incompatible_version():
         GandalfModel(**deps)
 
 
-@pytest.mark.parametrize("value", ["saruman", "1.3", ""])
+@pytest.mark.parametrize("value", ["saruman", ""])
 def test_dependency_model_raises_for_bad_dependency(value):
     deps = {
         "gandalf_the_white": {
@@ -289,7 +258,7 @@ def test_dependency_model_raises_for_bad_dependency(value):
         GandalfModel(**deps)
 
 
-@pytest.mark.parametrize("value", ["balrog", "1.3", ""])
+@pytest.mark.parametrize("value", ["balrog", ""])
 def test_dependency_model_raises_for_bad_nested_dependency(value):
     deps = {
         "gandalf_the_white": {
