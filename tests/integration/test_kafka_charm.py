@@ -7,7 +7,7 @@ import logging
 import pytest
 from pytest_operator.plugin import OpsTest
 
-from .helpers import get_application_relation_data
+from .helpers import get_application_relation_data, get_juju_secret
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, kafka_charm):
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_without_juju_secrets")
 async def test_kafka_relation_with_charm_libraries(ops_test: OpsTest):
     """Test basic functionality of kafka relation interface."""
     # Relate the charms and wait for them exchanging some connection data.
@@ -77,6 +78,51 @@ async def test_kafka_relation_with_charm_libraries(ops_test: OpsTest):
     assert topic == "test-topic"
 
 
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_kafka_relation_with_charm_libraries_secrets(ops_test: OpsTest):
+    """Test basic functionality of kafka relation interface."""
+    # Relate the charms and wait for them exchanging some connection data.
+    await ops_test.model.add_relation(KAFKA_APP_NAME, APPLICATION_APP_NAME)
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    # check unit messagge to check if the topic_created_event is triggered
+    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
+        assert unit.workload_status_message == "kafka_topic_created"
+    # check if the topic was granted
+    for unit in ops_test.model.applications[KAFKA_APP_NAME].units:
+        assert "granted" in unit.workload_status_message
+
+    secret_uri = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret-user"
+    )
+
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    username = secret_content["username"]
+    password = secret_content["password"]
+
+    secret_uri = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret-endpoints"
+    )
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    bootstrap_server = secret_content["endpoints"]
+
+    consumer_group_prefix = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "consumer-group-prefix"
+    )
+
+    topic = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "topic"
+    )
+
+    assert username == "admin"
+    assert password == "password"
+    assert bootstrap_server == "host1:port,host2:port"
+    assert consumer_group_prefix == "test-prefix"
+    assert topic == "test-topic"
+
+
+@pytest.mark.usefixtures("only_without_juju_secrets")
 async def test_kafka_bootstrap_server_changed(ops_test: OpsTest):
     """Test that the bootstrap server changed event is correctly triggered."""
     app_unit = ops_test.model.applications[APPLICATION_APP_NAME].units[0]
@@ -112,6 +158,61 @@ async def test_kafka_bootstrap_server_changed(ops_test: OpsTest):
         ops_test, APPLICATION_APP_NAME, RELATION_NAME, "endpoints"
     )
     assert bootstrap_server == "host1:port,host2:port,host3:port"
+    # check the bootstrap_server_changed event is NOT triggered
+    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
+        assert unit.workload_status_message == ""
+
+
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_kafka_bootstrap_server_changed_secrets(ops_test: OpsTest):
+    """Test that the bootstrap server changed event is correctly triggered."""
+    app_unit = ops_test.model.applications[APPLICATION_APP_NAME].units[0]
+    kafka_unit = ops_test.model.applications[KAFKA_APP_NAME].units[0]
+    # set new bootstrap
+    parameters = {"bootstrap-server": "host1:port,host2:port,host3:port"}
+    action = await kafka_unit.run_action(action_name="sync-bootstrap-server", **parameters)
+    result = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+    assert result.results["bootstrap-server"] == "host1:port,host2:port,host3:port"
+
+    # check that the new bootstrap-server is set as a secret
+    secret_uri = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret-endpoints"
+    )
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    bootstrap_server = secret_content["endpoints"]
+    assert bootstrap_server == "host1:port,host2:port,host3:port"
+
+    # check that the bootstrap_server_changed event is triggered
+    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
+        assert unit.workload_status_message == "kafka_bootstrap_server_changed"
+
+    # reset unit message
+    action = await app_unit.run_action(action_name="reset-unit-status")
+    result = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    # check if the message is empty
+    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
+        assert unit.workload_status_message == ""
+
+    # configure the same bootstrap-server
+    action = await kafka_unit.run_action(action_name="sync-bootstrap-server", **parameters)
+    result = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+    assert result.results["bootstrap-server"] == "host1:port,host2:port,host3:port"
+    bootstrap_server = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "endpoints"
+    )
+
+    # check that the new bootstrap-server secret
+    secret_uri = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret-endpoints"
+    )
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    bootstrap_server = secret_content["endpoints"]
+    assert bootstrap_server == "host1:port,host2:port,host3:port"
+
     # check the bootstrap_server_changed event is NOT triggered
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
         assert unit.workload_status_message == ""

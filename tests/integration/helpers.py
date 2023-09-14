@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-from typing import Optional
+import json
+from typing import Dict, Optional
 
 import yaml
+from ops import JujuVersion
 from pytest_operator.plugin import OpsTest
+
+
+async def get_juju_secret(ops_test: OpsTest, secret_uri: str) -> Dict[str, str]:
+    """Retrieve juju secret."""
+    secret_unique_id = secret_uri.split("/")[-1]
+    complete_command = f"show-secret {secret_uri} --reveal --format=json"
+    _, stdout, _ = await ops_test.juju(*complete_command.split())
+    return json.loads(stdout)[secret_unique_id]["content"]["Data"]
 
 
 async def build_connection_string(
@@ -30,15 +40,36 @@ async def build_connection_string(
     """
     # Get the connection data exposed to the application through the relation.
     database = f'{application_name.replace("-", "_")}_{relation_name.replace("-", "_")}'
-    username = await get_application_relation_data(
-        ops_test, application_name, relation_name, "username", relation_id, relation_alias
-    )
-    password = await get_application_relation_data(
-        ops_test, application_name, relation_name, "password", relation_id, relation_alias
-    )
-    endpoints = await get_application_relation_data(
-        ops_test, application_name, relation_name, "endpoints", relation_id, relation_alias
-    )
+
+    if JujuVersion.from_environ().has_secrets:
+        secret_uri = await get_application_relation_data(
+            ops_test, application_name, relation_name, "secret-user", relation_id, relation_alias
+        )
+        secret_data = await get_juju_secret(ops_test, secret_uri)
+        username = secret_data["username"]
+        password = secret_data["password"]
+
+        secret_uri = await get_application_relation_data(
+            ops_test,
+            application_name,
+            relation_name,
+            "secret-endpoints",
+            relation_id,
+            relation_alias,
+        )
+        secret_data = await get_juju_secret(ops_test, secret_uri)
+        endpoints = secret_data["endpoints"]
+
+    else:
+        username = await get_application_relation_data(
+            ops_test, application_name, relation_name, "username", relation_id, relation_alias
+        )
+        password = await get_application_relation_data(
+            ops_test, application_name, relation_name, "password", relation_id, relation_alias
+        )
+        endpoints = await get_application_relation_data(
+            ops_test, application_name, relation_name, "endpoints", relation_id, relation_alias
+        )
     host = endpoints.split(",")[0].split(":")[0]
 
     # Build the complete connection string to connect to the database.
