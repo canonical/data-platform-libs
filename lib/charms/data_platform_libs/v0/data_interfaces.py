@@ -334,6 +334,8 @@ added - keys that were added
 changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
+SECRET_PREFIX = "secret-"
+
 
 class SecretGroup(Enum):
     """Secret groups as constants."""
@@ -366,6 +368,10 @@ class SecretAlreadyExistsError(SecretError):
 
 
 class SecretsUnavailableError(SecretError):
+    """Secrets aren't yet available for Juju version used."""
+
+
+class SecretsIllegalUpdateError(SecretError):
     """Secrets aren't yet available for Juju version used."""
 
 
@@ -567,6 +573,11 @@ class DataRelation(Object, ABC):
         except (RuntimeError, ModelError):
             return False
 
+    @leader_only
+    def update_relation_data(self, relation_id: int, data: dict) -> None:
+        """Update the data within the relation."""
+        raise NotImplementedError
+
     def get_relation(self, relation_name, relation_id) -> Relation:
         """Safe way of retrieving a relation."""
         relation = self.charm.model.get_relation(relation_name, relation_id)
@@ -581,7 +592,8 @@ class DataRelation(Object, ABC):
 
         return relation
 
-    def generate_secret_label(self, relation_name, relation_id, mapping) -> str:
+    @staticmethod
+    def generate_secret_label(relation_name, relation_id, mapping) -> str:
         """Generate unique mappings for secrets within a relation context."""
         return f"{relation_name}.{relation_id}.{mapping}.secret"
 
@@ -644,22 +656,6 @@ class DataRelation(Object, ABC):
             )
         return data
 
-    @leader_only
-    def _update_relation_data(self, relation_id: int, data: dict) -> None:
-        """Updates a set of key-value pairs in the relation.
-
-        This function writes in the application data bag, therefore,
-        only the leader unit can call it.
-
-        Args:
-            relation_id: the identifier for a particular relation.
-            data: dict containing the key-value pairs
-                that should be updated in the relation.
-        """
-        relation = self.charm.model.get_relation(self.relation_name, relation_id)
-        if relation:
-            relation.data[self.local_app].update(data)
-
     @staticmethod
     def _create_mapping_sorted_content(secret_fields: List[str]) -> Dict[str, List[str]]:
         """Helper function to arrange secret mappings under their group.
@@ -705,7 +701,7 @@ class DataProvides(DataRelation):
         """Add a new Juju Secret that will be registered in the relation databag."""
         relation = self.get_relation(self.relation_name, relation_id)
 
-        if relation.data[self.local_app].get(f"secret-{mapping}"):
+        if relation.data[self.local_app].get(f"{SECRET_PREFIX}{mapping}"):
             logging.error("Secret for relation %s already exists, not adding again", relation_id)
             return
 
@@ -714,7 +710,7 @@ class DataProvides(DataRelation):
 
         # According to lint we may not have a Secret ID
         if secret.meta and secret.meta.id:
-            relation.data[self.local_app][f"secret-{mapping}"] = secret.meta.id
+            relation.data[self.local_app][f"{SECRET_PREFIX}{mapping}"] = secret.meta.id
 
     @leader_only
     @juju_secrets_only
@@ -747,11 +743,12 @@ class DataProvides(DataRelation):
         if not relation:
             return
 
-        if secret_uri := relation.data[self.local_app].get(f"secret-{mapping}"):
+        if secret_uri := relation.data[self.local_app].get(f"{SECRET_PREFIX}{mapping}"):
             return self.secrets.get(label, secret_uri)
 
+    @staticmethod
     def _create_secret_content_for_mapping(
-        self, content: Dict[str, str], secret_fields: Set[str], mapping: str
+        content: Dict[str, str], secret_fields: Set[str], mapping: str
     ) -> Dict[str, str]:
         if mapping == SecretGroup.EXTRA.value:
             return {
@@ -767,7 +764,7 @@ class DataProvides(DataRelation):
         }
 
     @leader_only
-    def set_relation_fields(self, relation_id: int, fields: Dict[str, str]) -> None:
+    def update_relation_data(self, relation_id: int, fields: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
         relation = self.get_relation(self.relation_name, relation_id)
         relation_secret_fields = relation.data.get(
@@ -807,7 +804,7 @@ class DataProvides(DataRelation):
             username: user that was created.
             password: password of the created user.
         """
-        self.set_relation_fields(relation_id, {"username": username, "password": password})
+        self.update_relation_data(relation_id, {"username": username, "password": password})
 
     def set_tls(self, relation_id: int, tls: str) -> None:
         """Set whether TLS is enabled.
@@ -816,7 +813,7 @@ class DataProvides(DataRelation):
             relation_id: the identifier for a particular relation.
             tls: whether tls is enabled (True or False).
         """
-        self.set_relation_fields(relation_id, {"tls": tls})
+        self.update_relation_data(relation_id, {"tls": tls})
 
     def set_tls_ca(self, relation_id: int, tls_ca: str) -> None:
         """Set the TLS CA in the application relation databag.
@@ -825,7 +822,7 @@ class DataProvides(DataRelation):
             relation_id: the identifier for a particular relation.
             tls_ca: TLS certification authority.
         """
-        self.set_relation_fields(relation_id, {"tls-ca": tls_ca})
+        self.update_relation_data(relation_id, {"tls-ca": tls_ca})
 
 
 class DataRequires(DataRelation):
@@ -936,6 +933,26 @@ class DataRequires(DataRelation):
         """Get a single field from the relation data."""
         return self.get_relation_fields(relation_id, [field], relation_name).get(field)
 
+    @leader_only
+    def update_relation_data(self, relation_id: int, data: dict) -> None:
+        """Updates a set of key-value pairs in the relation.
+
+        This function writes in the application data bag, therefore,
+        only the leader unit can call it.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            data: dict containing the key-value pairs
+                that should be updated in the relation.
+        """
+        for key in data.keys():
+            if key.startswith(SECRET_PREFIX):
+                raise SecretsIllegalUpdateError("Requires side can't update secrets.")
+
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+        if relation:
+            relation.data[self.local_app].update(data)
+
     def _is_resource_created_for_relation(self, relation: Relation) -> bool:
         if not relation.app:
             return False
@@ -1008,8 +1025,8 @@ class DataRequires(DataRelation):
             return
 
         for mapping in [group.value for group in SecretGroup]:
-            if f"secret-{mapping}" in params_name_list:
-                if secret_uri := relation.data[relation.app].get(f"secret-{mapping}"):
+            if f"{SECRET_PREFIX}{mapping}" in params_name_list:
+                if secret_uri := relation.data[relation.app].get(f"{SECRET_PREFIX}{mapping}"):
                     self._register_secret_to_relation(
                         relation.name, relation.id, secret_uri, mapping
                     )
@@ -1065,7 +1082,7 @@ class AuthenticationEvent(RelationEvent):
             return
         if not self._secrets.get(mapping):
             self._secrets[mapping] = None
-            if secret_uri := self.relation.data[self.app].get(f"secret-{mapping}"):
+            if secret_uri := self.relation.data[self.app].get(f"{SECRET_PREFIX}{mapping}"):
                 secret = self.framework.model.get_secret(id=secret_uri)
                 self._secrets[mapping] = secret.get_content()
         return self._secrets[mapping]
@@ -1284,7 +1301,7 @@ class DatabaseProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             database_name: database name.
         """
-        self._update_relation_data(relation_id, {"database": database_name})
+        self.update_relation_data(relation_id, {"database": database_name})
 
     def set_endpoints(self, relation_id: int, connection_strings: str) -> None:
         """Set database primary connections.
@@ -1300,7 +1317,7 @@ class DatabaseProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             connection_strings: database hosts and ports comma separated list.
         """
-        self.set_relation_fields(relation_id, {"endpoints": connection_strings})
+        self.update_relation_data(relation_id, {"endpoints": connection_strings})
 
     def set_read_only_endpoints(self, relation_id: int, connection_strings: str) -> None:
         """Set database replicas connection strings.
@@ -1312,7 +1329,7 @@ class DatabaseProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             connection_strings: database hosts and ports comma separated list.
         """
-        self._update_relation_data(relation_id, {"read-only-endpoints": connection_strings})
+        self.update_relation_data(relation_id, {"read-only-endpoints": connection_strings})
 
     def set_replset(self, relation_id: int, replset: str) -> None:
         """Set replica set name in the application relation databag.
@@ -1323,7 +1340,7 @@ class DatabaseProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             replset: replica set name.
         """
-        self._update_relation_data(relation_id, {"replset": replset})
+        self.update_relation_data(relation_id, {"replset": replset})
 
     def set_uris(self, relation_id: int, uris: str) -> None:
         """Set the database connection URIs in the application relation databag.
@@ -1334,7 +1351,7 @@ class DatabaseProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             uris: connection URIs.
         """
-        self.set_relation_fields(relation_id, {"uris": uris})
+        self.update_relation_data(relation_id, {"uris": uris})
 
     def set_version(self, relation_id: int, version: str) -> None:
         """Set the database version in the application relation databag.
@@ -1343,7 +1360,7 @@ class DatabaseProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             version: database version.
         """
-        self._update_relation_data(relation_id, {"version": version})
+        self.update_relation_data(relation_id, {"version": version})
 
 
 class DatabaseRequires(DataRequires):
@@ -1505,7 +1522,7 @@ class DatabaseRequires(DataRequires):
         # Sets both database and extra user roles in the relation
         # if the roles are provided. Otherwise, sets only the database.
         if self.extra_user_roles:
-            self._update_relation_data(
+            self.update_relation_data(
                 event.relation.id,
                 {
                     "database": self.database,
@@ -1513,7 +1530,7 @@ class DatabaseRequires(DataRequires):
                 },
             )
         else:
-            self._update_relation_data(event.relation.id, {"database": self.database})
+            self.update_relation_data(event.relation.id, {"database": self.database})
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
@@ -1521,12 +1538,14 @@ class DatabaseRequires(DataRequires):
         diff = self._diff(event)
 
         # Register all new secrets with their labels
-        if any(newval for newval in diff.added if newval.startswith("secret-")):
+        if any(newval for newval in diff.added if newval.startswith(SECRET_PREFIX)):
             self.register_secrets_to_relation(event.relation, diff.added)
 
         # Check if the database is created
         # (the database charm shared the credentials).
-        if ("username" in diff.added and "password" in diff.added) or "secret-user" in diff.added:
+        if (
+            "username" in diff.added and "password" in diff.added
+        ) or f"{SECRET_PREFIX}{SecretGroup.USER.value}" in diff.added:
             # Emit the default event (the one without an alias).
             logger.info("database created at %s", datetime.now())
             getattr(self.on, "database_created").emit(
@@ -1693,7 +1712,7 @@ class KafkaProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             topic: the topic name.
         """
-        self._update_relation_data(relation_id, {"topic": topic})
+        self.update_relation_data(relation_id, {"topic": topic})
 
     def set_bootstrap_server(self, relation_id: int, bootstrap_server: str) -> None:
         """Set the bootstrap server in the application relation databag.
@@ -1702,7 +1721,7 @@ class KafkaProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             bootstrap_server: the bootstrap server address.
         """
-        self.set_relation_fields(relation_id, {"endpoints": bootstrap_server})
+        self.update_relation_data(relation_id, {"endpoints": bootstrap_server})
 
     def set_consumer_group_prefix(self, relation_id: int, consumer_group_prefix: str) -> None:
         """Set the consumer group prefix in the application relation databag.
@@ -1711,7 +1730,7 @@ class KafkaProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             consumer_group_prefix: the consumer group prefix string.
         """
-        self._update_relation_data(relation_id, {"consumer-group-prefix": consumer_group_prefix})
+        self.update_relation_data(relation_id, {"consumer-group-prefix": consumer_group_prefix})
 
     def set_zookeeper_uris(self, relation_id: int, zookeeper_uris: str) -> None:
         """Set the zookeeper uris in the application relation databag.
@@ -1720,7 +1739,7 @@ class KafkaProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             zookeeper_uris: comma-separated list of ZooKeeper server uris.
         """
-        self._update_relation_data(relation_id, {"zookeeper-uris": zookeeper_uris})
+        self.update_relation_data(relation_id, {"zookeeper-uris": zookeeper_uris})
 
 
 class KafkaRequires(DataRequires):
@@ -1766,7 +1785,7 @@ class KafkaRequires(DataRequires):
             for f in ["consumer-group-prefix", "extra-user-roles", "topic"]
         }
 
-        self._update_relation_data(event.relation.id, relation_data)
+        self.update_relation_data(event.relation.id, relation_data)
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
         """Event notifying about a new value of a secret."""
@@ -1781,10 +1800,12 @@ class KafkaRequires(DataRequires):
         # (the Kafka charm shared the credentials).
 
         # Register all new secrets with their labels
-        if any(newval for newval in diff.added if newval.startswith("secret-")):
+        if any(newval for newval in diff.added if newval.startswith(SECRET_PREFIX)):
             self.register_secrets_to_relation(event.relation, diff.added)
 
-        if ("username" in diff.added and "password" in diff.added) or "secret-user" in diff.added:
+        if (
+            "username" in diff.added and "password" in diff.added
+        ) or f"{SECRET_PREFIX}{SecretGroup.USER.value}" in diff.added:
             # Emit the default event (the one without an alias).
             logger.info("topic created at %s", datetime.now())
             getattr(self.on, "topic_created").emit(event.relation, app=event.app, unit=event.unit)
@@ -1886,7 +1907,7 @@ class OpenSearchProvides(DataProvides):
                 requested index, and can be used to present a different index name if, for example,
                 the requested index is invalid.
         """
-        self._update_relation_data(relation_id, {"index": index})
+        self.update_relation_data(relation_id, {"index": index})
 
     def set_endpoints(self, relation_id: int, endpoints: str) -> None:
         """Set the endpoints in the application relation databag.
@@ -1895,7 +1916,7 @@ class OpenSearchProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             endpoints: the endpoint addresses for opensearch nodes.
         """
-        self.set_relation_fields(relation_id, {"endpoints": endpoints})
+        self.update_relation_data(relation_id, {"endpoints": endpoints})
 
     def set_version(self, relation_id: int, version: str) -> None:
         """Set the opensearch version in the application relation databag.
@@ -1904,7 +1925,7 @@ class OpenSearchProvides(DataProvides):
             relation_id: the identifier for a particular relation.
             version: database version.
         """
-        self._update_relation_data(relation_id, {"version": version})
+        self.update_relation_data(relation_id, {"version": version})
 
 
 class OpenSearchRequires(DataRequires):
@@ -1935,7 +1956,7 @@ class OpenSearchRequires(DataRequires):
         if self.extra_user_roles:
             data["extra-user-roles"] = self.extra_user_roles
 
-        self._update_relation_data(event.relation.id, data)
+        self.update_relation_data(event.relation.id, data)
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
         """Event notifying about a new value of a secret."""
@@ -1949,7 +1970,7 @@ class OpenSearchRequires(DataRequires):
             )
             return
 
-        logger.info("authentication updated at: %s", datetime.now())
+        logger.info("authentication updated")
         # TODO: Unit parameter is missing !!!!
         getattr(self.on, "authentication_updated").emit(relation, app=relation.app)
 
@@ -1962,10 +1983,17 @@ class OpenSearchRequires(DataRequires):
         diff = self._diff(event)
 
         # Register all new secrets with their labels
-        if any(newval for newval in diff.added if newval.startswith("secret-")):
+        if any(newval for newval in diff.added if newval.startswith(SECRET_PREFIX)):
             self.register_secrets_to_relation(event.relation, diff.added)
 
-        updates = {"username", "password", "tls", "tls-ca", "secret-user", "secret-tls"}
+        updates = {
+            "username",
+            "password",
+            "tls",
+            "tls-ca",
+            f"{SECRET_PREFIX}{SecretGroup.USER.value}",
+            f"{SECRET_PREFIX}{SecretGroup.TLS.value}",
+        }
         if len(set(diff._asdict().keys()) - updates) < len(diff):
             logger.info("authentication updated at: %s", datetime.now())
             getattr(self.on, "authentication_updated").emit(
@@ -1974,7 +2002,9 @@ class OpenSearchRequires(DataRequires):
 
         # Check if the index is created
         # (the OpenSearch charm shares the credentials).
-        if ("username" in diff.added and "password" in diff.added) or "secret-user" in diff.added:
+        if (
+            "username" in diff.added and "password" in diff.added
+        ) or f"{SECRET_PREFIX}{SecretGroup.USER.value}" in diff.added:
             # Emit the default event (the one without an alias).
             logger.info("index created at: %s", datetime.now())
             getattr(self.on, "index_created").emit(event.relation, app=event.app, unit=event.unit)

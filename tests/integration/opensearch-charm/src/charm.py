@@ -83,7 +83,7 @@ class OpenSearchCharm(CharmBase):
         """Change the admin password."""
         password = self._new_password()
         for relation in self.opensearch_provider.relations:
-            self.opensearch_provider.set_relation_fields(relation.id, {"password": password})
+            self.opensearch_provider.update_relation_data(relation.id, {"password": password})
 
     def _on_index_requested(self, event: IndexRequestedEvent):
         """Handle the on_index_requested event."""

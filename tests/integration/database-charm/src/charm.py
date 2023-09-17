@@ -54,14 +54,14 @@ class DatabaseCharm(CharmBase):
         """Change the admin password."""
         password = self._new_password()
         for relation in self.database.relations:
-            self.database.set_relation_fields(relation.id, {"password": password})
+            self.database.update_relation_data(relation.id, {"password": password})
 
     def _on_set_secret_action(self, event: ActionEvent):
         """Change the admin password."""
         secret_field = event.params.get("field")
         password = self._new_password()
         for relation in self.database.relations:
-            self.database.set_relation_fields(relation.id, {secret_field: password})
+            self.database.update_relation_data(relation.id, {secret_field: password})
 
     def _on_database_pebble_ready(self, event: WorkloadEvent) -> None:
         """Define and start the database using the Pebble API."""
