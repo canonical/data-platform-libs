@@ -636,7 +636,12 @@ class DataRelation(Object, ABC):
         if secret:
             return secret.get_content()
 
-    def fetch_relation_data(self) -> dict:
+    def fetch_relation_data(
+        self,
+        relation_ids: Optional[List[int]] = None,
+        fields: Optional[List[str]] = None,
+        relation_name: Optional[str] = None,
+    ) -> Dict[int, Dict[str, str]]:
         """Retrieves data from relation.
 
         This function can be used to retrieve data from a relation
@@ -647,14 +652,26 @@ class DataRelation(Object, ABC):
             a dict of the values stored in the relation data bag
                 for all relation instances (indexed by the relation ID).
         """
+        if not relation_name:
+            relation_name = self.relation_name
+
+        relations = []
+        if relation_ids:
+            relations = [
+                self.get_relation(relation_name, relation_id) for relation_id in relation_ids
+            ]
+        else:
+            relations = self.relations
+
         data = {}
-        for relation in self.relations:
-            data[relation.id] = (
-                {key: value for key, value in relation.data[relation.app].items() if key != "data"}
-                if relation.app
-                else {}
-            )
+        for relation in relations:
+            if not relation_ids or (relation_ids and relation.id in relation_ids):
+                data[relation.id] = self._fetch_specific_relation_data(relation, fields)
         return data
+
+    def _fetch_specific_relation_data(self, relation, fields: Optional[List[str]]) -> dict:
+        """Fetch data available (directily or indirectly -- i.e. secrets) from the relation."""
+        raise NotImplementedError
 
     @staticmethod
     def _create_mapping_sorted_content(secret_fields: List[str]) -> Dict[str, List[str]]:
@@ -762,6 +779,19 @@ class DataProvides(DataRelation):
             for k, v in content.items()
             if k in secret_fields and SECRET_LABEL_MAP.get(k) == mapping
         }
+
+    def _fetch_specific_relation_data(self, relation, fields: Optional[List[str]]) -> dict:
+        """Fetching relation data for Provides.
+
+        NOTE: Since all secret fields are in the Requires side of the databag, we don't need to worry about that
+        """
+        if not relation.app:
+            return {}
+
+        if fields:
+            return {k: relation.data[relation.app].get(k) for k in fields}
+        else:
+            return relation.data[relation.app]
 
     @leader_only
     def update_relation_data(self, relation_id: int, fields: Dict[str, str]) -> None:
@@ -889,35 +919,49 @@ class DataRequires(DataRelation):
         label = self.generate_secret_label(relation_name, relation_id, mapping)
         return self.secrets.get(label)
 
-    def get_relation_fields(
-        self, relation_id: int, fields: List[str], relation_name: Optional[str] = None
+    def _fetch_specific_relation_data(
+        self, relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
-        """Get the value of a field not caring whether it's a secret or not."""
-        if not relation_name:
-            relation_name = self.relation_name
+        if not relation.app:
+            return {}
 
         result = {}
-        relation = self.get_relation(relation_name, relation_id)
-
-        normal_fields = fields
+        normal_fields = []
         if self.secret_fields and self.secrets_enabled:
-            normal_fields = set(fields) - set(self.secret_fields)
-            secret_fields = set(fields) - set(normal_fields)
+            if fields:
+                normal_fields = set(fields) - set(self.secret_fields)
+                secret_fields = set(fields) - set(normal_fields)
 
-            mapping_sorted_content = self._create_mapping_sorted_content(list(secret_fields))
-            for mapping in mapping_sorted_content:
-                if (secret := self._get_relation_secret(relation_id, mapping)) and (
-                    secret_data := secret.get_content()
-                ):
-                    result.update(
-                        {
-                            k: v
-                            for k, v in secret_data.items()
-                            if k in mapping_sorted_content[mapping]
-                        }
-                    )
-                else:
-                    normal_fields |= set(mapping_sorted_content[mapping])
+                mapping_sorted_content = self._create_mapping_sorted_content(list(secret_fields))
+                for mapping in mapping_sorted_content:
+                    if (secret := self._get_relation_secret(relation.id, mapping)) and (
+                        secret_data := secret.get_content()
+                    ):
+                        result.update(
+                            {
+                                k: v
+                                for k, v in secret_data.items()
+                                if k in mapping_sorted_content[mapping]
+                            }
+                        )
+                    else:
+                        normal_fields |= set(mapping_sorted_content[mapping])
+            else:
+                normal_fields = [
+                    f
+                    for f in relation.data[relation.app].keys()
+                    if not f.startswith(SECRET_PREFIX)
+                ]
+                secret_fields = [
+                    f for f in relation.data[relation.app].keys() if f.startswith(SECRET_PREFIX)
+                ]
+                for mapping in [group.value for group in SecretGroup]:
+                    if (secret := self._get_relation_secret(relation.id, mapping)) and (
+                        secret_data := secret.get_content()
+                    ):
+                        result.update(
+                            {k: v for k, v in secret_data.items() if k in self.secret_fields}
+                        )
 
         result.update(
             {
@@ -927,11 +971,15 @@ class DataRequires(DataRelation):
         )
         return result
 
-    def get_relation_field(
+    def fetch_relation_field(
         self, relation_id: int, field: str, relation_name: Optional[str] = None
     ) -> Optional[str]:
         """Get a single field from the relation data."""
-        return self.get_relation_fields(relation_id, [field], relation_name).get(field)
+        return (
+            self.fetch_relation_data([relation_id], [field], relation_name)
+            .get(relation_id, {})
+            .get(field)
+        )
 
     @leader_only
     def update_relation_data(self, relation_id: int, data: dict) -> None:
@@ -957,7 +1005,9 @@ class DataRequires(DataRelation):
         if not relation.app:
             return False
 
-        data = self.get_relation_fields(relation.id, ["username", "password"])
+        data = self.fetch_relation_data([relation.id], ["username", "password"]).get(
+            relation.id, {}
+        )
         return bool(data.get("username")) and bool(data.get("password"))
 
     def is_resource_created(self, relation_id: Optional[int] = None) -> bool:
@@ -1484,7 +1534,7 @@ class DatabaseRequires(DataRequires):
             return False
 
         relation_id = self.relations[relation_index].id
-        host = self.get_relation_field(relation_id, "endpoints")
+        host = self.fetch_relation_field(relation_id, "endpoints")
 
         # Return False if there is no endpoint available.
         if host is None:
@@ -1492,7 +1542,9 @@ class DatabaseRequires(DataRequires):
 
         host = host.split(":")[0]
 
-        content = self.get_relation_fields(relation_id, ["username", "password"])
+        content = self.fetch_relation_data([relation_id], ["username", "password"]).get(
+            relation_id, {}
+        )
         user = content.get("username")
         password = content.get("password")
 

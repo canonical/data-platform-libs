@@ -1025,11 +1025,11 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.password == "test-password"
 
         assert (
-            self.harness.charm.requirer.get_relation_field(self.rel_id, "username")
+            self.harness.charm.requirer.fetch_relation_field(self.rel_id, "username")
             == "test-username"
         )
         assert (
-            self.harness.charm.requirer.get_relation_field(self.rel_id, "password")
+            self.harness.charm.requirer.fetch_relation_field(self.rel_id, "password")
             == "test-password"
         )
 
