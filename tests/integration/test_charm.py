@@ -2,6 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 import asyncio
+import json
 import logging
 from pathlib import Path
 
@@ -26,11 +27,13 @@ SECOND_DATABASE_RELATION_NAME = "second-database"
 MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "multiple-database-clusters"
 ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "aliased-multiple-database-clusters"
 
+SECRET_REF_PREFIX = "secret-"
+
 
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(ops_test: OpsTest, application_charm, database_charm):
     """Deploy both charms (application and database) to use in the tests."""
-    # Deploy both charms (2 units for each application to test that later they correctly
+    # Deploy both charms (1 units for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
@@ -280,10 +283,10 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
         ops_test,
         DATABASE_APP_NAME,
         DATABASE_APP_NAME,
-        "secret_fields",
+        "requested-secrets",
         related_endpoint=SECOND_DATABASE_RELATION_NAME,
     )
-    assert {"topsecret", "donttellanyone"} <= set(secret_fields.split(" "))
+    assert {"topsecret", "donttellanyone"} <= set(json.loads(secret_fields))
 
     # Set secret
     unit_name = f"{DATABASE_APP_NAME}/0"
@@ -294,7 +297,7 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
 
     # Get secret original value
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "secret-extra"
+        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}extra"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
@@ -309,7 +312,7 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
 
     # Get secret after change
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "secret-extra"
+        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}extra"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)

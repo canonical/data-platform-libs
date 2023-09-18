@@ -16,6 +16,8 @@ OPENSEARCH_APP_NAME = "opensearch-test"
 APP_NAMES = [APPLICATION_APP_NAME, OPENSEARCH_APP_NAME]
 RELATION_NAME = "opensearch-client"
 
+PROV_SECRET_PREFIX = "secret-"
+
 
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(ops_test: OpsTest, application_charm, opensearch_charm):
@@ -90,7 +92,7 @@ async def test_opensearch_relation_with_charm_libraries_secrets(ops_test: OpsTes
         assert "granted" in unit.workload_status_message
 
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret-user"
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
@@ -116,7 +118,7 @@ async def test_opensearch_relation_secret_changed(ops_test: OpsTest):
     """Test basic functionality of opensearch relation interface."""
     # Get current password
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret-user"
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
@@ -127,7 +129,7 @@ async def test_opensearch_relation_secret_changed(ops_test: OpsTest):
     await action.wait()
 
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "secret-user"
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)

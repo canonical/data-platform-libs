@@ -8,6 +8,8 @@ import yaml
 from ops import JujuVersion
 from pytest_operator.plugin import OpsTest
 
+PROV_SECRET_PREFIX = "secret-"
+
 
 async def get_juju_secret(ops_test: OpsTest, secret_uri: str) -> Dict[str, str]:
     """Retrieve juju secret."""
@@ -43,7 +45,12 @@ async def build_connection_string(
 
     if JujuVersion.from_environ().has_secrets:
         secret_uri = await get_application_relation_data(
-            ops_test, application_name, relation_name, "secret-user", relation_id, relation_alias
+            ops_test,
+            application_name,
+            relation_name,
+            f"{PROV_SECRET_PREFIX}user",
+            relation_id,
+            relation_alias,
         )
         secret_data = await get_juju_secret(ops_test, secret_uri)
         username = secret_data["username"]
