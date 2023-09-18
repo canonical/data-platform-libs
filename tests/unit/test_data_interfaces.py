@@ -1,5 +1,6 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
+import json
 import re
 import unittest
 from abc import ABC, abstractmethod
@@ -15,6 +16,8 @@ from ops.testing import Harness
 from parameterized import parameterized
 
 from charms.data_platform_libs.v0.data_interfaces import (
+    PROV_SECRET_PREFIX,
+    REQ_SECRET_FIELDS,
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseProvides,
@@ -113,7 +116,7 @@ class OpenSearchCharm(CharmBase):
 
 
 class DataProvidesBaseTests(ABC):
-    SECRET_FIELDS = "username password tls tls-ca uris"
+    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
 
     @abstractmethod
     def get_harness(self) -> Tuple[Harness, int]:
@@ -128,7 +131,7 @@ class DataProvidesBaseTests(ABC):
     def setup_secrets_if_needed(self, harness, rel_id):
         if JujuVersion.from_environ().has_secrets:
             harness.update_relation_data(
-                rel_id, "application", {"secret_fields": self.SECRET_FIELDS}
+                rel_id, "application", {REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)}
             )
 
     def test_diff(self):
@@ -183,12 +186,14 @@ class DataProvidesBaseTests(ABC):
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
 
         # Check that the credentials are present in the relation.
-        assert self.harness.get_relation_data(self.rel_id, self.app_name)["data"] == (
-            '{"secret_fields": "'
-            + f"{self.SECRET_FIELDS}"
-            + '"}'  # Data is the diff stored between multiple relation changed events.   # noqa
+        assert json.loads(self.harness.get_relation_data(self.rel_id, self.app_name)["data"]) == (
+            {
+                REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)
+            }  # Data is the diff stored between multiple relation changed events.   # noqa
         )
-        secret_id = self.harness.get_relation_data(self.rel_id, self.app_name)["secret-user"]
+        secret_id = self.harness.get_relation_data(self.rel_id, self.app_name)[
+            f"{PROV_SECRET_PREFIX}user"
+        ]
         assert secret_id
 
         secret = self.harness.charm.model.get_secret(id=secret_id)
@@ -197,7 +202,7 @@ class DataProvidesBaseTests(ABC):
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_set_credentials_secrets_provides_juju3_requires_juju2(self):
         """Asserts that the databag is used if one side of the relation is on Juju2."""
-        self.harness.update_relation_data(self.rel_id, "application", {"secret_fields": ""})
+        self.harness.update_relation_data(self.rel_id, "application", {REQ_SECRET_FIELDS: ""})
         # Set the credentials in the relation using the provides charm library.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
 
@@ -309,12 +314,12 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         relation_data = self.harness.get_relation_data(self.rel_id, "database")
-        secret_id = relation_data.pop("secret-tls")
+        secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}tls")
         assert secret_id
 
         relation_data == {
-            "data": '{"secret_fields": "'
-            + f"{self.SECRET_FIELDS}"
+            "data": f'{REQ_SECRET_FIELDS}: "'
+            + f"{json.dumps(self.SECRET_FIELDS)}"
             + '"}',  # Data is the diff stored between multiple relation changed events.   # noqa
             "replset": "rs0",
             "version": "1.0",
@@ -350,12 +355,12 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         relation_data = self.harness.get_relation_data(self.rel_id, "database")
-        secret_id = relation_data.pop("secret-tls")
+        secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}tls")
         assert secret_id
 
         relation_data == {
-            "data": '{"secret_fields": "'
-            + f"{self.SECRET_FIELDS}"
+            "data": '{REQ_SECRET_FIELDS: "'
+            + f"{json.dumps(self.SECRET_FIELDS)}"
             + '"}',  # Data is the diff stored between multiple relation changed events.   # noqa
             "replset": "rs0",
             "version": "1.0",
@@ -386,7 +391,9 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         # Check the data using the charm library function
         # (the diff/data key should not be present).
         data = self.harness.charm.provider.fetch_relation_data()
-        assert data == {self.rel_id: {"database": DATABASE, "secret_fields": self.SECRET_FIELDS}}
+        assert data == {
+            self.rel_id: {"database": DATABASE, REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)}
+        }
 
     def test_database_requested_event(self):
         # Test custom event creation
@@ -491,12 +498,12 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         relation_data = self.harness.get_relation_data(self.rel_id, self.app_name)
-        secret_id = relation_data.pop("secret-tls")
+        secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}tls")
         assert secret_id
 
         relation_data == {
-            "data": '{"secret_fields": "'
-            + f"{self.SECRET_FIELDS}"
+            "data": '{REQ_SECRET_FIELDS: "'
+            + f"{json.dumps(self.SECRET_FIELDS)}"
             + '"}',  # Data is the diff stored between multiple relation changed events.   # noqa
             "zookeeper-uris": "host1:port,host2:port",
             "consumer-group-prefix": "pr1,pr2",
@@ -526,7 +533,9 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         # Check the data using the charm library function
         # (the diff/data key should not be present).
         data = self.harness.charm.provider.fetch_relation_data()
-        assert data == {self.rel_id: {"topic": TOPIC, "secret_fields": self.SECRET_FIELDS}}
+        assert data == {
+            self.rel_id: {"topic": TOPIC, REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)}
+        }
 
     def test_topic_requested_event(self):
         # Test custom event creation
@@ -611,12 +620,12 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         relation_data = self.harness.get_relation_data(self.rel_id, self.app_name)
-        secret_id = relation_data.pop("secret-tls")
+        secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}tls")
         assert secret_id
 
         relation_data == {
-            "data": '{"secret_fields": "'
-            + f"{self.SECRET_FIELDS}"
+            "data": '{REQ_SECRET_FIELDS: "'
+            + f"{json.dumps(self.SECRET_FIELDS)}"
             + '"}',  # Data is the diff stored between multiple relation changed events.   # noqa
         }
 
@@ -643,7 +652,9 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         # Check the data using the charm library function
         # (the diff/data key should not be present).
         data = self.harness.charm.provider.fetch_relation_data()
-        assert data == {self.rel_id: {"index": INDEX, "secret_fields": self.SECRET_FIELDS}}
+        assert data == {
+            self.rel_id: {"index": INDEX, REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)}
+        }
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_index_requested_event(self):
@@ -969,7 +980,9 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             {"username": "test-username", "password": "test-password"}
         )
 
-        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {f"{PROV_SECRET_PREFIX}user": secret.id}
+        )
 
         # Assert the correct hook is called.
         _on_database_created.assert_called_once()
@@ -977,7 +990,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_database_created.call_args[0][0]
-        assert event.relation.data[event.relation.app]["secret-user"] == secret.id
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret.id
 
         assert self.harness.charm.requirer.is_resource_created()
 
@@ -989,7 +1002,9 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         secret2 = self.harness.charm.app.add_secret(
             {"username": "test-username", "password": "test-password"}
         )
-        self.harness.update_relation_data(rel_id, self.provider, {"secret-user": secret2.id})
+        self.harness.update_relation_data(
+            rel_id, self.provider, {f"{PROV_SECRET_PREFIX}user": secret2.id}
+        )
 
         # Assert the correct hook is called.
         assert _on_database_created.call_count == 2
@@ -997,7 +1012,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_database_created.call_args[0][0]
-        assert event.relation.data[event.relation.app]["secret-user"] == secret2.id
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret2.id
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
@@ -1413,7 +1428,9 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
             {"username": "test-username", "password": "test-password"}
         )
 
-        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {f"{PROV_SECRET_PREFIX}user": secret.id}
+        )
 
         # Assert the correct hook is called.
         _on_topic_created.assert_called_once()
@@ -1421,7 +1438,7 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_topic_created.call_args[0][0]
-        assert event.relation.data[event.relation.app]["secret-user"] == secret.id
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret.id
 
         assert self.harness.charm.requirer.is_resource_created()
 
@@ -1434,7 +1451,9 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
             {"username": "test-username2", "password": "test-password2"}
         )
 
-        self.harness.update_relation_data(rel_id, self.provider, {"secret-user": secret2.id})
+        self.harness.update_relation_data(
+            rel_id, self.provider, {f"{PROV_SECRET_PREFIX}user": secret2.id}
+        )
 
         # Assert the correct hook is called.
         assert _on_topic_created.call_count == 2
@@ -1442,7 +1461,7 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_topic_created.call_args[0][0]
-        assert event.relation.data[event.relation.app]["secret-user"] == secret2.id
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret2.id
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
@@ -1625,7 +1644,9 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
             {"username": "test-username", "password": "test-password"}
         )
 
-        self.harness.update_relation_data(self.rel_id, self.provider, {"secret-user": secret.id})
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {f"{PROV_SECRET_PREFIX}user": secret.id}
+        )
 
         # Assert the correct hook is called.
         _on_index_created.assert_called_once()
@@ -1633,7 +1654,7 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_index_created.call_args[0][0]
-        assert event.relation.data[event.relation.app]["secret-user"] == secret.id
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret.id
 
         assert self.harness.charm.requirer.is_resource_created()
 
@@ -1646,7 +1667,9 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
             {"username": "test-username", "password": "test-password"}
         )
 
-        self.harness.update_relation_data(rel_id, self.provider, {"secret-user": secret2.id})
+        self.harness.update_relation_data(
+            rel_id, self.provider, {f"{PROV_SECRET_PREFIX}user": secret2.id}
+        )
 
         # Assert the correct hook is called.
         assert _on_index_created.call_count == 2
@@ -1654,7 +1677,7 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the username and the password are present in the relation
         # using the requires charm library event.
         event = _on_index_created.call_args[0][0]
-        assert event.relation.data[event.relation.app]["secret-user"] == secret2.id
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret2.id
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
