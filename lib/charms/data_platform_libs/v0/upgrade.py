@@ -1019,7 +1019,7 @@ class DataUpgrade(Object, ABC):
         # This hook shouldn't run for the last unit (the first that is upgraded). For that unit it
         # should be done through an action after the upgrade success on that unit is double-checked.
         unit_number = int(self.charm.unit.name.split("/")[1])
-        if unit_number == len(self.peer_relation.units):
+        if unit_number == len(self.peer_relation.units) - 1:
             logger.info(
                 f"{self.charm.unit.name} unit upgraded. Evaluate and run `resume-upgrade` action to continue upgrade"
             )
