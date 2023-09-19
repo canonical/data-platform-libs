@@ -2091,9 +2091,18 @@ class OpenSearchRequires(DataRequires):
             )
             return
 
+        if relation.app == self.charm.app:
+            logging.info("Secret changed event ignored for Secret Owner")
+
+        remote_unit = None
+        for unit in relation.units:
+            if unit.app != self.charm.app:
+                remote_unit = unit
+
         logger.info("authentication updated")
-        # TODO: Unit parameter is missing !!!!
-        getattr(self.on, "authentication_updated").emit(relation, app=relation.app)
+        getattr(self.on, "authentication_updated").emit(
+            relation, app=relation.app, unit=remote_unit
+        )
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the OpenSearch relation has changed.
