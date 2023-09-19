@@ -120,7 +120,7 @@ class DatabaseCharm(CharmBase):
         self.database.set_credentials(event.relation.id, username, password)
 
         # Temporary hack to avoid https://bugs.launchpad.net/juju/+bug/2031631
-        sleep(randrange(3))
+        sleep(randrange(5))
 
         assert self.model.get_binding("database")
         assert self.model.get_binding("database").network
