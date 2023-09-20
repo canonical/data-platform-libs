@@ -28,7 +28,7 @@ SECOND_DATABASE_RELATION_NAME = "second-database"
 MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "multiple-database-clusters"
 ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "aliased-multiple-database-clusters"
 
-SECRET_REF_PREFIX = "secret-"
+PROV_SECRET_PREFIX = "secret-"
 
 
 @pytest.mark.abort_on_fail
@@ -281,7 +281,7 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_with_additional_secrets(ops_test: OpsTest, database_charm):
     # Let's make sure that there was enough time for the relation initialization to communicate secrets
-    sleep(5)
+    sleep(20)
     secret_fields = await get_application_relation_data(
         ops_test,
         DATABASE_APP_NAME,
@@ -300,7 +300,7 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
 
     # Get secret original value
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}extra"
+        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{PROV_SECRET_PREFIX}extra"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
@@ -315,7 +315,7 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
 
     # Get secret after change
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}extra"
+        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{PROV_SECRET_PREFIX}extra"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
