@@ -2,15 +2,17 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 import asyncio
+import json
 import logging
 from pathlib import Path
+from time import sleep
 
 import psycopg2
 import pytest
 import yaml
 from pytest_operator.plugin import OpsTest
 
-from .helpers import build_connection_string, get_application_relation_data
+from .helpers import build_connection_string, get_application_relation_data, get_juju_secret
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +28,13 @@ SECOND_DATABASE_RELATION_NAME = "second-database"
 MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "multiple-database-clusters"
 ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "aliased-multiple-database-clusters"
 
+SECRET_REF_PREFIX = "secret-"
+
 
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(ops_test: OpsTest, application_charm, database_charm):
     """Deploy both charms (application and database) to use in the tests."""
-    # Deploy both charms (2 units for each application to test that later they correctly
+    # Deploy both charms (1 units for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
@@ -272,3 +276,49 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
 
     # Assert the two application have different relation (connection) data.
     assert first_database_connection_string != second_database_connection_string
+
+
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_provider_with_additional_secrets(ops_test: OpsTest, database_charm):
+    # Let's make sure that there was enough time for the relation initialization to communicate secrets
+    sleep(5)
+    secret_fields = await get_application_relation_data(
+        ops_test,
+        DATABASE_APP_NAME,
+        DATABASE_APP_NAME,
+        "requested-secrets",
+        related_endpoint=SECOND_DATABASE_RELATION_NAME,
+    )
+    assert {"topsecret", "donttellanyone"} <= set(json.loads(secret_fields))
+
+    # Set secret
+    unit_name = f"{DATABASE_APP_NAME}/0"
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-secret", **{"field": "topsecret"}
+    )
+    await action.wait()
+
+    # Get secret original value
+    secret_uri = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}extra"
+    )
+
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    topsecret1 = secret_content["topsecret"]
+
+    # Re-set secret
+    unit_name = f"{DATABASE_APP_NAME}/0"
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-secret", **{"field": "topsecret"}
+    )
+    await action.wait()
+
+    # Get secret after change
+    secret_uri = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}extra"
+    )
+
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    topsecret2 = secret_content["topsecret"]
+
+    assert topsecret1 != topsecret2
