@@ -38,7 +38,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm, application_name=APPLICATION_APP_NAME, num_units=1, series="jammy"
+            application_charm, application_name=APPLICATION_APP_NAME, num_units=2, series="jammy"
         ),
         ops_test.model.deploy(
             database_charm,
@@ -48,7 +48,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
                 ]
             },
             application_name=DATABASE_APP_NAME,
-            num_units=1,
+            num_units=2,
             series="jammy",
         ),
         ops_test.model.deploy(
@@ -63,7 +63,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
         ),
     )
     await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_APP_NAME, DATABASE_APP_NAME], status="active", wait_for_exact_units=1
+        apps=[APPLICATION_APP_NAME, DATABASE_APP_NAME], status="active", wait_for_exact_units=2
     )
     await ops_test.model.wait_for_idle(
         apps=[ANOTHER_DATABASE_APP_NAME], status="active", wait_for_exact_units=1

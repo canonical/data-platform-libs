@@ -67,7 +67,7 @@ jobs:
           - juju-bootstrap-option: "2.9.44"
             juju-snap-channel: "2.9/stable"
             libjuju-version: "2.9.42.4"
-          - juju-bootstrap-option: "3.1.5"
+          - juju-bootstrap-option: "3.1.6"
             juju-snap-channel: "3.1/edge"
             libjuju-version: "3.2.0.1"
     name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- libjuju ${{ matrix.juju-version.libjuju-version }}
