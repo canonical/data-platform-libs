@@ -771,7 +771,7 @@ def test_upgrade_charm_sets_right_state(harness, mocker, substrate, state):
 
 def test_upgrade_changed_defers_if_recovery(harness, mocker):
     harness.charm.upgrade = GandalfUpgrade(
-        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="vm"
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "recovery"})
