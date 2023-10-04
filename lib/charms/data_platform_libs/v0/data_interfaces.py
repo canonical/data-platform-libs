@@ -898,10 +898,122 @@ class DataProvides(DataRelation):
         self.update_relation_data(relation_id, {"tls-ca": tls_ca})
 
 
+# Authentication event
+
+
+class AuthenticationEvent(RelationEvent):
+    """Base class for authentication fields for events.
+
+    The amount of logic added here is not ideal -- but this was the only way to preserve
+    the interface when moving to Juju Secrets
+    """
+
+    @property
+    def _secrets(self) -> dict:
+        """Caching secrets to avoid fetching them each time a field is referrd.
+
+        DON'T USE the encapsulated helper variable outside of this function
+        """
+        if not hasattr(self, "_cached_secrets"):
+            self._cached_secrets = {}
+        return self._cached_secrets
+
+    @property
+    def _jujuversion(self) -> JujuVersion:
+        """Caching jujuversion to avoid a Juju call on each field evaluation.
+
+        DON'T USE the encapsulated helper variable outside of this function
+        """
+        if not hasattr(self, "_cached_jujuversion"):
+            self._cached_jujuversion = None
+        if not self._cached_jujuversion:
+            self._cached_jujuversion = JujuVersion.from_environ()
+        return self._cached_jujuversion
+
+    def _get_secret(self, group) -> Optional[Dict[str, str]]:
+        """Retrieveing secrets."""
+        if not self.app:
+            return
+        if not self._secrets.get(group):
+            self._secrets[group] = None
+            secret_field = f"{PROV_SECRET_PREFIX}{group}"
+            if secret_uri := self.relation.data[self.app].get(secret_field):
+                secret = self.framework.model.get_secret(id=secret_uri)
+                self._secrets[group] = secret.get_content()
+        return self._secrets[group]
+
+    @property
+    def secrets_enabled(self):
+        """Is this Juju version allowing for Secrets usage?"""
+        return self._jujuversion.has_secrets
+
+    @property
+    def username(self) -> Optional[str]:
+        """Returns the created username."""
+        if not self.relation.app:
+            return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("user")
+            if secret:
+                return secret.get("username")
+
+        return self.relation.data[self.relation.app].get("username")
+
+    @property
+    def password(self) -> Optional[str]:
+        """Returns the password for the created user."""
+        if not self.relation.app:
+            return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("user")
+            if secret:
+                return secret.get("password")
+
+        return self.relation.data[self.relation.app].get("password")
+
+    @property
+    def tls(self) -> Optional[str]:
+        """Returns whether TLS is configured."""
+        if not self.relation.app:
+            return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("tls")
+            if secret:
+                return secret.get("tls")
+
+        return self.relation.data[self.relation.app].get("tls")
+
+    @property
+    def tls_ca(self) -> Optional[str]:
+        """Returns TLS CA."""
+        if not self.relation.app:
+            return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("tls")
+            if secret:
+                return secret.get("tls-ca")
+
+        return self.relation.data[self.relation.app].get("tls-ca")
+
+
+class DataRequiresEvents(CharmEvents):
+    """Database events.
+
+    This class defines the events that the database can emit.
+    """
+
+    authentication_updated = EventSource(AuthenticationEvent)
+
+
 class DataRequires(DataRelation):
     """Requires-side of the relation."""
 
     SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
+    on = DataRequiresEvents()  # pyright: ignore [reportGeneralTypeIssues]
 
     def __init__(
         self,
@@ -1049,10 +1161,30 @@ class DataRequires(DataRelation):
                 event.relation, self.charm.app, REQ_SECRET_FIELDS, self.secret_fields
             )
 
-    @abstractmethod
-    def _on_secret_changed_event(self, event: RelationChangedEvent) -> None:
+    def _on_secret_changed_event(self, event: SecretChangedEvent) -> None:
         """Event emitted when the relation data has changed."""
-        raise NotImplementedError
+        if not event.secret.label:
+            return
+
+        relation = self._relation_from_secret_label(event.secret.label)
+        if not relation:
+            logging.info(
+                f"Received secret {event.secret.label} but couldn't parse, seems irrelevant"
+            )
+            return
+
+        if relation.app == self.charm.app:
+            logging.info("Secret changed event ignored for Secret Owner")
+
+        remote_unit = None
+        for unit in relation.units:
+            if unit.app != self.charm.app:
+                remote_unit = unit
+
+        logger.info("authentication updated")
+        getattr(self.on, "authentication_updated").emit(
+            relation, app=relation.app, unit=remote_unit
+        )
 
     # Mandatory internal overrides
 
@@ -1161,105 +1293,6 @@ class ExtraRoleEvent(RelationEvent):
             return None
 
         return self.relation.data[self.relation.app].get("extra-user-roles")
-
-
-class AuthenticationEvent(RelationEvent):
-    """Base class for authentication fields for events.
-
-    The amount of logic added here is not ideal -- but this was the only way to preserve
-    the interface when moving to Juju Secrets
-    """
-
-    @property
-    def _secrets(self) -> dict:
-        """Caching secrets to avoid fetching them each time a field is referrd.
-
-        DON'T USE the encapsulated helper variable outside of this function
-        """
-        if not hasattr(self, "_cached_secrets"):
-            self._cached_secrets = {}
-        return self._cached_secrets
-
-    @property
-    def _jujuversion(self) -> JujuVersion:
-        """Caching jujuversion to avoid a Juju call on each field evaluation.
-
-        DON'T USE the encapsulated helper variable outside of this function
-        """
-        if not hasattr(self, "_cached_jujuversion"):
-            self._cached_jujuversion = None
-        if not self._cached_jujuversion:
-            self._cached_jujuversion = JujuVersion.from_environ()
-        return self._cached_jujuversion
-
-    def _get_secret(self, group) -> Optional[Dict[str, str]]:
-        """Retrieveing secrets."""
-        if not self.app:
-            return
-        if not self._secrets.get(group):
-            self._secrets[group] = None
-            secret_field = f"{PROV_SECRET_PREFIX}{group}"
-            if secret_uri := self.relation.data[self.app].get(secret_field):
-                secret = self.framework.model.get_secret(id=secret_uri)
-                self._secrets[group] = secret.get_content()
-        return self._secrets[group]
-
-    @property
-    def secrets_enabled(self):
-        """Is this Juju version allowing for Secrets usage?"""
-        return self._jujuversion.has_secrets
-
-    @property
-    def username(self) -> Optional[str]:
-        """Returns the created username."""
-        if not self.relation.app:
-            return None
-
-        if self.secrets_enabled:
-            secret = self._get_secret("user")
-            if secret:
-                return secret.get("username")
-
-        return self.relation.data[self.relation.app].get("username")
-
-    @property
-    def password(self) -> Optional[str]:
-        """Returns the password for the created user."""
-        if not self.relation.app:
-            return None
-
-        if self.secrets_enabled:
-            secret = self._get_secret("user")
-            if secret:
-                return secret.get("password")
-
-        return self.relation.data[self.relation.app].get("password")
-
-    @property
-    def tls(self) -> Optional[str]:
-        """Returns whether TLS is configured."""
-        if not self.relation.app:
-            return None
-
-        if self.secrets_enabled:
-            secret = self._get_secret("tls")
-            if secret:
-                return secret.get("tls")
-
-        return self.relation.data[self.relation.app].get("tls")
-
-    @property
-    def tls_ca(self) -> Optional[str]:
-        """Returns TLS CA."""
-        if not self.relation.app:
-            return None
-
-        if self.secrets_enabled:
-            secret = self._get_secret("tls")
-            if secret:
-                return secret.get("tls-ca")
-
-        return self.relation.data[self.relation.app].get("tls-ca")
 
 
 # Database related events and fields
@@ -1371,7 +1404,7 @@ class DatabaseReadOnlyEndpointsChangedEvent(AuthenticationEvent, DatabaseRequire
     """Event emitted when the read only endpoints are changed."""
 
 
-class DatabaseRequiresEvents(CharmEvents):
+class DatabaseRequiresEvents(DataRequiresEvents):
     """Database events.
 
     This class defines the events that the database can emit.
@@ -1519,10 +1552,6 @@ class DatabaseRequires(DataRequires):
                     f"{relation_alias}_read_only_endpoints_changed",
                     DatabaseReadOnlyEndpointsChangedEvent,
                 )
-
-    def _on_secret_changed_event(self, event: SecretChangedEvent):
-        """Event notifying about a new value of a secret."""
-        pass
 
     def _assign_relation_alias(self, relation_id: int) -> None:
         """Assigns an alias to a relation.
@@ -1788,7 +1817,7 @@ class BootstrapServerChangedEvent(AuthenticationEvent, KafkaRequiresEvent):
     """Event emitted when the bootstrap server is changed."""
 
 
-class KafkaRequiresEvents(CharmEvents):
+class KafkaRequiresEvents(DataRequiresEvents):
     """Kafka events.
 
     This class defines the events that the Kafka can emit.
@@ -1907,10 +1936,6 @@ class KafkaRequires(DataRequires):
 
         self.update_relation_data(event.relation.id, relation_data)
 
-    def _on_secret_changed_event(self, event: SecretChangedEvent):
-        """Event notifying about a new value of a secret."""
-        pass
-
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the Kafka relation has changed."""
         # Check which data has changed to emit customs events.
@@ -1982,7 +2007,7 @@ class IndexCreatedEvent(AuthenticationEvent, OpenSearchRequiresEvent):
     """Event emitted when a new index is created for use on this relation."""
 
 
-class OpenSearchRequiresEvents(CharmEvents):
+class OpenSearchRequiresEvents(DataRequiresEvents):
     """OpenSearch events.
 
     This class defines the events that the opensearch requirer can emit.
@@ -1990,7 +2015,6 @@ class OpenSearchRequiresEvents(CharmEvents):
 
     index_created = EventSource(IndexCreatedEvent)
     endpoints_changed = EventSource(DatabaseEndpointsChangedEvent)
-    authentication_updated = EventSource(AuthenticationEvent)
 
 
 # OpenSearch Provides and Requires Objects
@@ -2078,31 +2102,6 @@ class OpenSearchRequires(DataRequires):
             data["extra-user-roles"] = self.extra_user_roles
 
         self.update_relation_data(event.relation.id, data)
-
-    def _on_secret_changed_event(self, event: SecretChangedEvent):
-        """Event notifying about a new value of a secret."""
-        if not event.secret.label:
-            return
-
-        relation = self._relation_from_secret_label(event.secret.label)
-        if not relation:
-            logging.info(
-                f"Received secret {event.secret.label} but couldn't parse, seems irrelevant"
-            )
-            return
-
-        if relation.app == self.charm.app:
-            logging.info("Secret changed event ignored for Secret Owner")
-
-        remote_unit = None
-        for unit in relation.units:
-            if unit.app != self.charm.app:
-                remote_unit = unit
-
-        logger.info("authentication updated")
-        getattr(self.on, "authentication_updated").emit(
-            relation, app=relation.app, unit=remote_unit
-        )
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the OpenSearch relation has changed.
