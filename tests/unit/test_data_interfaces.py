@@ -374,7 +374,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         }
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
-    def test_fetch_relation_data(self):
+    def test_fetch_relation_data_and_field(self):
         # Set some data in the relation.
         self.harness.update_relation_data(self.rel_id, "application", {"database": DATABASE})
 
@@ -382,9 +382,12 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         # (the diff/data key should not be present).
         data = self.harness.charm.provider.fetch_relation_data()
         assert data == {self.rel_id: {"database": DATABASE}}
+        assert (
+            self.harness.charm.provider.fetch_relation_field(self.rel_id, "database") == DATABASE
+        )
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
-    def test_fetch_relation_data_secrets(self):
+    def test_fetch_relation_data_and_field_secrets(self):
         # Set some data in the relation.
         self.harness.update_relation_data(self.rel_id, "application", {"database": DATABASE})
 
@@ -392,8 +395,66 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         # (the diff/data key should not be present).
         data = self.harness.charm.provider.fetch_relation_data()
         assert data == {
-            self.rel_id: {"database": DATABASE, REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)}
+            self.rel_id: {
+                "database": DATABASE,
+                REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS),
+            }
         }
+        assert (
+            self.harness.charm.provider.fetch_relation_field(self.rel_id, "database") == DATABASE
+        )
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_fetch_my_relation_data_and_field(self):
+        # Set some data in the relation.
+        self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
+        self.harness.update_relation_data(self.rel_id, "database", {"somedata": "somevalue"})
+
+        # Check the data using the charm library function
+        # (the diff/data key should not be present).
+        data = self.harness.charm.provider.fetch_my_relation_data()
+        assert data == {
+            self.rel_id: {
+                "username": "test-username",
+                "password": "test-password",
+                "somedata": "somevalue",
+                "data": json.dumps({}),
+            }
+        }
+        assert (
+            self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
+        assert (
+            self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "somedata")
+            == "somevalue"
+        )
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_fetch_my_relation_data_and_field_secrets(self):
+        # Set some data in the relation.
+        self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
+        self.harness.update_relation_data(self.rel_id, "database", {"somedata": "somevalue"})
+
+        # Check the data using the charm library function
+        # (the diff/data key should not be present).
+        data = self.harness.charm.provider.fetch_my_relation_data()
+        assert data == {
+            self.rel_id: {
+                "username": "test-username",
+                "password": "test-password",
+                "somedata": "somevalue",
+                "data": json.dumps({REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)}),
+            }
+        }
+        assert (
+            self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
+        assert (
+            self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "somedata")
+            == "somevalue"
+        )
 
     def test_database_requested_event(self):
         # Test custom event creation
@@ -1016,6 +1077,106 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_fetch_relation_data_fields(self):
+        # Set some data in the relation.
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {"username": "test-username", "password": "test-password"}
+        )
+        self.harness.update_relation_data(self.rel_id, self.provider, {"somedata": "somevalue"})
+
+        # Check the data using the charm library function
+        # (the diff/data key should not be present).
+        data = self.harness.charm.requirer.fetch_relation_data()
+        assert data == {
+            self.rel_id: {
+                "username": "test-username",
+                "password": "test-password",
+                "somedata": "somevalue",
+            }
+        }
+        assert (
+            self.harness.charm.requirer.fetch_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
+        assert (
+            self.harness.charm.requirer.fetch_relation_field(self.rel_id, "somedata")
+            == "somevalue"
+        )
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_fetch_relation_data_secrets_fields(self):
+        # Set user secret for the relation.
+        secret = self.harness.charm.app.add_secret(
+            {"username": "test-username", "password": "test-password"}
+        )
+
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {f"{PROV_SECRET_PREFIX}user": secret.id}
+        )
+        # Set some data in the relation.
+        self.harness.update_relation_data(self.rel_id, self.provider, {"somedata": "somevalue"})
+
+        # Check the data using the charm library function
+        # (the diff/data key should not be present).
+        data = self.harness.charm.requirer.fetch_relation_data()
+        assert data == {
+            self.rel_id: {
+                "username": "test-username",
+                "password": "test-password",
+                "somedata": "somevalue",
+            }
+        }
+        assert (
+            self.harness.charm.requirer.fetch_relation_field(self.rel_id, "password")
+            == "test-password"
+        )
+        assert (
+            self.harness.charm.requirer.fetch_relation_field(self.rel_id, "somedata")
+            == "somevalue"
+        )
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_fetch_my_relation_data_and_fields(self):
+        # Set some data in the relation.
+        self.harness.update_relation_data(self.rel_id, self.app_name, {"somedata": "somevalue"})
+
+        # Check the data using the charm library function
+        # (the diff/data key should not be present).
+        data = self.harness.charm.requirer.fetch_my_relation_data()
+        assert data == {
+            self.rel_id: {
+                "somedata": "somevalue",
+                "database": "data_platform",
+                "extra-user-roles": "CREATEDB,CREATEROLE",
+            }
+        }
+        assert (
+            self.harness.charm.requirer.fetch_my_relation_field(self.rel_id, "somedata")
+            == "somevalue"
+        )
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_fetch_my_relation_data_and_fields_secrets(self):
+        # Set some data in the relation.
+        self.harness.update_relation_data(self.rel_id, self.app_name, {"somedata": "somevalue"})
+
+        # Check the data using the charm library function
+        # (the diff/data key should not be present).
+        data = self.harness.charm.requirer.fetch_my_relation_data()
+        assert data == {
+            self.rel_id: {
+                "somedata": "somevalue",
+                "database": "data_platform",
+                "extra-user-roles": "CREATEDB,CREATEROLE",
+                REQ_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.secret_fields),
+            }
+        }
+        assert (
+            self.harness.charm.requirer.fetch_my_relation_field(self.rel_id, "somedata")
+            == "somevalue"
+        )
 
     @patch.object(charm, "_on_database_created")
     @pytest.mark.usefixtures("only_with_juju_secrets")
