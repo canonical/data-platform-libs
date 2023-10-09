@@ -378,7 +378,7 @@ class SecretsIllegalUpdateError(SecretError):
 
 
 def get_encoded_field(
-    relation: Relation, member: Union[Unit, Application], field
+    relation: Relation, member: Union[Unit, Application], field: str
 ) -> Union[str, List[str], Dict[str, str]]:
     """Retrieve and decode an encoded field from relation data."""
     return json.loads(relation.data[member].get(field, "{}"))
@@ -408,9 +408,12 @@ def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
     # Retrieve the old data from the data key in the application relation databag.
     old_data = get_encoded_field(event.relation, bucket, "data")
 
-    if not old_data or (old_data and not isinstance(old_data, dict)):
+    if not old_data:
+        old_data = {}
+
+    if not isinstance(old_data, dict):
         # We should never get here, added to re-assure pyright
-        logger.error("Can't retrieve previous databag diff.")
+        logger.error("Previous databag diff is of a wrong type.")
         old_data = {}
 
     # Retrieve the new data from the event relation databag.
@@ -604,14 +607,14 @@ class DataRelation(Object, ABC):
 
     @abstractmethod
     def _fetch_specific_relation_data(
-        self, relation, fields: Optional[List[str]]
+        self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
         """Fetch data available (directily or indirectly -- i.e. secrets) from the relation."""
         raise NotImplementedError
 
     @abstractmethod
     def _fetch_my_specific_relation_data(
-        self, relation, fields: Optional[List[str]]
+        self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
         """Fetch data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         raise NotImplementedError
@@ -684,7 +687,7 @@ class DataRelation(Object, ABC):
 
     def _retrieve_group_secret_contents(
         self,
-        relation_id,
+        relation_id: int,
         group: SecretGroup,
         secret_fields: Optional[Union[Set[str], List[str]]] = None,
     ) -> Dict[str, str]:
@@ -708,20 +711,34 @@ class DataRelation(Object, ABC):
             return secret.get_content()
 
     def _fetch_relation_data_without_secrets(
-        self, app: Application, relation, fields: Optional[List[str]]
-    ) -> dict:
+        self, app: Application, relation: Relation, fields: Optional[List[str]]
+    ) -> Dict[str, str]:
+        """Fetching databag contents when no secrets are involved.
+
+        Since the Provider's databag is the only one holding secrest, we can apply
+        a simplified workflow to read the Require's side's databag.
+        This is used typically when the Provides side wants to read the Requires side's data,
+        or when the Requires side may want to read its own data.
+        """
         if fields:
-            return {k: relation.data[app].get(k) for k in fields}
+            return {k: relation.data[app][k] for k in fields if k in relation.data[app]}
         else:
-            return relation.data[app]
+            return dict(relation.data[app])
 
     def _fetch_relation_data_with_secrets(
         self,
         app: Application,
         req_secret_fields: Optional[List[str]],
-        relation,
+        relation: Relation,
         fields: Optional[List[str]] = None,
     ) -> Dict[str, str]:
+        """Fetching databag contents when secrets may be involved.
+
+        This function has internal logic to resolve if a requested field may be "hidden"
+        within a Relation Secret, or directly available as a databag field. Typically
+        used to read the Provides side's databag (eigher by the Requires side, or by
+        Provides side itself).
+        """
         result = {}
 
         normal_fields = fields
@@ -756,7 +773,7 @@ class DataRelation(Object, ABC):
                     )
 
         # Processing "normal" fields. May include leftover from what we couldn't retrieve as a secret.
-        result.update({k: relation.data[app].get(k) for k in normal_fields})
+        result.update({k: relation.data[app][k] for k in normal_fields if k in relation.data[app]})
         return result
 
     # Public methods
@@ -838,7 +855,7 @@ class DataRelation(Object, ABC):
 
         data = {}
         for relation in relations:
-            if not relation_ids or (relation_ids and relation.id in relation_ids):
+            if not relation_ids or relation.id in relation_ids:
                 data[relation.id] = self._fetch_my_specific_relation_data(relation, fields)
         return data
 
@@ -961,7 +978,7 @@ class DataProvides(DataRelation):
 
     def _fetch_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
-    ) -> dict:
+    ) -> Dict[str, str]:
         """Fetching relation data for Provides.
 
         NOTE: Since all secret fields are in the Provides side of the databag, we don't need to worry about that
@@ -1208,6 +1225,8 @@ class DataRequires(DataRelation):
         self, relation, fields: Optional[List[str]] = None
     ) -> Dict[str, str]:
         """Fetching Requires data -- that may include secrets."""
+        if not relation.app:
+            return {}
         return self._fetch_relation_data_with_secrets(
             relation.app, self.secret_fields, relation, fields
         )
