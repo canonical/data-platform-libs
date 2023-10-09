@@ -382,8 +382,21 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         # (the diff/data key should not be present).
         data = self.harness.charm.provider.fetch_relation_data()
         assert data == {self.rel_id: {"database": DATABASE}}
+
+        data = self.harness.charm.provider.fetch_relation_data([self.rel_id], ["database"])
+        assert data == {self.rel_id: {"database": DATABASE}}
+
+        data = self.harness.charm.provider.fetch_relation_data(
+            [self.rel_id], ["non-existent-field"]
+        )
+        assert data == {self.rel_id: {}}
+
         assert (
             self.harness.charm.provider.fetch_relation_field(self.rel_id, "database") == DATABASE
+        )
+        assert (
+            self.harness.charm.provider.fetch_relation_field(self.rel_id, "non-existent-field")
+            is None
         )
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
@@ -400,8 +413,20 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                 REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS),
             }
         }
+        data = self.harness.charm.provider.fetch_relation_data([self.rel_id], ["database"])
+        assert data == {self.rel_id: {"database": DATABASE}}
+
+        data = self.harness.charm.provider.fetch_relation_data(
+            [self.rel_id], ["non-existent-field"]
+        )
+        assert data == {self.rel_id: {}}
+
         assert (
             self.harness.charm.provider.fetch_relation_field(self.rel_id, "database") == DATABASE
+        )
+        assert (
+            self.harness.charm.provider.fetch_relation_field(self.rel_id, "non-existent-field")
+            is None
         )
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
@@ -421,6 +446,15 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                 "data": json.dumps({}),
             }
         }
+
+        data = self.harness.charm.provider.fetch_my_relation_data([self.rel_id], ["somedata"])
+        assert data == {self.rel_id: {"somedata": "somevalue"}}
+
+        data = self.harness.charm.provider.fetch_my_relation_data(
+            [self.rel_id], ["non-existing-data"]
+        )
+        assert data == {self.rel_id: {}}
+
         assert (
             self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "password")
             == "test-password"
@@ -428,6 +462,10 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         assert (
             self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "somedata")
             == "somevalue"
+        )
+        assert (
+            self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "non-existing-data")
+            is None
         )
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
@@ -447,6 +485,15 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                 "data": json.dumps({REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)}),
             }
         }
+
+        data = self.harness.charm.provider.fetch_my_relation_data([self.rel_id], ["somedata"])
+        assert data == {self.rel_id: {"somedata": "somevalue"}}
+
+        data = self.harness.charm.provider.fetch_my_relation_data(
+            [self.rel_id], ["non-existing-data"]
+        )
+        assert data == {self.rel_id: {}}
+
         assert (
             self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "password")
             == "test-password"
@@ -454,6 +501,10 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         assert (
             self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "somedata")
             == "somevalue"
+        )
+        assert (
+            self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "non-existing-data")
+            is None
         )
 
     def test_database_requested_event(self):
@@ -1079,7 +1130,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert self.harness.charm.requirer.is_resource_created()
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
-    def test_fetch_relation_data_fields(self):
+    def test_fetch_relation_data_and_fields(self):
         # Set some data in the relation.
         self.harness.update_relation_data(
             self.rel_id, self.provider, {"username": "test-username", "password": "test-password"}
@@ -1096,6 +1147,15 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "somedata": "somevalue",
             }
         }
+
+        data = self.harness.charm.requirer.fetch_relation_data([self.rel_id], ["username"])
+        assert data == {self.rel_id: {"username": "test-username"}}
+
+        data = self.harness.charm.requirer.fetch_relation_data(
+            [self.rel_id], ["non-existent-field"]
+        )
+        assert data == {self.rel_id: {}}
+
         assert (
             self.harness.charm.requirer.fetch_relation_field(self.rel_id, "password")
             == "test-password"
@@ -1128,6 +1188,15 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "somedata": "somevalue",
             }
         }
+
+        data = self.harness.charm.requirer.fetch_relation_data([self.rel_id], ["username"])
+        assert data == {self.rel_id: {"username": "test-username"}}
+
+        data = self.harness.charm.requirer.fetch_relation_data(
+            [self.rel_id], ["non-existent-field"]
+        )
+        assert data == {self.rel_id: {}}
+
         assert (
             self.harness.charm.requirer.fetch_relation_field(self.rel_id, "password")
             == "test-password"
@@ -1135,6 +1204,10 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert (
             self.harness.charm.requirer.fetch_relation_field(self.rel_id, "somedata")
             == "somevalue"
+        )
+        assert (
+            self.harness.charm.requirer.fetch_my_relation_field(self.rel_id, "non-existing-data")
+            is None
         )
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
@@ -1152,9 +1225,22 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "extra-user-roles": "CREATEDB,CREATEROLE",
             }
         }
+
+        data = self.harness.charm.requirer.fetch_my_relation_data([self.rel_id], ["somedata"])
+        assert data == {self.rel_id: {"somedata": "somevalue"}}
+
+        data = self.harness.charm.requirer.fetch_my_relation_data(
+            [self.rel_id], ["non-existing-data"]
+        )
+        assert data == {self.rel_id: {}}
+
         assert (
             self.harness.charm.requirer.fetch_my_relation_field(self.rel_id, "somedata")
             == "somevalue"
+        )
+        assert (
+            self.harness.charm.requirer.fetch_my_relation_field(self.rel_id, "non-existing-data")
+            is None
         )
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
@@ -1173,6 +1259,14 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 REQ_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.secret_fields),
             }
         }
+
+        data = self.harness.charm.requirer.fetch_my_relation_data([self.rel_id], ["somedata"])
+        assert data == {self.rel_id: {"somedata": "somevalue"}}
+
+        data = self.harness.charm.requirer.fetch_my_relation_data(
+            [self.rel_id], ["non-existing-data"]
+        )
+        assert data == {self.rel_id: {}}
         assert (
             self.harness.charm.requirer.fetch_my_relation_field(self.rel_id, "somedata")
             == "somevalue"
