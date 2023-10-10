@@ -1,6 +1,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 import json
+import logging
 import re
 import unittest
 from abc import ABC, abstractmethod
@@ -117,6 +118,10 @@ class OpenSearchCharm(CharmBase):
 
 class DataProvidesBaseTests(ABC):
     SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
+
+    @pytest.fixture
+    def use_caplog(self, caplog):
+        self._caplog = caplog
 
     @abstractmethod
     def get_harness(self) -> Tuple[Harness, int]:
@@ -429,6 +434,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             is None
         )
 
+    @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_fetch_my_relation_data_and_field(self):
         # Set some data in the relation.
@@ -468,6 +474,18 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             is None
         )
 
+        self.harness.set_leader(False)
+        with self._caplog.at_level(logging.ERROR):
+            assert (
+                self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "somedata")
+                is None
+            )
+            assert (
+                "This operation (fetch_my_relation_field()) can only be performed by the leader unit"
+                in self._caplog.text
+            )
+
+    @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_fetch_my_relation_data_and_field_secrets(self):
         # Set some data in the relation.
@@ -506,6 +524,17 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "non-existing-data")
             is None
         )
+
+        self.harness.set_leader(False)
+        with self._caplog.at_level(logging.ERROR):
+            assert (
+                self.harness.charm.provider.fetch_my_relation_field(self.rel_id, "somedata")
+                is None
+            )
+            assert (
+                "This operation (fetch_my_relation_field()) can only be performed by the leader unit"
+                in self._caplog.text
+            )
 
     def test_database_requested_event(self):
         # Test custom event creation
@@ -923,6 +952,10 @@ class DataRequirerBaseTests(ABC):
     app_name: str
     charm: Type[CharmBase]
 
+    @pytest.fixture
+    def use_caplog(self, caplog):
+        self._caplog = caplog
+
     def get_harness(self) -> Harness:
         harness = Harness(self.charm, meta=self.metadata)
         harness.set_leader(True)
@@ -1210,6 +1243,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             is None
         )
 
+    @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_fetch_my_relation_data_and_fields(self):
         # Set some data in the relation.
@@ -1243,6 +1277,18 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             is None
         )
 
+        self.harness.set_leader(False)
+        with self._caplog.at_level(logging.ERROR):
+            assert (
+                self.harness.charm.requirer.fetch_my_relation_field(self.rel_id, "somedata")
+                is None
+            )
+            assert (
+                "This operation (fetch_my_relation_field()) can only be performed by the leader unit"
+                in self._caplog.text
+            )
+
+    @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_fetch_my_relation_data_and_fields_secrets(self):
         # Set some data in the relation.
@@ -1271,6 +1317,17 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             self.harness.charm.requirer.fetch_my_relation_field(self.rel_id, "somedata")
             == "somevalue"
         )
+
+        self.harness.set_leader(False)
+        with self._caplog.at_level(logging.ERROR):
+            assert (
+                self.harness.charm.requirer.fetch_my_relation_field(self.rel_id, "somedata")
+                is None
+            )
+            assert (
+                "This operation (fetch_my_relation_field()) can only be performed by the leader unit"
+                in self._caplog.text
+            )
 
     @patch.object(charm, "_on_database_created")
     @pytest.mark.usefixtures("only_with_juju_secrets")

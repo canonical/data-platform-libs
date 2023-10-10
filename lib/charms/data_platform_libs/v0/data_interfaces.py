@@ -446,6 +446,9 @@ def leader_only(f):
 
     def wrapper(self, *args, **kwargs):
         if not self.local_unit.is_leader():
+            logger.error(
+                "This operation (%s()) can only be performed by the leader unit", f.__name__
+            )
             return
         return f(self, *args, **kwargs)
 
@@ -835,13 +838,18 @@ class DataRelation(Object, ABC):
             .get(field)
         )
 
+    @leader_only
     def fetch_my_relation_data(
         self,
         relation_ids: Optional[List[int]] = None,
         fields: Optional[List[str]] = None,
         relation_name: Optional[str] = None,
-    ):
-        """Fetch data of the 'owner' (or 'this app') side of the relation."""
+    ) -> Optional[Dict[int, Dict[str, str]]]:
+        """Fetch data of the 'owner' (or 'this app') side of the relation.
+
+        NOTE: Since only the leader can read the relation's 'this_app'-side
+        Application databag, the functionality is limited to leaders
+        """
         if not relation_name:
             relation_name = self.relation_name
 
@@ -859,15 +867,17 @@ class DataRelation(Object, ABC):
                 data[relation.id] = self._fetch_my_specific_relation_data(relation, fields)
         return data
 
+    @leader_only
     def fetch_my_relation_field(
         self, relation_id: int, field: str, relation_name: Optional[str] = None
     ) -> Optional[str]:
-        """Get a single field from the relation data -- owner side."""
-        return (
-            self.fetch_my_relation_data([relation_id], [field], relation_name)
-            .get(relation_id, {})
-            .get(field)
-        )
+        """Get a single field from the relation data -- owner side.
+
+        NOTE: Since only the leader can read the relation's 'this_app'-side
+        Application databag, the functionality is limited to leaders
+        """
+        if relation_data := self.fetch_my_relation_data([relation_id], [field], relation_name):
+            return relation_data.get(relation_id, {}).get(field)
 
     # Public methods - mandatory override
 
