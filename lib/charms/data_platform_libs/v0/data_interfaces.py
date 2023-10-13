@@ -1678,7 +1678,6 @@ class DatabaseRequires(DataRequires):
         # it will be accessible in show-unit juju command, executed for a consumer application unit
         self.update_relation_data(relation_id, {"alias": available_aliases[0]})
 
-
     def _emit_aliased_event(self, event: RelationChangedEvent, event_name: str) -> None:
         """Emit an aliased event to a particular relation if it has an alias.
 
