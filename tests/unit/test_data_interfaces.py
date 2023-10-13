@@ -1254,6 +1254,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         data = self.harness.charm.requirer.fetch_my_relation_data()
         assert data == {
             self.rel_id: {
+                "alias": "cluster1",
                 "somedata": "somevalue",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
@@ -1299,6 +1300,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         data = self.harness.charm.requirer.fetch_my_relation_data()
         assert data == {
             self.rel_id: {
+                "alias": "cluster1",
                 "somedata": "somevalue",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
