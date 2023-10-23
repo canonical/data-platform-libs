@@ -9,3 +9,18 @@ set-secret:
     field:
       type: string
       description: The mapping name, i.e. what databag field ('secret-<mapping>') is to be changed
+
+set-relation-field:
+  description: Set fields from the relation
+  field:
+    type: string
+    description: Relation field
+  value:
+    type: string
+    description: Value of the field to set
+
+delete-relation-field:
+  description: Delete fields from the relation
+  field:
+    type: string
+    description: Relation field

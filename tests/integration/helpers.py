@@ -2,7 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 import json
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import yaml
 from ops import JujuVersion
@@ -17,6 +17,30 @@ async def get_juju_secret(ops_test: OpsTest, secret_uri: str) -> Dict[str, str]:
     complete_command = f"show-secret {secret_uri} --reveal --format=json"
     _, stdout, _ = await ops_test.juju(*complete_command.split())
     return json.loads(stdout)[secret_unique_id]["content"]["Data"]
+
+
+async def list_juju_secrets(ops_test: OpsTest) -> List[str]:
+    """Check if a juju secret does not exist."""
+    _, stdout, _ = await ops_test.juju("list-secrets")
+    data = stdout.split("\n")
+    data = data[1:]
+    return [line.split()[0] for line in data if line]
+
+
+async def get_leader_id(ops_test: OpsTest, app_name: str) -> int:
+    """Returns the unit number of the juju leader unit."""
+    for unit in ops_test.model.applications[app_name].units:
+        if await unit.is_leader_from_status():
+            return int(unit.name.split("/")[1])
+    return -1
+
+
+async def get_non_leader_id(ops_test: OpsTest, app_name: str) -> int:
+    """Returns the unit number of the juju leader unit."""
+    for unit in ops_test.model.applications[app_name].units:
+        if not await unit.is_leader_from_status():
+            return int(unit.name.split("/")[1])
+    return -1
 
 
 async def build_connection_string(
