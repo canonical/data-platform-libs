@@ -26,8 +26,7 @@ logger = logging.getLogger(__name__)
 APPLICATION_APP_NAME = "application"
 DATABASE_APP_NAME = "database"
 ANOTHER_DATABASE_APP_NAME = "another-database"
-# APP_NAMES = [APPLICATION_APP_NAME, DATABASE_APP_NAME, ANOTHER_DATABASE_APP_NAME]
-APP_NAMES = [APPLICATION_APP_NAME, DATABASE_APP_NAME]
+APP_NAMES = [APPLICATION_APP_NAME, DATABASE_APP_NAME, ANOTHER_DATABASE_APP_NAME]
 DATABASE_APP_METADATA = yaml.safe_load(
     Path("./tests/integration/database-charm/metadata.yaml").read_text()
 )

@@ -152,7 +152,7 @@ class ApplicationCharm(CharmBase):
 
     # Set/delete field
     def _on_set_relation_field(self, event: ActionEvent):
-        """[second_database]: Delete requested relation field."""
+        """[second_database]: Set requested relation field."""
         for relation in self.second_database.relations:
             self.second_database.update_relation_data(
                 relation.id, {event.params["field"]: event.params["value"]}

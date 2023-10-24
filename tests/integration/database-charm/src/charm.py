@@ -149,7 +149,7 @@ class DatabaseCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     def _on_set_relation_field(self, event: ActionEvent):
-        """Delete requested relation field."""
+        """Set requested relation field."""
         for relation in self.database.relations:
             self.database.update_relation_data(
                 relation.id, {event.params["field"]: event.params["value"]}

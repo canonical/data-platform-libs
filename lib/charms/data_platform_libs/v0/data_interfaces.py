@@ -384,7 +384,7 @@ def get_encoded_dict(
     data = json.loads(relation.data[member].get(field, "{}"))
     if isinstance(data, dict):
         return data
-    logger.error("Unexpected datatype for {data} instead of dict.")
+    logger.error("Unexpected datatype for %s instead of dict.", str(data))
 
 
 def get_encoded_list(
@@ -394,7 +394,7 @@ def get_encoded_list(
     data = json.loads(relation.data[member].get(field, "[]"))
     if isinstance(data, list):
         return data
-    logger.error("Unexpected datatype for {data} instead of list.")
+    logger.error("Unexpected datatype for %s instead of list.", str(data))
 
 
 def set_encoded_field(
@@ -728,9 +728,10 @@ class DataRelation(Object, ABC):
         return {}
 
     @staticmethod
-    def _secret_content_grouped(
+    def _content_for_secret_group(
         content: Dict[str, str], secret_fields: Set[str], group_mapping: SecretGroup
     ) -> Dict[str, str]:
+        """Select <field>: <value> pairs from input, that belong to this particular Secret group."""
         if group_mapping == SecretGroup.EXTRA:
             return {
                 k: v
@@ -849,7 +850,6 @@ class DataRelation(Object, ABC):
         if relation:
             relation.data[app].update(data)
 
-    @leader_only
     def _delete_relation_data_without_secrets(
         self, app: Application, relation: Relation, fields: List[str]
     ) -> None:
@@ -1036,7 +1036,8 @@ class DataProvides(DataRelation):
         secret_fields: Set[str],
         data: Dict[str, str],
     ) -> None:
-        secret_content = self._secret_content_grouped(data, secret_fields, group)
+        """Update contents for Secret group. If the Secret doesn't exist, create it."""
+        secret_content = self._content_for_secret_group(data, secret_fields, group)
         if self._get_relation_secret(relation.id, group):
             self._update_relation_secret(relation, secret_content, group)
         else:
@@ -1341,7 +1342,6 @@ class DataRequires(DataRelation):
         """Fetching our own relation data."""
         return self._fetch_relation_data_without_secrets(self.local_app, relation, fields)
 
-    @leader_only
     def _update_relation_data(self, relation: Relation, data: dict) -> None:
         """Updates a set of key-value pairs in the relation.
 
@@ -1355,7 +1355,6 @@ class DataRequires(DataRelation):
         """
         return self._update_relation_data_without_secrets(self.local_app, relation, data)
 
-    @leader_only
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
         """Deletes a set of fields from the relation.
 
