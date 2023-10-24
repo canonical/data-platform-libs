@@ -141,10 +141,27 @@ class ApplicationCharm(CharmBase):
         # actions
 
         self.framework.observe(self.on.reset_unit_status_action, self._on_reset_unit_status)
+        self.framework.observe(self.on.set_relation_field_action, self._on_set_relation_field)
+        self.framework.observe(
+            self.on.delete_relation_field_action, self._on_delete_relation_field
+        )
 
     def _on_start(self, _) -> None:
         """Only sets an Active status."""
         self.unit.status = ActiveStatus()
+
+    # Set/delete field
+    def _on_set_relation_field(self, event: ActionEvent):
+        """[second_database]: Set requested relation field."""
+        for relation in self.second_database.relations:
+            self.second_database.update_relation_data(
+                relation.id, {event.params["field"]: event.params["value"]}
+            )
+
+    def _on_delete_relation_field(self, event: ActionEvent):
+        """[second_database]: Delete requested relation field."""
+        for relation in self.second_database.relations:
+            self.second_database.delete_relation_data(relation.id, [event.params["field"]])
 
     # First database events observers.
     def _on_first_database_created(self, event: DatabaseCreatedEvent) -> None:

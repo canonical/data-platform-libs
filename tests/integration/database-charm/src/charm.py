@@ -49,6 +49,10 @@ class DatabaseCharm(CharmBase):
             self.on.change_admin_password_action, self._on_change_admin_password
         )
         self.framework.observe(self.on.set_secret_action, self._on_set_secret_action)
+        self.framework.observe(self.on.set_relation_field_action, self._on_set_relation_field)
+        self.framework.observe(
+            self.on.delete_relation_field_action, self._on_delete_relation_field
+        )
 
     def _on_change_admin_password(self, event: ActionEvent):
         """Change the admin password."""
@@ -143,6 +147,18 @@ class DatabaseCharm(CharmBase):
         self.database.set_version(event.relation.id, version)
 
         self.unit.status = ActiveStatus()
+
+    def _on_set_relation_field(self, event: ActionEvent):
+        """Set requested relation field."""
+        for relation in self.database.relations:
+            self.database.update_relation_data(
+                relation.id, {event.params["field"]: event.params["value"]}
+            )
+
+    def _on_delete_relation_field(self, event: ActionEvent):
+        """Delete requested relation field."""
+        for relation in self.database.relations:
+            self.database.delete_relation_data(relation.id, [event.params["field"]])
 
     def _new_password(self) -> str:
         """Generate a random password string.

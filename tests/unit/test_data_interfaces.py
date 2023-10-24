@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 
 import psycopg
 import pytest
-from ops import JujuVersion, SecretChangedEvent
+from ops import JujuVersion, SecretChangedEvent, SecretNotFoundError
 from ops.charm import CharmBase
 from ops.testing import Harness
 from parameterized import parameterized
@@ -535,6 +535,16 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                 "This operation (fetch_my_relation_field()) can only be performed by the leader unit"
                 in self._caplog.text
             )
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_delete_relation_data_and_field_secrets(self):
+        # Set some data in the relation.
+        self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
+        secret_id = self.harness.get_relation_data(self.rel_id, self.app_name)["secret-user"]
+
+        self.harness.charm.provider.delete_relation_data(self.rel_id, ["username", "password"])
+        with pytest.raises(SecretNotFoundError):
+            self.harness.charm.model.get_secret(id=secret_id)
 
     def test_database_requested_event(self):
         # Test custom event creation
