@@ -775,7 +775,7 @@ def test_upgrade_supported_check_succeeds(harness):
 @pytest.mark.parametrize("is_leader", (True, False))
 @pytest.mark.parametrize("substrate", ("vm", "k8s"))
 def test_upgrade_charm_runs_checks_on_leader(
-        harness, mocker, is_leader: bool, substrate: typing.Literal["vm", "k8s"]
+    harness, mocker, is_leader: bool, substrate: typing.Literal["vm", "k8s"]
 ):
     harness.charm.upgrade = GandalfUpgrade(
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate=substrate
@@ -802,7 +802,9 @@ def test_upgrade_charm_without_upgrade_stack(harness, mocker):
 
     harness.charm.on.upgrade_charm.emit()
 
-    assert harness.charm.unit.status == BlockedStatus('Ensure pre-upgrade checks are ran before upgrading.')
+    assert harness.charm.unit.status == BlockedStatus(
+        "Ensure pre-upgrade checks are ran before upgrading."
+    )
 
 
 @pytest.mark.parametrize("substrate,state", [("vm", "ready"), ("k8s", "upgrading")])
