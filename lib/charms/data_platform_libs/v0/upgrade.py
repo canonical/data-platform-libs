@@ -860,13 +860,9 @@ class DataUpgrade(Object, ABC):
 
         # if the first unit in the stack fails, the stack will be the same length as units
         # i.e this block not ran
-        if (
-            self.cluster_state in ["failed", "recovery"]
-            and self.upgrade_stack
-            and len(self.upgrade_stack) != len(self.app_units)
-            and self.charm.unit.is_leader()
-        ):
-            new_stack = self.upgrade_stack
+        if self.cluster_state in ["failed", "recovery"] and self.charm.unit.is_leader():
+            new_stack = self.upgrade_stack or []
+
             for unit in self.app_units:
                 unit_id = int(unit.name.split("/")[1])
 
@@ -1053,17 +1049,17 @@ class DataUpgrade(Object, ABC):
 
         if not self.upgrade_stack:
             logger.error("Cluster upgrade failed, ensure pre-upgrade checks are ran first.")
+            self.set_unit_failed("Ensure pre-upgrade checks are ran before upgrading.")
             return
 
         if self.substrate == "vm":
-            # for VM run version checks on leader only
-            if self.charm.unit.is_leader():
-                try:
-                    self._upgrade_supported_check()
-                except VersionError as e:  # not ready if not passed check
-                    logger.error(e)
-                    self.set_unit_failed()
-                    return
+            # for VM run version checks on all units
+            try:
+                self._upgrade_supported_check()
+            except VersionError as e:  # not ready if not passed check
+                logger.error(e)
+                self.set_unit_failed()
+                return
             self.charm.unit.status = WaitingStatus("other units upgrading first...")
             self.peer_relation.data[self.charm.unit].update({"state": "ready"})
 

@@ -3,6 +3,7 @@
 
 import json
 import logging
+import typing
 
 import pytest
 from ops.charm import CharmBase
@@ -771,18 +772,37 @@ def test_upgrade_supported_check_succeeds(harness):
     harness.charm.upgrade._upgrade_supported_check()
 
 
-def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
+@pytest.mark.parametrize("is_leader", (True, False))
+@pytest.mark.parametrize("substrate", ("vm", "k8s"))
+def test_upgrade_charm_runs_checks_on_leader(
+        harness, mocker, is_leader: bool, substrate: typing.Literal["vm", "k8s"]
+):
     harness.charm.upgrade = GandalfUpgrade(
-        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate=substrate
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "idle"})
     harness.charm.upgrade.upgrade_stack = [0]
 
+    harness.set_leader(is_leader)
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
     harness.charm.on.upgrade_charm.emit()
 
     harness.charm.upgrade._upgrade_supported_check.assert_called_once()
+
+
+def test_upgrade_charm_without_upgrade_stack(harness, mocker):
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
+    )
+    harness.add_relation("upgrade", "gandalf")
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "idle"})
+
+    mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
+
+    harness.charm.on.upgrade_charm.emit()
+
+    assert harness.charm.unit.status == BlockedStatus('Ensure pre-upgrade checks are ran before upgrading.')
 
 
 @pytest.mark.parametrize("substrate,state", [("vm", "ready"), ("k8s", "upgrading")])
