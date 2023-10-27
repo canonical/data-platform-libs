@@ -70,6 +70,12 @@ jobs:
           - juju-bootstrap-option: "3.1.6"
             juju-snap-channel: "3.1/stable"
             libjuju-version: "3.2.2"
+        include:
+          - {tox-environments: integration-upgrades,
+              juju-version:
+              {juju-snap-channel: "3.1/stable",
+                juju-bootstrap-option: "3.1.6",
+                libjuju-version: "3.2.2"}}
     name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- libjuju ${{ matrix.juju-version.libjuju-version }}
     needs:
       - lint
