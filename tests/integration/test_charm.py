@@ -162,7 +162,7 @@ async def test_postgresql_plugin(ops_test: OpsTest):
     assert action.results.get("plugin-status") == "enabled"
 
 
-async def test_two_applications_doesnt_share_the_same_relation_data(
+async def test_two_applications_dont_share_the_same_relation_data(
     ops_test: OpsTest, application_charm
 ):
     """Test that two different application connect to the database with different credentials."""
@@ -192,6 +192,28 @@ async def test_two_applications_doesnt_share_the_same_relation_data(
         ops_test, another_application_app_name, FIRST_DATABASE_RELATION_NAME
     )
     assert application_connection_string != another_application_connection_string
+
+
+@pytest.mark.usefixtures("only_without_juju_secrets")
+async def test_databag_usage_correct(ops_test: OpsTest, application_charm):
+    for field in ["username", "password"]:
+        assert await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "username"
+        )
+
+
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_secrets_usage_correct_secrets(ops_test: OpsTest, application_charm):
+    for field in ["username", "password", "uris"]:
+        assert (
+            await get_application_relation_data(
+                ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, field
+            )
+            is None
+        )
+    assert await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "secret-user"
+    )
 
 
 async def test_an_application_can_connect_to_multiple_database_clusters(
