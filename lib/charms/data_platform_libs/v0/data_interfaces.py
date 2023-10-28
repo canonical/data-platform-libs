@@ -779,7 +779,7 @@ class DataRelation(Object, ABC):
         )
 
         normal_fields = set(impacted_rel_fields)
-        if req_secret_fields and self.secrets_enabled:
+        if req_secret_fields and self.secrets_enabled and not fallback_to_databag:
             normal_fields = normal_fields - set(req_secret_fields)
             secret_fields = set(impacted_rel_fields) - set(normal_fields)
 
@@ -1052,7 +1052,7 @@ class DataProvides(DataRelation):
         group: SecretGroup,
         secret_fields: Set[str],
         data: Dict[str, str],
-    ) -> None:
+    ) -> bool:
         """Update contents for Secret group. If the Secret doesn't exist, create it."""
         secret_content = self._content_for_secret_group(data, secret_fields, group)
         if self._get_relation_secret(relation.id, group):
