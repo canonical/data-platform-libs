@@ -81,7 +81,8 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
 async def test_database_relation_with_charm_libraries(ops_test: OpsTest):
     """Test basic functionality of database relation interface."""
     # Relate the charms and wait for them exchanging some connection data.
-    await ops_test.model.add_relation(
+
+    pytest.first_database_relation = await ops_test.model.add_relation(
         f"{APPLICATION_APP_NAME}:{FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
@@ -135,6 +136,7 @@ async def test_user_with_extra_roles(ops_test: OpsTest):
     connection.close()
 
 
+@pytest.mark.abort_on_fail
 async def test_postgresql_plugin(ops_test: OpsTest):
     """Test that the application charm can check whether a plugin is enabled."""
     # Check that the plugin is disabled.
@@ -198,7 +200,7 @@ async def test_two_applications_dont_share_the_same_relation_data(
 async def test_databag_usage_correct(ops_test: OpsTest, application_charm):
     for field in ["username", "password"]:
         assert await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "username"
+            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, field
         )
 
 
@@ -291,7 +293,7 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
     """Test that an application can request additional databases using the same interface."""
     # Relate the charms using another relation and wait for them exchanging some connection data.
     sleep(5)
-    await ops_test.model.add_relation(
+    pytest.second_database_relation = await ops_test.model.add_relation(
         f"{APPLICATION_APP_NAME}:{SECOND_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
@@ -321,9 +323,10 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
     assert {"topsecret", "donttellanyone"} <= set(json.loads(secret_fields))
 
     # Set secret
-    unit_name = f"{DATABASE_APP_NAME}/0"
-    action = await ops_test.model.units.get(unit_name).run_action(
-        "set-secret", **{"field": "topsecret"}
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "set-secret", **{"relation_id": pytest.second_database_relation.id, "field": "topsecret"}
     )
     await action.wait()
 
@@ -336,9 +339,8 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
     topsecret1 = secret_content["topsecret"]
 
     # Re-set secret
-    unit_name = f"{DATABASE_APP_NAME}/0"
-    action = await ops_test.model.units.get(unit_name).run_action(
-        "set-secret", **{"field": "topsecret"}
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "set-secret", **{"relation_id": pytest.second_database_relation.id, "field": "topsecret"}
     )
     await action.wait()
 
@@ -353,88 +355,168 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
     assert topsecret1 != topsecret2
 
 
+@pytest.mark.parametrize("field,value", [("new_field", "blah"), ("tls", "True")])
 @pytest.mark.usefixtures("only_without_juju_secrets")
-async def test_provider_set_delete_fields(ops_test: OpsTest):
+async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     # Add normal field
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
+
     action = await ops_test.model.units.get(leader_name).run_action(
-        "set-relation-field", **{"field": "new_field", "value": "blah"}
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": field,
+            "value": value,
+        },
     )
     await action.wait()
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "new_field"
+            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, field
         )
-        == "blah"
+        == value
     )
+
+    # Check all application units can read remote relation data
+    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
+        action = await unit.run_action(
+            "get-relation-field",
+            **{
+                "relation_id": pytest.second_database_relation.id,
+                "field": field,
+            },
+        )
+        await action.wait()
+        assert action.results.get("value") == value
+
+    # Check if database can retrieve self-side relation data
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "get-relation-self-side-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": field,
+            "value": value,
+        },
+    )
+    await action.wait()
+    assert action.results.get("value") == value
 
     # Delete normal field
     action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field", **{"field": "new_field"}
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "new_field"
+            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, field
         )
         is None
     )
 
-    # Delete "secret" field
+
+@pytest.mark.parametrize(
+    "field,value,relation_field",
+    [
+        ("new_field", "blah", "new_field"),
+        pytest.param(
+            "tls",
+            "True",
+            "secret-tls",
+            marks=pytest.mark.xfail(
+                reason="https://github.com/canonical/data-platform-libs/issues/108"
+            ),
+        ),
+    ],
+)
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_provider_get_set_delete_fields_secrets(
+    field, value, relation_field, ops_test: OpsTest
+):
+    # Add field
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
     action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field", **{"field": "tls"}
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": field,
+            "value": value,
+        },
+    )
+    await action.wait()
+
+    assert await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, relation_field
+    )
+
+    # Check all application units can read remote relation data
+    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
+        action = await unit.run_action(
+            "get-relation-field",
+            **{
+                "relation_id": pytest.second_database_relation.id,
+                "field": field,
+            },
+        )
+        await action.wait()
+        assert action.results.get("value") == value
+
+    # Check if database can retrieve self-side relation data
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "get-relation-self-side-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": field,
+            "value": value,
+        },
+    )
+    await action.wait()
+    assert action.results.get("value") == value
+
+    # Delete normal field
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "tls"
+            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, relation_field
         )
         is None
     )
+
+    # Check that the field is deleted
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "get-relation-self-side-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": field,
+        },
+    )
+    await action.wait()
+    assert not action.results.get("value")
 
 
 @pytest.mark.usefixtures("only_with_juju_secrets")
-async def test_provider_set_delete_fields_secrets(ops_test: OpsTest):
-    # Add normal field
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
-    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "set-relation-field", **{"field": "new_field", "value": "blah"}
-    )
-    await action.wait()
-
-    assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "new_field"
-        )
-        == "blah"
-    )
-
-    # Delete normal field
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field", **{"field": "new_field"}
-    )
-    await action.wait()
-
-    assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "new_field"
-        )
-        is None
-    )
-
-    # Delete secret field
-
+async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
+    """The 'tls' field, that was removed in the previous test has it's secret removed."""
     # Get TLS secret pointer
     secret_uri = await get_application_relation_data(
         ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}tls"
     )
+
+    # The 7 lines below can be removed once the test above is fully passing
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
     action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field", **{"field": "tls"}
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": "tls"},
     )
     await action.wait()
 
@@ -450,18 +532,97 @@ async def test_provider_set_delete_fields_secrets(ops_test: OpsTest):
     assert secret_xid not in secrets
 
 
+async def test_requires_get_set_delete_fields(ops_test: OpsTest):
+    # Add normal field
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_name = f"{APPLICATION_APP_NAME}/{leader_id}"
+
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "new_field",
+            "value": "blah",
+        },
+    )
+    await action.wait()
+
+    assert (
+        await get_application_relation_data(
+            ops_test,
+            DATABASE_APP_NAME,
+            SECOND_DATABASE_RELATION_NAME,
+            "new_field",
+            related_endpoint="second-database",
+        )
+        == "blah"
+    )
+
+    # Check all application units can read remote relation data
+    for unit in ops_test.model.applications[DATABASE_APP_NAME].units:
+        action = await unit.run_action(
+            "get-relation-field",
+            **{
+                "relation_id": pytest.second_database_relation.id,
+                "field": "new_field",
+            },
+        )
+        await action.wait()
+        assert action.results.get("value") == "blah"
+
+    # Check if database can retrieve self-side relation data
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "get-relation-self-side-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "new_field",
+            "value": "blah",
+        },
+    )
+    await action.wait()
+    assert action.results.get("value") == "blah"
+
+    # Delete normal field
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": "new_field"},
+    )
+    await action.wait()
+
+    assert (
+        await get_application_relation_data(
+            ops_test,
+            DATABASE_APP_NAME,
+            SECOND_DATABASE_RELATION_NAME,
+            "new_field",
+            related_endpoint="second-database",
+        )
+        is None
+    )
+
+
 async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
     action = await ops_test.model.units.get(leader_name).run_action(
-        "set-relation-field", **{"field": "new_field", "value": "blah"}
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "new_field",
+            "value": "blah",
+        },
     )
     await action.wait()
 
     unit_id = await get_non_leader_id(ops_test, DATABASE_APP_NAME)
     unit_name = f"{DATABASE_APP_NAME}/{unit_id}"
     action = await ops_test.model.units.get(unit_name).run_action(
-        "set-relation-field", **{"field": "new_field2", "value": "blah2"}
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "new_field2",
+            "value": "blah2",
+        },
     )
     await action.wait()
 
@@ -473,7 +634,8 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
     )
 
     action = await ops_test.model.units.get(unit_name).run_action(
-        "delete-relation-field", **{"field": "new_field"}
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": "new_field"},
     )
     await action.wait()
 
@@ -490,7 +652,12 @@ async def test_requires_set_delete_fields(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_name = f"{APPLICATION_APP_NAME}/{leader_id}"
     action = await ops_test.model.units.get(leader_name).run_action(
-        "set-relation-field", **{"field": "new_field_req", "value": "blah-req"}
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "new_field_req",
+            "value": "blah-req",
+        },
     )
     await action.wait()
 
@@ -507,7 +674,8 @@ async def test_requires_set_delete_fields(ops_test: OpsTest):
 
     # Delete field
     action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field", **{"field": "new_field_req"}
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": "new_field_req"},
     )
     await action.wait()
 
@@ -527,14 +695,24 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_name = f"{APPLICATION_APP_NAME}/{leader_id}"
     action = await ops_test.model.units.get(leader_name).run_action(
-        "set-relation-field", **{"field": "new_field-req", "value": "blah-req"}
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "new_field-req",
+            "value": "blah-req",
+        },
     )
     await action.wait()
 
     unit_id = await get_non_leader_id(ops_test, APPLICATION_APP_NAME)
     unit_name = f"{APPLICATION_APP_NAME}/{unit_id}"
     action = await ops_test.model.units.get(unit_name).run_action(
-        "set-relation-field", **{"field": "new_field2-req", "value": "blah2-req"}
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "new_field2-req",
+            "value": "blah2-req",
+        },
     )
     await action.wait()
 
@@ -550,7 +728,8 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
     )
 
     action = await ops_test.model.units.get(unit_name).run_action(
-        "delete-relation-field", **{"field": "new_field-req"}
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": "new_field-req"},
     )
     await action.wait()
 
@@ -564,3 +743,36 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         )
         == "blah-req"
     )
+
+
+async def test_scaling_requires_can_access_shared_secrest(ops_test):
+    """When scaling up the application, new units should have access to relation secrets."""
+    await ops_test.model.applications[APPLICATION_APP_NAME].scale(3)
+
+    await ops_test.model.wait_for_idle(
+        apps=[APPLICATION_APP_NAME], status="active", timeout=(15 * 60), wait_for_exact_units=3
+    )
+
+    old_unit_name = f"{APPLICATION_APP_NAME}/1"
+    new_unit_name = f"{APPLICATION_APP_NAME}/2"
+
+    action = await ops_test.model.units.get(old_unit_name).run_action(
+        "get-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "password",
+        },
+    )
+    await action.wait()
+    orig_password = action.results.get("value")
+
+    action = await ops_test.model.units.get(new_unit_name).run_action(
+        "get-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "password",
+        },
+    )
+    await action.wait()
+    new_password = action.results.get("value")
+    assert new_password == orig_password
