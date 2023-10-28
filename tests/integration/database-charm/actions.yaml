@@ -6,21 +6,55 @@ change-admin-password:
 set-secret:
   description: Change the value of a particular secret
   params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
     field:
       type: string
       description: The mapping name, i.e. what databag field ('secret-<mapping>') is to be changed
 
+get-relation-field:
+  description: Set fields from the relation
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
+
+get-relation-self-side-field:
+  description: Set fields from the relation
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
+
 set-relation-field:
   description: Set fields from the relation
-  field:
-    type: string
-    description: Relation field
-  value:
-    type: string
-    description: Value of the field to set
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
+    value:
+      type: string
+      description: Value of the field to set
 
 delete-relation-field:
   description: Delete fields from the relation
-  field:
-    type: string
-    description: Relation field
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    relation_id:
+      type: integer
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
