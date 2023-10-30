@@ -534,7 +534,7 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
 
 async def test_requires_get_set_delete_fields(ops_test: OpsTest):
     # Add normal field
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_name = f"{APPLICATION_APP_NAME}/{leader_id}"
 
     action = await ops_test.model.units.get(leader_name).run_action(
