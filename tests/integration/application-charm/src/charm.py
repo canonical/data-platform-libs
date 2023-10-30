@@ -9,11 +9,16 @@ of the libraries in this repository.
 """
 
 import logging
+from typing import Optional, Tuple
 
+from ops import Relation
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 
+from charms.data_platform_libs.v0.data_interfaces import (
+    LIBPATCH as DATA_INTERFACES_VERSION,
+)
 from charms.data_platform_libs.v0.data_interfaces import (
     BootstrapServerChangedEvent,
     DatabaseCreatedEvent,
@@ -60,13 +65,24 @@ class ApplicationCharm(CharmBase):
         # Events related to the second database that is requested
         # (these events are defined in the database requires charm library).
         database_name = f'{self.app.name.replace("-", "_")}_second_database'
-        self.second_database = DatabaseRequires(
-            self,
-            "second-database",
-            database_name,
-            EXTRA_USER_ROLES,
-            additional_secret_fields=["topsecret", "donttellanyone"],
-        )
+
+        # Keeping the charm backwards compatible, for upgrades testing
+        if DATA_INTERFACES_VERSION > 17:
+            self.second_database = DatabaseRequires(
+                self,
+                "second-database",
+                database_name,
+                EXTRA_USER_ROLES,
+                additional_secret_fields=["topsecret", "donttellanyone"],
+            )
+        else:
+            self.second_database = DatabaseRequires(
+                self,
+                "second-database",
+                database_name,
+                EXTRA_USER_ROLES,
+            )
+
         self.framework.observe(
             self.second_database.on.database_created, self._on_second_database_created
         )
@@ -141,27 +157,72 @@ class ApplicationCharm(CharmBase):
         # actions
 
         self.framework.observe(self.on.reset_unit_status_action, self._on_reset_unit_status)
+
+        # Get/set/delete fields on second-database relations
+        self.framework.observe(self.on.get_relation_field_action, self._on_get_relation_field)
+        self.framework.observe(
+            self.on.get_relation_self_side_field_action, self._on_get_relation_self_side_field
+        )
         self.framework.observe(self.on.set_relation_field_action, self._on_set_relation_field)
         self.framework.observe(
             self.on.delete_relation_field_action, self._on_delete_relation_field
         )
+        self._relation_endpoints = [
+            self.first_database,
+            self.second_database,
+            self.database_clusters,
+            self.aliased_database_clusters,
+            self.kafka,
+            self.opensearch,
+        ]
+
+    def _get_relation(self, relation_id: int) -> Optional[Tuple[CharmBase, Relation]]:
+        """Retrieve a relation by ID, together with the corresponding endpoint object ('Requires')."""
+        for source in self._relation_endpoints:
+            for relation in source.relations:
+                if relation.id == relation_id:
+                    return (source, relation)
 
     def _on_start(self, _) -> None:
         """Only sets an Active status."""
         self.unit.status = ActiveStatus()
 
-    # Set/delete field
+    # Generic relation actions
+    def _on_get_relation_field(self, event: ActionEvent):
+        """Get requested relation field (OTHER side)."""
+        source, relation = self._get_relation(event.params["relation_id"])
+        if DATA_INTERFACES_VERSION > 17:
+            value = source.fetch_relation_field(relation.id, event.params["field"])
+        else:
+            value = relation.data[relation.app].get(event.params["field"])
+        event.set_results({"value": value if value else ""})
+
+    def _on_get_relation_self_side_field(self, event: ActionEvent):
+        """Get requested relation field (OTHER side)."""
+        source, relation = self._get_relation(event.params["relation_id"])
+        if DATA_INTERFACES_VERSION > 17:
+            value = source.fetch_my_relation_field(relation.id, event.params["field"])
+        else:
+            value = relation.data[source.local_app].get(event.params["field"])
+        event.set_results({"value": value if value else ""})
+
     def _on_set_relation_field(self, event: ActionEvent):
-        """[second_database]: Set requested relation field."""
-        for relation in self.second_database.relations:
-            self.second_database.update_relation_data(
+        """Set requested relation field on self-side (that's the only one writeable)."""
+        source, relation = self._get_relation(event.params["relation_id"])
+        if DATA_INTERFACES_VERSION > 17:
+            source.update_relation_data(
                 relation.id, {event.params["field"]: event.params["value"]}
             )
+        else:
+            relation.data[source.local_app][event.params["field"]] = event.params["value"]
 
     def _on_delete_relation_field(self, event: ActionEvent):
-        """[second_database]: Delete requested relation field."""
-        for relation in self.second_database.relations:
-            self.second_database.delete_relation_data(relation.id, [event.params["field"]])
+        """Delete requested relation field on self-side (that's the only one writeable)."""
+        source, relation = self._get_relation(event.params["relation_id"])
+        if DATA_INTERFACES_VERSION > 17:
+            source.delete_relation_data(relation.id, [event.params["field"]])
+        else:
+            del relation.data[source.local_app][event.params["field"]]
 
     # First database events observers.
     def _on_first_database_created(self, event: DatabaseCreatedEvent) -> None:

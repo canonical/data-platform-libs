@@ -15,11 +15,15 @@ from random import randrange
 from time import sleep
 
 import psycopg2
+from ops import Relation
 from ops.charm import ActionEvent, CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
 
+from charms.data_platform_libs.v0.data_interfaces import (
+    LIBPATCH as DATA_INTERFACES_VERSION,
+)
 from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseProvides,
     DatabaseRequestedEvent,
@@ -48,7 +52,14 @@ class DatabaseCharm(CharmBase):
         self.framework.observe(
             self.on.change_admin_password_action, self._on_change_admin_password
         )
+
         self.framework.observe(self.on.set_secret_action, self._on_set_secret_action)
+
+        # Get/set/delete values on second-database relaton
+        self.framework.observe(
+            self.on.get_relation_self_side_field_action, self._on_get_relation_self_side_field
+        )
+        self.framework.observe(self.on.get_relation_field_action, self._on_get_relation_field)
         self.framework.observe(self.on.set_relation_field_action, self._on_set_relation_field)
         self.framework.observe(
             self.on.delete_relation_field_action, self._on_delete_relation_field
@@ -103,7 +114,10 @@ class DatabaseCharm(CharmBase):
         password = self._new_password()
 
         # Connect to the database.
-        connection_string = f"dbname='postgres' user='postgres' host='localhost' password='{self._stored.password}' connect_timeout=10"
+        connection_string = (
+            "dbname='postgres' user='postgres' host='localhost' "
+            f"password='{self._stored.password}' connect_timeout=10"
+        )
         connection = psycopg2.connect(connection_string)
         connection.autocommit = True
         cursor = connection.cursor()
@@ -148,17 +162,53 @@ class DatabaseCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
+    def _get_relation(self, relation_id: int) -> Relation:
+        for relation in self.database.relations:
+            if relation.id == relation_id:
+                return relation
+
+    # Get/set/delete field on second-database relation
+    def _on_get_relation_field(self, event: ActionEvent):
+        """[second_database]: Set requested relation field."""
+        relation = self._get_relation(event.params["relation_id"])
+        value = None
+        if DATA_INTERFACES_VERSION > 17:
+            value = self.database.fetch_relation_field(relation.id, event.params["field"])
+        else:
+            value = relation.data[relation.app].get(event.params["field"])
+        event.set_results({"value": value if value else ""})
+
+    def _on_get_relation_self_side_field(self, event: ActionEvent):
+        """[second_database]: Set requested relation field."""
+        relation = self._get_relation(event.params["relation_id"])
+        value = None
+        if DATA_INTERFACES_VERSION > 17:
+            value = self.database.fetch_my_relation_field(relation.id, event.params["field"])
+        else:
+            value = relation.data[self.database.local_app].get(event.params["field"])
+        event.set_results({"value": value if value else ""})
+
     def _on_set_relation_field(self, event: ActionEvent):
         """Set requested relation field."""
-        for relation in self.database.relations:
+        relation = self._get_relation(event.params["relation_id"])
+        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        if DATA_INTERFACES_VERSION > 17:
             self.database.update_relation_data(
                 relation.id, {event.params["field"]: event.params["value"]}
+            )
+        else:
+            relation.data[self.database.local_app].update(
+                {event.params["field"]: event.params["value"]}
             )
 
     def _on_delete_relation_field(self, event: ActionEvent):
         """Delete requested relation field."""
-        for relation in self.database.relations:
+        relation = self._get_relation(event.params["relation_id"])
+        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        if DATA_INTERFACES_VERSION > 17:
             self.database.delete_relation_data(relation.id, [event.params["field"]])
+        else:
+            relation.data[self.database.local_app].pop(event.params["field"])
 
     def _new_password(self) -> str:
         """Generate a random password string.

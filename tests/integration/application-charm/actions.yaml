@@ -10,6 +10,22 @@ get-plugin-status:
 reset-unit-status:
   description: Set empty status message (ActiveStatus)
 
+get-relation-field:
+  description: Get fields from the second-database relation
+  field:
+    type: string
+    description: Relation field
+
+get-relation-self-side-field:
+  description: Set fields from the relation
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
+
 set-relation-field:
   description: Set fields from the second-database relation
   field:
