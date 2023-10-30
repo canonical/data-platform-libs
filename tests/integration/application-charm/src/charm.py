@@ -9,7 +9,7 @@ of the libraries in this repository.
 """
 
 import logging
-from typing import Tuple
+from typing import Optional, Tuple
 
 from ops import Relation
 from ops.charm import ActionEvent, CharmBase
@@ -176,7 +176,8 @@ class ApplicationCharm(CharmBase):
             self.opensearch,
         ]
 
-    def _get_relation(self, relation_id: int) -> Tuple[CharmBase, Relation]:
+    def _get_relation(self, relation_id: int) -> Optional[Tuple[CharmBase, Relation]]:
+        """Retrieve a relation by ID, together with the corresponding endpoint object ('Requires')."""
         for source in self._relation_endpoints:
             for relation in source.relations:
                 if relation.id == relation_id:

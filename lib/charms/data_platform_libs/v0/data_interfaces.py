@@ -1078,7 +1078,7 @@ class DataProvides(DataRelation):
                 new_content.pop(field)
             except KeyError:
                 logging.error(
-                    "Non-exsiting secret was attempted to be removed %s, %s",
+                    "Non-existing secret was attempted to be removed %s, %s",
                     str(relation.id),
                     str(field),
                 )

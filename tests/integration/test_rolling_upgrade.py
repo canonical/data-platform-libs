@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 import asyncio
 import logging
@@ -28,12 +28,11 @@ SECOND_DATABASE_RELATION_NAME = "second-database"
 SECRET_REF_PREFIX = "secret-"
 
 
-# Global variables to store the relation ID after creation
-# def pytest_namespace():
-#     return {"first_database_relation": None, "second_database_relation": None}
-
-
 async def downgrade_to_databag(ops_test, app_name):
+    """Helper function simulating a "rolling downgrade".
+
+    The data_interfaces module is replaced "on-the-fly" by an older version, where Juju Secrets aren't enabled yet.
+    """
     for unit in ops_test.model.applications[app_name].units:
         unit_name_with_dash = unit.name.replace("/", "-")
         complete_command = (
@@ -44,6 +43,10 @@ async def downgrade_to_databag(ops_test, app_name):
 
 
 async def upgrade_to_secrets(ops_test, app_name):
+    """Helper function simulating a "rolling upgrade".
+
+    The data_interfaces module is replaced "on-the-fly" by the latest version, using Juju secrets.
+    """
     for unit in ops_test.model.applications[app_name].units:
         unit_name_with_dash = unit.name.replace("/", "-")
         complete_command = (
