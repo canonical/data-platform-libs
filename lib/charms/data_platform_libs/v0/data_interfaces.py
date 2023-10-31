@@ -878,7 +878,15 @@ class DataRelation(Object, ABC):
             return
 
         for field in fields:
-            relation.data[app].pop(field)
+            try:
+                relation.data[app].pop(field)
+            except KeyError:
+                logger.debug(
+                    "Non-existing field was attempted to be removed from the databag %s, %s",
+                    str(relation.id),
+                    str(field),
+                )
+                pass
 
     # Public interface methods
     # Handling Relation Fields seamlessly, regardless if in databag or a Juju Secret
@@ -1098,7 +1106,10 @@ class DataProvides(DataRelation):
         # Remove secret from the relation if it's fully gone
         if not new_content:
             field = self._generate_secret_field_name(group)
-            relation.data[self.local_app].pop(field)
+            try:
+                relation.data[self.local_app].pop(field)
+            except KeyError:
+                pass
 
         # Return the content that was removed
         return True
