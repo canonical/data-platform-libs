@@ -417,6 +417,15 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
         is None
     )
 
+    # Delete non-existent field
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": "doesnt_exist"},
+    )
+    await action.wait()
+    # Juju2 syntax
+    assert int(action.results["Code"]) == 0
+
 
 @pytest.mark.parametrize(
     "field,value,relation_field",
@@ -502,6 +511,21 @@ async def test_provider_get_set_delete_fields_secrets(
     await action.wait()
     assert not action.results.get("value")
 
+    # Delete non-existent notmal and secret field
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": "doesnt_exist"},
+    )
+    await action.wait()
+    assert action.results["return-code"] == 0
+
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": "tls-ca"},
+    )
+    await action.wait()
+    assert action.results["return-code"] == 0
+
 
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
@@ -522,7 +546,7 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "tls"
+            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "secret-tls"
         )
         is None
     )
