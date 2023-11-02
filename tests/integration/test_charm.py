@@ -431,14 +431,7 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     "field,value,relation_field",
     [
         ("new_field", "blah", "new_field"),
-        pytest.param(
-            "tls",
-            "True",
-            "secret-tls",
-            marks=pytest.mark.xfail(
-                reason="https://github.com/canonical/data-platform-libs/issues/108"
-            ),
-        ),
+        pytest.param("tls", "True", "secret-tls"),
     ],
 )
 @pytest.mark.usefixtures("only_with_juju_secrets")
