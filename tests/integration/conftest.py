@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 import json
+import logging
 import os
 import shutil
 from pathlib import Path
@@ -104,3 +105,12 @@ async def opensearch_charm(ops_test: OpsTest):
     charm_path = "tests/integration/opensearch-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
+
+
+@pytest.fixture(autouse=True)
+async def without_errors(caplog):
+    """This fixture is to list all those errors that mustn't occur during execution."""
+    # To be executed after the tests
+    yield
+    with caplog.at_level(logging.ERROR):
+        assert "can only be performed by the leader unit" not in caplog.text
