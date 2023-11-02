@@ -431,14 +431,7 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     "field,value,relation_field",
     [
         ("new_field", "blah", "new_field"),
-        pytest.param(
-            "tls",
-            "True",
-            "secret-tls",
-            marks=pytest.mark.xfail(
-                reason="https://github.com/canonical/data-platform-libs/issues/108"
-            ),
-        ),
+        ("tls", "True", "secret-tls"),
     ],
 )
 @pytest.mark.usefixtures("only_with_juju_secrets")
@@ -486,7 +479,7 @@ async def test_provider_get_set_delete_fields_secrets(
     await action.wait()
     assert action.results.get("value") == value
 
-    # Delete normal field
+    # Delete field
     action = await ops_test.model.units.get(leader_name).run_action(
         "delete-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": field},
@@ -519,34 +512,52 @@ async def test_provider_get_set_delete_fields_secrets(
     await action.wait()
     assert action.results["return-code"] == 0
 
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field",
-        **{"relation_id": pytest.second_database_relation.id, "field": "tls-ca"},
-    )
-    await action.wait()
-    assert action.results["return-code"] == 0
-
 
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     """The 'tls' field, that was removed in the previous test has it's secret removed."""
-    # Get TLS secret pointer
-    secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}tls"
-    )
-
-    # The 7 lines below can be removed once the test above is fully passing
+    # Add field
+    field = "tls"
+    value = "True"
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
     action = await ops_test.model.units.get(leader_name).run_action(
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": field,
+            "value": value,
+        },
+    )
+    await action.wait()
+
+    # Get TLS secret pointer
+    secret_uri = await get_application_relation_data(
+        ops_test,
+        APPLICATION_APP_NAME,
+        SECOND_DATABASE_RELATION_NAME,
+        f"{SECRET_REF_PREFIX}{field}",
+    )
+
+    # Delete field
+    action = await ops_test.model.units.get(leader_name).run_action(
         "delete-relation-field",
-        **{"relation_id": pytest.second_database_relation.id, "field": "tls"},
+        **{"relation_id": pytest.second_database_relation.id, "field": field},
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "secret-tls"
+            ops_test,
+            APPLICATION_APP_NAME,
+            SECOND_DATABASE_RELATION_NAME,
+            f"{SECRET_REF_PREFIX}{field}",
         )
         is None
     )
