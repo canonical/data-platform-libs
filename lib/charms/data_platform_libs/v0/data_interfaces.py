@@ -501,8 +501,13 @@ class CachedSecret:
                 "Secret is already defined with uri %s", self._secret_uri
             )
 
+        logger.info(f"[SECRET] Adding secret {self.label} {content}")
         secret = self.charm.app.add_secret(content, label=self.label)
         secret.grant(relation)
+        if self.meta:
+            logger.info(
+                f"[SECRET] Added secret {self.meta.id}, {self.meta.label}, {self.meta.__dict__}"
+            )
         self._secret_uri = secret.id
         self._secret_meta = secret
         return self._secret_meta
@@ -514,11 +519,21 @@ class CachedSecret:
             if not (self._secret_uri or self.label):
                 return
             try:
+                logger.info(f"[SECRET] Getting secret by label {self.label} ")
                 self._secret_meta = self.charm.model.get_secret(label=self.label)
+                logger.info(
+                    f"[SECRET] Received secret {self._secret_meta.id}, "
+                    f"{self.label}, {self._secret_meta.get_info().revision}, {self._secret_meta.__dict__}"
+                )
             except SecretNotFoundError:
+                logger.info(f"[SECRET] Couldn't get secret by label {self.label} {self.__dict__}")
                 if self._secret_uri:
                     self._secret_meta = self.charm.model.get_secret(
                         id=self._secret_uri, label=self.label
+                    )
+                    logger.info(
+                        f"[SECRET] Received secret {self._secret_meta.id}, "
+                        f"{self.label}, {self._secret_meta.__dict__}"
                     )
         return self._secret_meta
 
@@ -526,7 +541,22 @@ class CachedSecret:
         """Getting cached secret content."""
         if not self._secret_content:
             if self.meta:
+                logger.info("[SECRET] Getting secret contents")
                 self._secret_content = self.meta.get_content()
+                logger.info(
+                    f"[SECRET] Got secret contents "
+                    f"{self.meta.id}, {self.meta.label}, {self.meta.__dict__}"
+                )
+                # try:
+                #     logger.info("[SECRET] Peeking content contents")
+                #     self._secret_content = self.meta.peek_content()
+                #     logger.info(
+                #         f"[SECRET] Peeked secret contents "
+                #         f"{self.meta.id}, {self.meta.label}, {self.meta.__dict__}"
+                #     )
+                # except Exception:
+                #     pass
+
         return self._secret_content
 
     def set_content(self, content: Dict[str, str]) -> None:
@@ -536,13 +566,26 @@ class CachedSecret:
 
         if content:
             self.meta.set_content(content)
+            logger.info(
+                f"[SECRET] Setting secret"
+                f"{self.meta.id}, {self.meta.label}, {self.meta.__dict__}"
+                f"with content {content}"
+            )
             self._secret_content = content
         else:
             self.meta.remove_all_revisions()
+            logger.info(
+                f"[SECRET] Deleting secret"
+                f"{self.meta.id}, {self.meta.label}, {self.meta.__dict__}"
+            )
 
     def get_info(self) -> Optional[SecretInfo]:
         """Wrapper function to apply the corresponding call on the Secret object within CachedSecret if any."""
         if self.meta:
+            logger.info(
+                f"[SECRET] Getting info about secret"
+                f"{self.meta.id}, {self.meta.label},  {self.meta.__dict__}"
+            )
             return self.meta.get_info()
 
 
