@@ -431,14 +431,7 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     "field,value,relation_field",
     [
         ("new_field", "blah", "new_field"),
-        pytest.param(
-            "tls",
-            "True",
-            "secret-tls",
-            marks=pytest.mark.xfail(
-                reason="https://github.com/canonical/data-platform-libs/issues/108"
-            ),
-        ),
+        ("tls", "True", "secret-tls"),
     ],
 )
 @pytest.mark.usefixtures("only_with_juju_secrets")
@@ -461,6 +454,7 @@ async def test_provider_get_set_delete_fields_secrets(
     assert await get_application_relation_data(
         ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, relation_field
     )
+    sleep(10)
 
     # Check all application units can read remote relation data
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
@@ -486,13 +480,14 @@ async def test_provider_get_set_delete_fields_secrets(
     await action.wait()
     assert action.results.get("value") == value
 
-    # Delete normal field
+    # Delete field
     action = await ops_test.model.units.get(leader_name).run_action(
         "delete-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
 
+    sleep(2)
     assert (
         await get_application_relation_data(
             ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, relation_field

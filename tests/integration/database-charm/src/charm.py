@@ -193,6 +193,9 @@ class DatabaseCharm(CharmBase):
         relation = self._get_relation(event.params["relation_id"])
         # Charms should be compatible with old vesrions, to simulate rolling upgrade
         if DATA_INTERFACES_VERSION > 17:
+            logger.info(
+                "*************************************** Setting (secret?) field ***************************************"
+            )
             self.database.update_relation_data(
                 relation.id, {event.params["field"]: event.params["value"]}
             )
