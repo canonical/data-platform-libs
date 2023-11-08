@@ -526,11 +526,7 @@ class CachedSecret:
         """Getting cached secret content."""
         if not self._secret_content:
             if self.meta:
-                try:
-                    self._secret_content = self.meta.get_content(refresh=True)
-                except ValueError:
-                    # Due to: ValueError: Secret owner cannot use refresh=True
-                    self._secret_content = self.meta.get_content()
+                self._secret_content = self.meta.get_content(refresh=True)
         return self._secret_content
 
     def set_content(self, content: Dict[str, str]) -> None:
