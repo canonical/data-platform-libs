@@ -5,6 +5,7 @@
 import json
 import os
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -104,3 +105,33 @@ async def opensearch_charm(ops_test: OpsTest):
     charm_path = "tests/integration/opensearch-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
+
+
+@pytest.fixture(autouse=True)
+async def without_errors(ops_test: OpsTest, request):
+    """This fixture is to list all those errors that mustn't occur during execution."""
+    # To be executed after the tests
+    now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    yield
+    whitelist = []
+    if "log_errors_allowed" in request.keywords:
+        for marker in [
+            mark for mark in request.node.iter_markers() if mark.name == "log_errors_allowed"
+        ]:
+            for arg in marker.args:
+                whitelist.append(arg)
+
+        # All errors allowed
+        if not whitelist:
+            return
+
+    _, dbg_log, _ = await ops_test.juju("debug-log", "--ms", "--replay")
+    lines = dbg_log.split("\n")
+    for index, line in enumerate(lines):
+        logitems = line.split(" ")
+        if not line or len(logitems) < 3:
+            continue
+        if logitems[1] < now:
+            continue
+        if logitems[2] == "ERROR":
+            assert any(white in line for white in whitelist)

@@ -14,6 +14,7 @@ from pytest_operator.plugin import OpsTest
 
 from .helpers import (
     build_connection_string,
+    check_logs,
     get_application_relation_data,
     get_juju_secret,
     get_leader_id,
@@ -41,7 +42,7 @@ SECRET_REF_PREFIX = "secret-"
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(ops_test: OpsTest, application_charm, database_charm):
     """Deploy both charms (application and database) to use in the tests."""
-    # Deploy both charms (1 units for each application to test that later they correctly
+    # Deploy both charms (2 units for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
@@ -513,6 +514,7 @@ async def test_provider_get_set_delete_fields_secrets(
     assert action.results["return-code"] == 0
 
 
+@pytest.mark.log_errors_allowed("Can't delete secret for relation")
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     """The 'tls' field, that was removed in the previous test has it's secret removed."""
@@ -545,12 +547,14 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
+    assert not (await check_logs(ops_test, strings=["Can't delete secret for relation"]))
 
     action = await ops_test.model.units.get(leader_name).run_action(
         "delete-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
+    assert await check_logs(ops_test, strings=["Can't delete secret for relation"])
 
     assert (
         await get_application_relation_data(
@@ -636,6 +640,12 @@ async def test_requires_get_set_delete_fields(ops_test: OpsTest):
     )
 
 
+@pytest.mark.log_errors_allowed(
+    "This operation (update_relation_data()) can only be performed by the leader unit"
+)
+@pytest.mark.log_errors_allowed(
+    "This operation (delete_relation_data()) can only be performed by the leader unit"
+)
 async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
@@ -660,6 +670,12 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
         },
     )
     await action.wait()
+    assert await check_logs(
+        ops_test,
+        strings=[
+            "This operation (update_relation_data()) can only be performed by the leader unit"
+        ],
+    )
 
     assert (
         await get_application_relation_data(
@@ -673,6 +689,12 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": "new_field"},
     )
     await action.wait()
+    assert await check_logs(
+        ops_test,
+        strings=[
+            "This operation (delete_relation_data()) can only be performed by the leader unit"
+        ],
+    )
 
     assert (
         await get_application_relation_data(
@@ -726,6 +748,12 @@ async def test_requires_set_delete_fields(ops_test: OpsTest):
     )
 
 
+@pytest.mark.log_errors_allowed(
+    "This operation (update_relation_data()) can only be performed by the leader unit"
+)
+@pytest.mark.log_errors_allowed(
+    "This operation (delete_relation_data()) can only be performed by the leader unit"
+)
 async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_name = f"{APPLICATION_APP_NAME}/{leader_id}"
@@ -750,6 +778,12 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         },
     )
     await action.wait()
+    assert await check_logs(
+        ops_test,
+        strings=[
+            "This operation (update_relation_data()) can only be performed by the leader unit"
+        ],
+    )
 
     assert (
         await get_application_relation_data(
@@ -767,6 +801,12 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": "new_field-req"},
     )
     await action.wait()
+    assert await check_logs(
+        ops_test,
+        strings=[
+            "This operation (delete_relation_data()) can only be performed by the leader unit"
+        ],
+    )
 
     assert (
         await get_application_relation_data(

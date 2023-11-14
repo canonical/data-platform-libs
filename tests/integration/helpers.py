@@ -2,6 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 import json
+from time import sleep
 from typing import Dict, List, Optional
 
 import yaml
@@ -266,3 +267,14 @@ async def get_application_relation_data(
             f"no relation data could be grabbed on relation with endpoint {relation_name} and alias {relation_alias}"
         )
     return relation_data[0]["application-data"].get(key)
+
+
+async def check_logs(ops_test: OpsTest, strings: str, limit: int = 10) -> bool:
+    """Check if any of strings may appear in juju debug-log."""
+    # juju debug-log may not be flushed yet, thus the "tenacity simulation"
+    for tries in range(5):
+        sleep(3)
+        _, dbg_log, _ = await ops_test.juju("debug-log", "--no-tail", "--replay")
+        if any(text in dbg_log for text in strings):
+            return True
+    return False
