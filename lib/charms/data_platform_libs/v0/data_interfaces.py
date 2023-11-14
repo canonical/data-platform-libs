@@ -1094,7 +1094,7 @@ class DataProvides(DataRelation):
         secret = self._get_relation_secret(relation.id, group)
 
         if not secret:
-            logging.error("Can't update secret for relation %s", str(relation.id))
+            logging.error("Can't delete secret for relation %s", str(relation.id))
             return False
 
         old_content = secret.get_content()
