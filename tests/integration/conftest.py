@@ -54,6 +54,14 @@ def copy_s3_library_into_charm(ops_test: OpsTest):
     shutil.copyfile(library_path, install_path_requirer)
 
 
+@pytest.fixture(scope="module", autouse=True)
+def copy_data_secrets_library_into_charm(ops_test: OpsTest):
+    """Copy the data_interfaces library to the different charm folder."""
+    library_path = "lib/charms/data_platform_libs/v0/data_secrets.py"
+    install_path = "tests/integration/secrets-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
+
+
 @pytest.fixture(scope="module")
 async def application_charm(ops_test: OpsTest):
     """Build the application charm."""
@@ -103,6 +111,14 @@ async def opensearch_charm(ops_test: OpsTest):
     data-integrator charm repo.
     """
     charm_path = "tests/integration/opensearch-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def secrets_charm(ops_test: OpsTest):
+    """Build the secrets charm."""
+    charm_path = "tests/integration/secrets-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 

@@ -1,0 +1,8 @@
+# Copyright 2022 Canonical Ltd.                                                                                                                                                                                     
+# See LICENSE file for licensing details.
+name: secrets-test 
+description: |
+  Data platform libs charm used in integration tests for secrets.
+summary: |
+  Data platform libs database meant to be used
+  only for testing of the libs in this repository.

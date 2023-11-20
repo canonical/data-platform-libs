@@ -1,0 +1,26 @@
+add-secret:
+  description: Add a new secret, with label and content specified
+  label:
+    type: str
+    description: Unique part of the identifier of the secret 
+  content:                     
+    type: dict                 
+    description: Content to be added as secret
+  scope:
+    type: str
+    description: Scope of the secret
+
+set-secret:
+  description: Set the content of the secret known by the label specified
+  content:                     
+    type: dict                 
+    description: Content to be set on the secret
+  label:
+    type: str
+    description: Identifier of the secret
+      
+get-secret:
+  description: Retrieve a secret by label from the Juju Secret Store
+  label:
+    type: str
+    description: Identifier of the identifier of the secret 
