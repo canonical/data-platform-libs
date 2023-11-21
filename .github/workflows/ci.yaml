@@ -76,6 +76,11 @@ jobs:
               {juju-snap-channel: "3.1/stable",
                 juju-bootstrap-option: "3.1.6",
                 libjuju-version: "3.2.2"}}
+          - {tox-environments: integration-secrets,
+              juju-version:
+              {juju-snap-channel: "3.1/stable",
+                juju-bootstrap-option: "3.1.6",
+                libjuju-version: "3.2.2"}}
     name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- libjuju ${{ matrix.juju-version.libjuju-version }}
     needs:
       - lint
