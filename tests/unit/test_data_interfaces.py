@@ -332,7 +332,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         }
 
         secret = self.harness.charm.model.get_secret(id=secret_id)
-        assert secret.get_content() == {
+        assert secret.peek_content() == {
             "tls": "True",
             "tls-ca": "Canonical",
         }
@@ -661,7 +661,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         }
 
         secret = self.harness.charm.model.get_secret(id=secret_id)
-        assert secret.get_content() == {
+        assert secret.peek_content() == {
             "tls": "True",
             "tls-ca": "Canonical",
         }
