@@ -356,6 +356,9 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
     assert topsecret1 != topsecret2
 
 
+@pytest.mark.log_errors_allowed(
+    "Non-existing secret 'doesnt_exist' was attempted to be removed from the databag"
+)
 @pytest.mark.parametrize("field,value", [("new_field", "blah"), ("tls", "True")])
 @pytest.mark.usefixtures("only_without_juju_secrets")
 async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
@@ -428,6 +431,9 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     assert int(action.results["Code"]) == 0
 
 
+@pytest.mark.log_errors_allowed(
+    "Non-existing secret 'doesnt_exist' was attempted to be removed from the databag"
+)
 @pytest.mark.parametrize(
     "field,value,relation_field",
     [
@@ -514,6 +520,9 @@ async def test_provider_get_set_delete_fields_secrets(
     assert action.results["return-code"] == 0
 
 
+@pytest.mark.log_errors_allowed(
+    "Non-existing secret 'tls' was attempted to be removed from the databag"
+)
 @pytest.mark.log_errors_allowed("Can't delete secret for relation")
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
