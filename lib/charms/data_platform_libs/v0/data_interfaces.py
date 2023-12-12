@@ -884,17 +884,17 @@ class DataRelation(Object, ABC):
         self, app: Union[Application, Unit], relation: Relation, fields: List[str]
     ) -> None:
         """Remove databag fields 'fields' from Relation."""
-        if app not in relation.data or not relation.data[app]:
+        if app not in relation.data or relation.data[app] is None:
             return
 
         for field in fields:
             try:
                 relation.data[app].pop(field)
             except KeyError:
-                logger.debug(
-                    "Non-existing field was attempted to be removed from the databag %s, %s",
-                    str(relation.id),
+                logger.error(
+                    "Non-existing secret '%s' was attempted to be removed from the databag (relation ID: %s)",
                     str(field),
+                    str(relation.id),
                 )
                 pass
 
@@ -1034,13 +1034,19 @@ class DataProvides(DataRelation):
 
     @juju_secrets_only
     def _add_relation_secret(
-        self, relation: Relation, content: Dict[str, str], group_mapping: SecretGroup
+        self,
+        relation: Relation,
+        group_mapping: SecretGroup,
+        secret_fields: Set[str],
+        data: Dict[str, str],
     ) -> bool:
         """Add a new Juju Secret that will be registered in the relation databag."""
         secret_field = self._generate_secret_field_name(group_mapping)
         if relation.data[self.component].get(secret_field):
             logging.error("Secret for relation %s already exists, not adding again", relation.id)
             return False
+
+        content = self._content_for_secret_group(data, secret_fields, group_mapping)
 
         label = self._generate_secret_label(self.relation_name, relation.id, group_mapping)
         secret = self.secrets.add(label, content, relation)
@@ -1054,7 +1060,11 @@ class DataProvides(DataRelation):
 
     @juju_secrets_only
     def _update_relation_secret(
-        self, relation: Relation, content: Dict[str, str], group_mapping: SecretGroup
+        self,
+        relation: Relation,
+        group_mapping: SecretGroup,
+        secret_fields: Set[str],
+        data: Dict[str, str],
     ) -> bool:
         """Update the contents of an existing Juju Secret, referred in the relation databag."""
         secret = self._get_relation_secret(relation.id, group_mapping)
@@ -1062,6 +1072,8 @@ class DataProvides(DataRelation):
         if not secret:
             logging.error("Can't update secret for relation %s", relation.id)
             return False
+
+        content = self._content_for_secret_group(data, secret_fields, group_mapping)
 
         old_content = secret.get_content()
         full_content = copy.deepcopy(old_content)
@@ -1079,11 +1091,10 @@ class DataProvides(DataRelation):
         data: Dict[str, str],
     ) -> bool:
         """Update contents for Secret group. If the Secret doesn't exist, create it."""
-        secret_content = self._content_for_secret_group(data, secret_fields, group)
         if self._get_relation_secret(relation.id, group):
-            return self._update_relation_secret(relation, secret_content, group)
+            return self._update_relation_secret(relation, group, secret_fields, data)
         else:
-            return self._add_relation_secret(relation, secret_content, group)
+            return self._add_relation_secret(relation, group, secret_fields, data)
 
     @juju_secrets_only
     def _delete_relation_secret(
@@ -1453,12 +1464,14 @@ class DataPeer(DataRequires, DataProvides):
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         secret_field_name: Optional[str] = None,
+        deleted_label: Optional[str] = None,
     ):
         """Manager of base client relations."""
         DataRequires.__init__(
             self, charm, relation_name, extra_user_roles, additional_secret_fields
         )
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
+        self.deleted_label = deleted_label
 
     @property
     def scope(self) -> Optional[Scope]:
@@ -1522,6 +1535,18 @@ class DataPeer(DataRequires, DataProvides):
             relation.data[self.component].pop(self._generate_secret_field_name(), None)
         return secret
 
+    def _get_group_secret_contents(
+        self,
+        relation: Relation,
+        group: SecretGroup,
+        secret_fields: Optional[Union[Set[str], List[str]]] = None,
+    ) -> Dict[str, str]:
+        """Helper function to retrieve collective, requested contents of a secret."""
+        result = super()._get_group_secret_contents(relation, group, secret_fields)
+        if not self.deleted_label:
+            return result
+        return {key: result[key] for key in result if result[key] != self.deleted_label}
+
     def _remove_secret_from_databag(self, relation, fields: List[str]) -> None:
         """For Rolling Upgrades -- when moving from databag to secrets usage.
 
@@ -1568,9 +1593,29 @@ class DataPeer(DataRequires, DataProvides):
 
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
         """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
-        _, normal_fields = self._process_secret_fields(
-            relation, self.secret_fields, fields, self._delete_relation_secret, fields=fields
-        )
+        if self.secret_fields and self.deleted_label:
+            current_data = self.fetch_my_relation_data([relation.id], fields)
+            if current_data is not None:
+                # Check if the secret we wanna delete actually exists
+                # Given the "deleted label", here we can't rely on the default mechanism (i.e. 'key not found')
+                if non_existent := (set(fields) & set(self.secret_fields)) - set(
+                    current_data.get(relation.id, [])
+                ):
+                    logger.error(
+                        "Non-existing secret %s was attempted to be removed.", non_existent
+                    )
+
+            _, normal_fields = self._process_secret_fields(
+                relation,
+                self.secret_fields,
+                fields,
+                self._update_relation_secret,
+                data={field: self.deleted_label for field in fields},
+            )
+        else:
+            _, normal_fields = self._process_secret_fields(
+                relation, self.secret_fields, fields, self._delete_relation_secret, fields=fields
+            )
         self._delete_relation_data_without_secrets(self.component, relation, list(normal_fields))
 
     # Public functions -- inherited
