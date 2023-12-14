@@ -874,9 +874,6 @@ class DataRelation(Object, ABC):
         if app not in relation.data or relation.data[app] is None:
             return
 
-        if any(self._is_secret_field(key) for key in data.keys()):
-            raise SecretsIllegalUpdateError("Can't update secret {key}.")
-
         if relation:
             relation.data[app].update(data)
 
