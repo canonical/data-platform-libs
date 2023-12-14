@@ -19,6 +19,7 @@ from .helpers import (
     get_juju_secret,
     get_leader_id,
     get_non_leader_id,
+    get_secret_by_label,
     list_juju_secrets,
 )
 
@@ -76,6 +77,208 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
     await ops_test.model.wait_for_idle(
         apps=[ANOTHER_DATABASE_APP_NAME], status="active", wait_for_exact_units=1
     )
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_without_juju_secrets")
+@pytest.mark.parametrize("component", ["app", "unit"])
+async def test_peer_relation(component, ops_test: OpsTest):
+    """Testing peer relation using the DataPeer class."""
+    # Setting and verifying two secret fields
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "monitor-password", "value": "blablabla"},
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "secret-field", "value": "blablabla2"},
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "secret-field"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla2"
+
+    # Setting and verifying a non-secret field
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "not-a-secret", "value": "plain text"},
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "plain text"
+
+    # Deleting all fields
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+    assert not action.results.get("value")
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+    assert not action.results.get("value")
+
+    assert not (
+        await get_application_relation_data(
+            ops_test, DATABASE_APP_NAME, "database-peers", "not-a-secret"
+        )
+    )
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+@pytest.mark.parametrize("component", ["app", "unit"])
+async def test_peer_relation_secrets(component, ops_test: OpsTest):
+    """Testing peer relation using the DataPeer class."""
+    # Setting and verifying two secret fields
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "monitor-password", "value": "blablabla"},
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "secret-field", "value": "blablabla2"},
+    )
+    await action.wait()
+
+    secret = await get_secret_by_label(ops_test, f"database.{component}")
+    assert secret.get("monitor-password") == "blablabla"
+    assert secret.get("secret-field") == "blablabla2"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "secret-field"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla2"
+
+    # Setting and verifying a non-secret field
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "not-a-secret", "value": "plain text"},
+    )
+    await action.wait()
+
+    secret = await get_secret_by_label(ops_test, f"database.{component}")
+    assert not secret.get("not-a-secret")
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "plain text"
+
+    # Deleting all fields
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+
+    secret = await get_secret_by_label(ops_test, f"database.{component}")
+    assert secret.get("secret-field") == "blablabla2"
+    assert secret.get("monitor-password") == "#DELETED#"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+    assert not action.results.get("value")
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+    assert not action.results.get("value")
+
+    assert not (
+        await get_application_relation_data(
+            ops_test, DATABASE_APP_NAME, "database-peers", "not-a-secret", app_or_unit=component
+        )
+    )
+
+    # Internal secret URI is not saved on the databag
+    assert not (
+        await get_application_relation_data(
+            ops_test, DATABASE_APP_NAME, "database-peers", "internal-secret", app_or_unit=component
+        )
+    )
+
+
+@pytest.mark.abort_on_fail
+async def test_peer_relation_non_leader_can_read_app_data(ops_test: OpsTest):
+    """Testing peer relation using the DataPeer class."""
+    # Setting and verifying two secret fields
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": "app", "field": "monitor-password", "value": "blablabla"},
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": "app", "field": "not-a-secret", "value": "plain text"},
+    )
+    await action.wait()
+
+    # Checking that non-leader unit can fetch any (i.e. also app) secret
+    non_leader_unit_id = await get_non_leader_id(ops_test, DATABASE_APP_NAME)
+    non_leader_unit_name = f"{DATABASE_APP_NAME}/{non_leader_unit_id}"
+    action = await ops_test.model.units.get(non_leader_unit_name).run_action(
+        "get-peer-relation-field", **{"component": "app", "field": "monitor-password"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla"
+
+    action = await ops_test.model.units.get(non_leader_unit_name).run_action(
+        "get-peer-relation-field", **{"component": "app", "field": "not-a-secret"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "plain text"
 
 
 @pytest.mark.abort_on_fail
@@ -357,7 +560,7 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
 
 
 @pytest.mark.log_errors_allowed(
-    "Non-existing secret 'doesnt_exist' was attempted to be removed from the databag"
+    "Non-existing field 'doesnt_exist' was attempted to be removed from the databag"
 )
 @pytest.mark.parametrize("field,value", [("new_field", "blah"), ("tls", "True")])
 @pytest.mark.usefixtures("only_without_juju_secrets")
@@ -432,7 +635,7 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
 
 
 @pytest.mark.log_errors_allowed(
-    "Non-existing secret 'doesnt_exist' was attempted to be removed from the databag"
+    "Non-existing field 'doesnt_exist' was attempted to be removed from the databag"
 )
 @pytest.mark.parametrize(
     "field,value,relation_field",
@@ -521,7 +724,7 @@ async def test_provider_get_set_delete_fields_secrets(
 
 
 @pytest.mark.log_errors_allowed(
-    "Non-existing secret 'tls' was attempted to be removed from the databag"
+    "Non-existing field 'tls' was attempted to be removed from the databag"
 )
 @pytest.mark.log_errors_allowed("Can't delete secret for relation")
 @pytest.mark.usefixtures("only_with_juju_secrets")
