@@ -889,7 +889,7 @@ class DataRelation(Object, ABC):
                 relation.data[app].pop(field)
             except KeyError:
                 logger.error(
-                    "Non-existing secret '%s' was attempted to be removed from the databag (relation ID: %s)",
+                    "Non-existing field '%s' was attempted to be removed from the databag (relation ID: %s)",
                     str(field),
                     str(relation.id),
                 )
@@ -1617,6 +1617,27 @@ class DataPeer(DataRequires, DataProvides):
                 relation, self.secret_fields, fields, self._delete_relation_secret, fields=fields
             )
         self._delete_relation_data_without_secrets(self.component, relation, list(normal_fields))
+
+    def fetch_relation_data(
+        self,
+        relation_ids: Optional[List[int]] = None,
+        fields: Optional[List[str]] = None,
+        relation_name: Optional[str] = None,
+    ) -> Dict[int, Dict[str, str]]:
+        """This method makes no sense for a Peer Relation."""
+        raise NotImplementedError(
+            "Peer Relation only supports 'self-side' fetch methods: "
+            "fetch_my_relation_data() and fetch_my_relation_field()"
+        )
+
+    def fetch_relation_field(
+        self, relation_id: int, field: str, relation_name: Optional[str] = None
+    ) -> Optional[str]:
+        """This method makes no sense for a Peer Relation."""
+        raise NotImplementedError(
+            "Peer Relation only supports 'self-side' fetch methods: "
+            "fetch_my_relation_data() and fetch_my_relation_field()"
+        )
 
     # Public functions -- inherited
 
