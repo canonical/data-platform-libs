@@ -1039,10 +1039,11 @@ class DataProvides(DataRelation):
         group_mapping: SecretGroup,
         secret_fields: Set[str],
         data: Dict[str, str],
+        uri_to_databag=True,
     ) -> bool:
         """Add a new Juju Secret that will be registered in the relation databag."""
         secret_field = self._generate_secret_field_name(group_mapping)
-        if relation.data[self.component].get(secret_field):
+        if uri_to_databag and relation.data[self.component].get(secret_field):
             logging.error("Secret for relation %s already exists, not adding again", relation.id)
             return False
 
@@ -1052,7 +1053,7 @@ class DataProvides(DataRelation):
         secret = self.secrets.add(label, content, relation)
 
         # According to lint we may not have a Secret ID
-        if secret.meta and secret.meta.id:
+        if uri_to_databag and secret.meta and secret.meta.id:
             relation.data[self.component][secret_field] = secret.meta.id
 
         # Return the content that was added
@@ -1089,12 +1090,13 @@ class DataProvides(DataRelation):
         group: SecretGroup,
         secret_fields: Set[str],
         data: Dict[str, str],
+        uri_to_databag=True,
     ) -> bool:
         """Update contents for Secret group. If the Secret doesn't exist, create it."""
         if self._get_relation_secret(relation.id, group):
             return self._update_relation_secret(relation, group, secret_fields, data)
         else:
-            return self._add_relation_secret(relation, group, secret_fields, data)
+            return self._add_relation_secret(relation, group, secret_fields, data, uri_to_databag)
 
     @juju_secrets_only
     def _delete_relation_secret(
@@ -1453,7 +1455,7 @@ class DataRequires(DataRelation):
 class DataPeer(DataRequires, DataProvides):
     """Represents peer relations."""
 
-    SECRET_FIELDS = ["admin", "monitor", "password", "tls", "tls-ca"]
+    SECRET_FIELDS = ["operator-password"]
     SECRET_FIELD_NAME = "internal_secret"
     SECRET_LABEL_MAP = {}
 
@@ -1586,6 +1588,7 @@ class DataPeer(DataRequires, DataProvides):
             list(data),
             self._add_or_update_relation_secrets,
             data=data,
+            uri_to_databag=False,
         )
 
         normal_content = {k: v for k, v in data.items() if k in normal_fields}
