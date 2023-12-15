@@ -193,6 +193,9 @@ async def get_alias_from_relation_data(
     # Retrieve the relation data from the unit.
     relation_data = {}
     for relation in data[related_unit_name]["relation-info"]:
+        # Peer relation typically
+        if "related-units" not in relation:
+            continue
         for name, unit in relation["related-units"].items():
             if name == unit_name:
                 relation_data = unit["data"]
@@ -213,6 +216,7 @@ async def get_application_relation_data(
     relation_id: str = None,
     relation_alias: str = None,
     related_endpoint: str = None,
+    app_or_unit: str = "app",
 ) -> Optional[str]:
     """Get relation data for an application.
 
@@ -225,6 +229,7 @@ async def get_application_relation_data(
         relation_alias: alias of the relation (like a connection name)
             to get connection data from
         related_endpoint: the related endpoint, i.e. the "other side" of the relation
+        app_or_unit: whether it's the app or the unit databag to be searched
 
     Returns:
         the data that was requested or None
@@ -266,7 +271,10 @@ async def get_application_relation_data(
         raise ValueError(
             f"no relation data could be grabbed on relation with endpoint {relation_name} and alias {relation_alias}"
         )
-    return relation_data[0]["application-data"].get(key)
+    if app_or_unit == "app":
+        return relation_data[0]["application-data"].get(key)
+    else:
+        return relation_data[0]["local-unit"].get("data", {}).get(key)
 
 
 async def check_logs(ops_test: OpsTest, strings: str, limit: int = 10) -> bool:
@@ -278,3 +286,19 @@ async def check_logs(ops_test: OpsTest, strings: str, limit: int = 10) -> bool:
         if any(text in dbg_log for text in strings):
             return True
     return False
+
+
+async def get_secret_by_label(ops_test, label: str) -> Dict[str, str]:
+    secrets_raw = await ops_test.juju("list-secrets")
+    secret_ids = [
+        secret_line.split()[0] for secret_line in secrets_raw[1].split("\n")[1:] if secret_line
+    ]
+
+    for secret_id in secret_ids:
+        secret_data_raw = await ops_test.juju(
+            "show-secret", "--format", "json", "--reveal", secret_id
+        )
+        secret_data = json.loads(secret_data_raw[1])
+
+        if label == secret_data[secret_id].get("label"):
+            return secret_data[secret_id]["content"]["Data"]

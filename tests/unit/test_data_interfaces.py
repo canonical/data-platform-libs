@@ -26,6 +26,8 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseRequestedEvent,
     DatabaseRequires,
     DatabaseRequiresEvents,
+    DataPeer,
+    DataPeerUnit,
     Diff,
     IndexRequestedEvent,
     KafkaProvides,
@@ -38,12 +40,19 @@ from charms.harness_extensions.v0.capture_events import capture, capture_events
 
 logger = getLogger(__name__)
 
+PEER_RELATION_NAME = "database-peers"
+
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 DATABASE_RELATION_INTERFACE = "database_client"
 DATABASE_RELATION_NAME = "database"
 DATABASE_METADATA = f"""
 name: database
+
+peers:
+  database-peers:
+    interface: database-peers
+
 provides:
   {DATABASE_RELATION_NAME}:
     interface: {DATABASE_RELATION_INTERFACE}
@@ -76,6 +85,8 @@ class DatabaseCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self.peer_relation_app = DataPeer(self, PEER_RELATION_NAME)
+        self.peer_relation_app = DataPeerUnit(self, PEER_RELATION_NAME)
         self.provider = DatabaseProvides(
             self,
             DATABASE_RELATION_NAME,
@@ -332,7 +343,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         }
 
         secret = self.harness.charm.model.get_secret(id=secret_id)
-        assert secret.get_content() == {
+        assert secret.peek_content() == {
             "tls": "True",
             "tls-ca": "Canonical",
         }
@@ -562,6 +573,14 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             self.harness.update_relation_data(self.rel_id, "application/0", {"database": DATABASE})
         assert captured.event.unit.name == "application/0"
 
+    def test_peer_relation_disabled_functions(self):
+        """Verify that fetch_relation_data/field() functions are disabled for Peer Relations."""
+        with pytest.raises(NotImplementedError):
+            self.harness.charm.peer_relation_app.fetch_relation_data(0, ["key"])
+
+        with pytest.raises(NotImplementedError):
+            self.harness.charm.peer_relation_app.fetch_relation_field(0, "key")
+
 
 class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
     metadata = KAFKA_METADATA
@@ -661,7 +680,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         }
 
         secret = self.harness.charm.model.get_secret(id=secret_id)
-        assert secret.get_content() == {
+        assert secret.peek_content() == {
             "tls": "True",
             "tls-ca": "Canonical",
         }

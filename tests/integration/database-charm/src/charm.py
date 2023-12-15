@@ -29,7 +29,18 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseRequestedEvent,
 )
 
+if DATA_INTERFACES_VERSION > 17:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        DataPeer,
+        DataPeerUnit,
+    )
+
+
 logger = logging.getLogger(__name__)
+
+SECRET_INTERNAL_LABEL = "internal-secret"
+SECRET_DELETED_LABEL = "#DELETED#"
+PEER = "database-peers"
 
 
 class DatabaseCharm(CharmBase):
@@ -39,6 +50,28 @@ class DatabaseCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+
+        if DATA_INTERFACES_VERSION > 17:
+            self.peer_relation_app = DataPeer(
+                self,
+                relation_name=PEER,
+                additional_secret_fields=[
+                    "monitor-password",
+                    "secret-field",
+                ],
+                secret_field_name=SECRET_INTERNAL_LABEL,
+                deleted_label=SECRET_DELETED_LABEL,
+            )
+            self.peer_relation_unit = DataPeerUnit(
+                self,
+                relation_name=PEER,
+                additional_secret_fields=[
+                    "monitor-password",
+                    "secret-field",
+                ],
+                secret_field_name=SECRET_INTERNAL_LABEL,
+                deleted_label=SECRET_DELETED_LABEL,
+            )
 
         # Default charm events.
         self.framework.observe(self.on.database_pebble_ready, self._on_database_pebble_ready)
@@ -63,6 +96,17 @@ class DatabaseCharm(CharmBase):
         self.framework.observe(self.on.set_relation_field_action, self._on_set_relation_field)
         self.framework.observe(
             self.on.delete_relation_field_action, self._on_delete_relation_field
+        )
+
+        # Get/set/delete values on second-database relaton
+        self.framework.observe(
+            self.on.get_peer_relation_field_action, self._on_get_peer_relation_field
+        )
+        self.framework.observe(
+            self.on.set_peer_relation_field_action, self._on_set_peer_relation_field
+        )
+        self.framework.observe(
+            self.on.delete_peer_relation_field_action, self._on_delete_peer_relation_field
         )
 
     def _on_change_admin_password(self, event: ActionEvent):
@@ -218,6 +262,75 @@ class DatabaseCharm(CharmBase):
         """
         choices = string.ascii_letters + string.digits
         return "".join([secrets.choice(choices) for i in range(16)])
+
+    # Get/set/delete field on the peer relation
+    def _on_get_peer_relation_field(self, event: ActionEvent):
+        """[second_database]: Set requested relation field."""
+        component = event.params["component"]
+
+        value = None
+        if DATA_INTERFACES_VERSION <= 17:
+            relation = self.model.get_relation(PEER)
+            if component == "app":
+                value = relation.data[self.app][event.params["field"]]
+            else:
+                value = relation.data[self.unit][event.params["field"]]
+        else:
+            if component == "app":
+                relation = self.peer_relation_app.relations[0]
+                value = self.peer_relation_app.fetch_my_relation_field(
+                    relation.id, event.params["field"]
+                )
+            else:
+                relation = self.peer_relation_unit.relations[0]
+                value = self.peer_relation_unit.fetch_my_relation_field(
+                    relation.id, event.params["field"]
+                )
+        event.set_results({"value": value if value else ""})
+
+    def _on_set_peer_relation_field(self, event: ActionEvent):
+        """Set requested relation field."""
+        component = event.params["component"]
+
+        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        if DATA_INTERFACES_VERSION <= 17:
+            relation = self.model.get_relation(PEER)
+            if component == "app":
+                relation.data[self.app][event.params["field"]] = event.params["value"]
+            else:
+                relation.data[self.unit][event.params["field"]] = event.params["value"]
+            return
+
+        if component == "app":
+            relation = self.peer_relation_app.relations[0]
+            self.peer_relation_app.update_relation_data(
+                relation.id, {event.params["field"]: event.params["value"]}
+            )
+        else:
+            relation = self.peer_relation_unit.relations[0]
+            self.peer_relation_unit.update_relation_data(
+                relation.id, {event.params["field"]: event.params["value"]}
+            )
+
+    def _on_delete_peer_relation_field(self, event: ActionEvent):
+        """Delete requested relation field."""
+        component = event.params["component"]
+
+        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        if DATA_INTERFACES_VERSION <= 17:
+            relation = self.model.get_relation(PEER)
+            if component == "app":
+                del relation.data[self.app][event.params["field"]]
+            else:
+                del relation.data[self.unit][event.params["field"]]
+            return
+
+        if component == "app":
+            relation = self.peer_relation_app.relations[0]
+            self.peer_relation_app.delete_relation_data(relation.id, [event.params["field"]])
+        else:
+            relation = self.peer_relation_unit.relations[0]
+            self.peer_relation_unit.delete_relation_data(relation.id, [event.params["field"]])
 
 
 if __name__ == "__main__":

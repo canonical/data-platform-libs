@@ -12,6 +12,7 @@ from pytest_operator.plugin import OpsTest
 from .helpers import (
     get_application_relation_data,
     get_leader_id,
+    get_secret_by_label,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,8 +77,132 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
         ),
     )
     await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_APP_NAME, DATABASE_APP_NAME], status="active", wait_for_exact_units=1
+        apps=[APPLICATION_APP_NAME, DATABASE_APP_NAME],
+        status="active",
+        wait_for_exact_units=1,
     )
+
+
+# -----------------------------------------------------
+# Testing 'Peer Relation'
+# -----------------------------------------------------
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.parametrize("component", ["app", "unit"])
+async def test_peer_relation(component, ops_test: OpsTest):
+    """Relating Requires (databag only) with Provides (that could use secrets).
+
+    This should fall back to databag usage.
+    """
+    await downgrade_to_databag(ops_test, DATABASE_APP_NAME)
+
+    # Setting and verifying two fields (one that should be a secret, one plain text)
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "monitor-password", "value": "blablabla"},
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "not-a-secret", "value": "plain text"},
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "plain text"
+
+    # Upgrade
+    await upgrade_to_secrets(ops_test, DATABASE_APP_NAME)
+
+    # Both secret and databag content can be modified
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "monitor-password", "value": "blablabla_new"},
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "not-a-secret", "value": "even more plain text"},
+    )
+    await action.wait()
+
+    # ...and secret is moved away from the databag
+    assert not (
+        await get_application_relation_data(
+            ops_test,
+            DATABASE_APP_NAME,
+            "database-peers",
+            "monitor-password",
+            app_or_unit=component,
+        )
+    )
+
+    assert (
+        await get_application_relation_data(
+            ops_test, DATABASE_APP_NAME, "database-peers", "not-a-secret", app_or_unit=component
+        )
+    ) == "even more plain text"
+
+    assert not (
+        await get_application_relation_data(
+            ops_test, DATABASE_APP_NAME, "database-peers", "internal-secret", app_or_unit=component
+        )
+    )
+
+    secret = await get_secret_by_label(ops_test, f"database.{component}")
+    assert secret.get("monitor-password") == "blablabla_new"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla_new"
+
+    await upgrade_to_secrets(ops_test, DATABASE_APP_NAME)
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "even more plain text"
+
+    # Removing both secret and databag content can be modified
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+
+    # ...successfully
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
+    )
+    await action.wait()
+    assert not action.results.get("value")
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
+    )
+    await action.wait()
+    assert not action.results.get("value")
 
 
 #
