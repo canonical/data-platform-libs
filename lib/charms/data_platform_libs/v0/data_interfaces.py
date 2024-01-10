@@ -823,7 +823,7 @@ class DataRelation(Object, ABC):
         return (result, normal_fields)
 
     def _fetch_relation_data_without_secrets(
-        self, app: Union[Application, Unit], relation: Relation, fields: Optional[List[str]]
+        self, component: Union[Application, Unit], relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
         """Fetching databag contents when no secrets are involved.
 
@@ -832,17 +832,19 @@ class DataRelation(Object, ABC):
         This is used typically when the Provides side wants to read the Requires side's data,
         or when the Requires side may want to read its own data.
         """
-        if app not in relation.data or not relation.data[app]:
+        if component not in relation.data or not relation.data[component]:
             return {}
 
         if fields:
-            return {k: relation.data[app][k] for k in fields if k in relation.data[app]}
+            return {
+                k: relation.data[component][k] for k in fields if k in relation.data[component]
+            }
         else:
-            return dict(relation.data[app])
+            return dict(relation.data[component])
 
     def _fetch_relation_data_with_secrets(
         self,
-        app: Union[Application, Unit],
+        component: Union[Application, Unit],
         req_secret_fields: Optional[List[str]],
         relation: Relation,
         fields: Optional[List[str]] = None,
@@ -858,10 +860,10 @@ class DataRelation(Object, ABC):
         normal_fields = []
 
         if not fields:
-            if app not in relation.data or not relation.data[app]:
+            if component not in relation.data or not relation.data[component]:
                 return {}
 
-            all_fields = list(relation.data[app].keys())
+            all_fields = list(relation.data[component].keys())
             normal_fields = [field for field in all_fields if not self._is_secret_field(field)]
 
             # There must have been secrets there
@@ -878,30 +880,30 @@ class DataRelation(Object, ABC):
         # (Typically when Juju3 Requires meets Juju2 Provides)
         if normal_fields:
             result.update(
-                self._fetch_relation_data_without_secrets(app, relation, list(normal_fields))
+                self._fetch_relation_data_without_secrets(component, relation, list(normal_fields))
             )
         return result
 
     def _update_relation_data_without_secrets(
-        self, app: Union[Application, Unit], relation: Relation, data: Dict[str, str]
+        self, component: Union[Application, Unit], relation: Relation, data: Dict[str, str]
     ) -> None:
         """Updating databag contents when no secrets are involved."""
-        if app not in relation.data or relation.data[app] is None:
+        if component not in relation.data or relation.data[component] is None:
             return
 
         if relation:
-            relation.data[app].update(data)
+            relation.data[component].update(data)
 
     def _delete_relation_data_without_secrets(
-        self, app: Union[Application, Unit], relation: Relation, fields: List[str]
+        self, component: Union[Application, Unit], relation: Relation, fields: List[str]
     ) -> None:
         """Remove databag fields 'fields' from Relation."""
-        if app not in relation.data or relation.data[app] is None:
+        if component not in relation.data or relation.data[component] is None:
             return
 
         for field in fields:
             try:
-                relation.data[app].pop(field)
+                relation.data[component].pop(field)
             except KeyError:
                 logger.error(
                     "Non-existing field '%s' was attempted to be removed from the databag (relation ID: %s)",
