@@ -88,3 +88,10 @@ delete-peer-relation-field:
     field:
       type: string
       description: Relation field
+
+delete-peer-secret:
+  description: Delete Peer secret
+  params:
+    component:
+      type: string
+      description: app/unit
