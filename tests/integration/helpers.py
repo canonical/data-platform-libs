@@ -288,7 +288,7 @@ async def check_logs(ops_test: OpsTest, strings: str, limit: int = 10) -> bool:
     return False
 
 
-async def get_secret_by_label(ops_test, label: str) -> Dict[str, str]:
+async def get_secret_by_label(ops_test, label: str, owner: str = "") -> Dict[str, str]:
     secrets_raw = await ops_test.juju("list-secrets")
     secret_ids = [
         secret_line.split()[0] for secret_line in secrets_raw[1].split("\n")[1:] if secret_line
@@ -301,4 +301,5 @@ async def get_secret_by_label(ops_test, label: str) -> Dict[str, str]:
         secret_data = json.loads(secret_data_raw[1])
 
         if label == secret_data[secret_id].get("label"):
-            return secret_data[secret_id]["content"]["Data"]
+            if not owner or owner == secret_data[secret_id].get("owner"):
+                return secret_data[secret_id]["content"]["Data"]

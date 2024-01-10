@@ -65,10 +65,7 @@ class DatabaseCharm(CharmBase):
             self.peer_relation_unit = DataPeerUnit(
                 self,
                 relation_name=PEER,
-                additional_secret_fields=[
-                    "monitor-password",
-                    "secret-field",
-                ],
+                additional_secret_fields=["monitor-password", "secret-field", "my-unit-secret"],
                 secret_field_name=SECRET_INTERNAL_LABEL,
                 deleted_label=SECRET_DELETED_LABEL,
             )
@@ -108,6 +105,7 @@ class DatabaseCharm(CharmBase):
         self.framework.observe(
             self.on.delete_peer_relation_field_action, self._on_delete_peer_relation_field
         )
+        self.framework.observe(self.on.delete_peer_secret_action, self._on_delete_peer_secret)
 
     def _on_change_admin_password(self, event: ActionEvent):
         """Change the admin password."""
@@ -331,6 +329,23 @@ class DatabaseCharm(CharmBase):
         else:
             relation = self.peer_relation_unit.relations[0]
             self.peer_relation_unit.delete_relation_data(relation.id, [event.params["field"]])
+
+    def _on_delete_peer_secret(self, event: ActionEvent):
+        """Delete requested relation field."""
+        component = event.params["component"]
+
+        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        if DATA_INTERFACES_VERSION <= 17:
+            return
+
+        secret = None
+        if component == "app":
+            secret = self.model.get_secret(label="database.app")
+        else:
+            secret = self.model.get_secret(label="database.unit")
+
+        if secret:
+            secret.remove_all_revisions()
 
 
 if __name__ == "__main__":
