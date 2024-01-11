@@ -1489,14 +1489,6 @@ class DataPeer(DataRequires, DataProvides):
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
         self.deleted_label = deleted_label
 
-    @property
-    def scope(self) -> Optional[Scope]:
-        """Turn component information into Scope."""
-        if isinstance(self.component, Application):
-            return Scope.APP
-        if isinstance(self.component, Unit):
-            return Scope.UNIT
-
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
         pass
@@ -1508,9 +1500,7 @@ class DataPeer(DataRequires, DataProvides):
     def _generate_secret_label(
         self, relation_name: str, relation_id: int, group_mapping: SecretGroup
     ) -> str:
-        members = [self.charm.app.name]
-        if self.scope:
-            members.append(self.scope.value)
+        members = [self.charm.app.name, self.SCOPE.value]
         return f"{'.'.join(members)}"
 
     def _generate_secret_field_name(self, group_mapping: SecretGroup = SecretGroup.EXTRA) -> str:
