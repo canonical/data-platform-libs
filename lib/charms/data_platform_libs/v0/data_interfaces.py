@@ -1686,12 +1686,8 @@ class ExtraRoleEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("extra-user-roles")
 
 
-class AuthenticationEvent(RelationEvent):
-    """Base class for authentication fields for events.
-
-    The amount of logic added here is not ideal -- but this was the only way to preserve
-    the interface when moving to Juju Secrets
-    """
+class RelationEventWithSecret(RelationEvent):
+    """Base class for Relation Events that need to handle secrets."""
 
     @property
     def _secrets(self) -> dict:
@@ -1702,18 +1698,6 @@ class AuthenticationEvent(RelationEvent):
         if not hasattr(self, "_cached_secrets"):
             self._cached_secrets = {}
         return self._cached_secrets
-
-    @property
-    def _jujuversion(self) -> JujuVersion:
-        """Caching jujuversion to avoid a Juju call on each field evaluation.
-
-        DON'T USE the encapsulated helper variable outside of this function
-        """
-        if not hasattr(self, "_cached_jujuversion"):
-            self._cached_jujuversion = None
-        if not self._cached_jujuversion:
-            self._cached_jujuversion = JujuVersion.from_environ()
-        return self._cached_jujuversion
 
     def _get_secret(self, group) -> Optional[Dict[str, str]]:
         """Retrieveing secrets."""
@@ -1730,7 +1714,15 @@ class AuthenticationEvent(RelationEvent):
     @property
     def secrets_enabled(self):
         """Is this Juju version allowing for Secrets usage?"""
-        return self._jujuversion.has_secrets
+        return JujuVersion.from_environ().has_secrets
+
+
+class AuthenticationEvent(RelationEventWithSecret):
+    """Base class for authentication fields for events.
+
+    The amount of logic added here is not ideal -- but this was the only way to preserve
+    the interface when moving to Juju Secrets
+    """
 
     @property
     def username(self) -> Optional[str]:
@@ -1813,7 +1805,7 @@ class DatabaseProvidesEvents(CharmEvents):
     database_requested = EventSource(DatabaseRequestedEvent)
 
 
-class DatabaseRequiresEvent(RelationEvent):
+class DatabaseRequiresEvent(RelationEventWithSecret):
     """Base class for database events."""
 
     @property
@@ -1867,6 +1859,11 @@ class DatabaseRequiresEvent(RelationEvent):
         """
         if not self.relation.app:
             return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("user")
+            if secret:
+                return secret.get("uris")
 
         return self.relation.data[self.relation.app].get("uris")
 
