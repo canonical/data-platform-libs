@@ -1165,6 +1165,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # using the requires charm library event.
         event = _on_database_created.call_args[0][0]
         assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret.id
+        assert event.username == "test-username"
+        assert event.password == "test-password"
 
         assert self.harness.charm.requirer.is_resource_created()
 
@@ -1174,7 +1176,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert not self.harness.charm.requirer.is_resource_created(rel_id)
 
         secret2 = self.harness.charm.app.add_secret(
-            {"username": "test-username", "password": "test-password"}
+            {"username": "test-username-2", "password": "test-password-2"}
         )
         self.harness.update_relation_data(
             rel_id, self.provider, {f"{PROV_SECRET_PREFIX}user": secret2.id}
@@ -1187,6 +1189,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # using the requires charm library event.
         event = _on_database_created.call_args[0][0]
         assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret2.id
+        assert event.username == "test-username-2"
+        assert event.password == "test-password-2"
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
         assert self.harness.charm.requirer.is_resource_created()
@@ -1526,6 +1530,57 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.read_only_endpoints == "host1:port,host2:port"
         assert event.replset == "rs0"
         assert event.tls == "True"
+        assert event.tls_ca == "Canonical"
+        assert event.uris == "host1:port,host2:port"
+        assert event.version == "1.0"
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    @patch.object(charm, "_on_database_created")
+    def test_fields_are_accessible_through_event_secret(self, _on_database_created):
+        """Asserts fields are accessible through the requires charm library event."""
+        # Manually setting up user credentials secret
+        secret = self.harness.charm.app.add_secret(
+            {
+                "username": "test-username",
+                "password": "test-password",
+                "uris": "host1:port,host2:port",
+            },
+        )
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {f"{PROV_SECRET_PREFIX}user": secret.id}
+        )
+
+        # Manually setting up TLS credentials secret
+        secret = self.harness.charm.app.add_secret(
+            {
+                "tls": "True",
+                "tls-ca": "Canonical",
+            },
+        )
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {f"{PROV_SECRET_PREFIX}tls": secret.id}
+        )
+
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "endpoints": "host1:port,host2:port",
+                "read-only-endpoints": "host1:port,host2:port",
+                "replset": "rs0",
+                "version": "1.0",
+            },
+        )
+
+        # Check that the fields are present in the relation
+        # using the requires charm library event.
+        event = _on_database_created.call_args[0][0]
+        assert event.tls == "True"
+        assert event.username == "test-username"
+        assert event.password == "test-password"
+        assert event.endpoints == "host1:port,host2:port"
+        assert event.read_only_endpoints == "host1:port,host2:port"
+        assert event.replset == "rs0"
         assert event.tls_ca == "Canonical"
         assert event.uris == "host1:port,host2:port"
         assert event.version == "1.0"
