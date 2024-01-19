@@ -1619,7 +1619,8 @@ class DataPeer(DataRequires, DataProvides):
                     current_data.get(relation.id, [])
                 ):
                     logger.error(
-                        "Non-existing secret %s was attempted to be removed.", non_existent
+                        "Non-existing secret %s was attempted to be removed.",
+                        ", ".join(non_existent),
                     )
 
             _, normal_fields = self._process_secret_fields(
