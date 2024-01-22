@@ -285,7 +285,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 15
+LIBPATCH = 16
 
 PYDEPS = ["pydantic>=1.10,<2", "poetry-core"]
 
@@ -501,7 +501,7 @@ class DataUpgrade(Object, ABC):
 
     STATES = ["recovery", "failed", "idle", "ready", "upgrading", "completed"]
 
-    on = UpgradeEvents()  # pyright: ignore [reportGeneralTypeIssues]
+    on = UpgradeEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(
         self,

@@ -80,7 +80,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ deleted - key that were deleted"""
 class DatabaseProvides(Object):
     """Provides-side of the database relation."""
 
-    on = DatabaseEvents()  # pyright: ignore [reportGeneralTypeIssues]
+    on = DatabaseEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         super().__init__(charm, relation_name)
