@@ -80,7 +80,7 @@ def test_add_multiple_secrets(harness):
         "best-2020-picture": "Nomadland",
         "best-2021-picture": "CODA",
         "best-2022-picture": "Everything Everywhere All at Once",
-        }
+    }
 
 
 @pytest.mark.usefixtures("only_with_juju_secrets")
