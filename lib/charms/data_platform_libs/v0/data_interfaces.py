@@ -2682,3 +2682,61 @@ class OpenSearchRequires(DataRequires):
                 event.relation, app=event.app, unit=event.unit
             )  # here check if this is the right design
             return
+
+
+class MongosRequirer(Object):
+    """Manage relations between the mongos router and the application on the application side.
+
+    Library to manage the relation for the application between mongos and the deployed application.
+    In short, this relation ensure that:
+    1. mongos receives the specified database and users roles needed by the host application
+    2. the host application receives the generated username, password and uri for connecting to the
+    sharded cluster.
+
+    This library contains the Requires and Provides classes for handling the relation between an
+    application and mongos. The mongos application relies on the MongosProvider class and the deployed
+    application uses the MongoDBRequires class.
+
+    The following is an example of how to use the MongoDBRequires class to specify the roles and
+    database name:
+
+    ```python
+    from charms.mongos.v0.mongos_client_interface import MongosRequirer
+
+
+    class ApplicationCharm(CharmBase):
+
+        def __init__(self, *args):
+            super().__init__(*args)
+
+            # relation events for mongos client
+            self._mongos_client = MongosRequirer(
+                self,
+                database_name="my-test-db",
+                extra_user_roles="admin",
+            )
+    ```
+    """
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        database_name: str,
+        extra_user_roles: str,
+        relation_name: str = "mongos_proxy",
+    ) -> None:
+        """Constructor for MongosRequirer object."""
+        self.relation_name = relation_name
+        self.charm = charm
+
+        if not database_name:
+            database_name = f"{self.charm.app}"
+
+        self.database_requires = DatabaseRequires(
+            self.charm,
+            relation_name=self.relation_name,
+            database_name=database_name,
+            extra_user_roles=extra_user_roles,
+        )
+
+        super().__init__(charm, self.relation_name)
