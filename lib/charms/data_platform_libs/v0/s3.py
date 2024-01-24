@@ -212,7 +212,7 @@ class S3CredentialEvents(CharmEvents):
 class S3Provider(Object):
     """A provider handler for communicating S3 credentials to consumers."""
 
-    on = S3CredentialEvents()  # pyright: ignore [reportGeneralTypeIssues]
+    on = S3CredentialEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(
         self,
@@ -613,7 +613,7 @@ S3_REQUIRED_OPTIONS = ["access-key", "secret-key"]
 class S3Requirer(Object):
     """Requires-side of the s3 relation."""
 
-    on = S3CredentialRequiresEvents()  # pyright: ignore[reportGeneralTypeIssues]
+    on = S3CredentialRequiresEvents()  # pyright: ignore[reportAssignmentType]
 
     def __init__(
         self, charm: ops.charm.CharmBase, relation_name: str, bucket_name: Optional[str] = None

@@ -422,15 +422,15 @@ def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
     )
 
     # These are the keys that were added to the databag and triggered this event.
-    added = new_data.keys() - old_data.keys()  # pyright: ignore [reportGeneralTypeIssues]
+    added = new_data.keys() - old_data.keys()  # pyright: ignore [reportAssignmentType]
     # These are the keys that were removed from the databag and triggered this event.
-    deleted = old_data.keys() - new_data.keys()  # pyright: ignore [reportGeneralTypeIssues]
+    deleted = old_data.keys() - new_data.keys()  # pyright: ignore [reportAssignmentType]
     # These are the keys that already existed in the databag,
     # but had their values changed.
     changed = {
         key
-        for key in old_data.keys() & new_data.keys()  # pyright: ignore [reportGeneralTypeIssues]
-        if old_data[key] != new_data[key]  # pyright: ignore [reportGeneralTypeIssues]
+        for key in old_data.keys() & new_data.keys()  # pyright: ignore [reportAssignmentType]
+        if old_data[key] != new_data[key]  # pyright: ignore [reportAssignmentType]
     }
     # Convert the new_data to a serializable format and save it for a next diff check.
     set_encoded_field(event.relation, bucket, "data", new_data)
@@ -1909,7 +1909,7 @@ class DatabaseRequiresEvents(CharmEvents):
 class DatabaseProvides(DataProvides):
     """Provider-side of the database relations."""
 
-    on = DatabaseProvidesEvents()  # pyright: ignore [reportGeneralTypeIssues]
+    on = DatabaseProvidesEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         super().__init__(charm, relation_name)
@@ -2004,7 +2004,7 @@ class DatabaseProvides(DataProvides):
 class DatabaseRequires(DataRequires):
     """Requires-side of the database relation."""
 
-    on = DatabaseRequiresEvents()  # pyright: ignore [reportGeneralTypeIssues]
+    on = DatabaseRequiresEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(
         self,
@@ -2333,7 +2333,7 @@ class KafkaRequiresEvents(CharmEvents):
 class KafkaProvides(DataProvides):
     """Provider-side of the Kafka relation."""
 
-    on = KafkaProvidesEvents()  # pyright: ignore [reportGeneralTypeIssues]
+    on = KafkaProvidesEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         super().__init__(charm, relation_name)
@@ -2394,7 +2394,7 @@ class KafkaProvides(DataProvides):
 class KafkaRequires(DataRequires):
     """Requires-side of the Kafka relation."""
 
-    on = KafkaRequiresEvents()  # pyright: ignore [reportGeneralTypeIssues]
+    on = KafkaRequiresEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(
         self,
@@ -2531,7 +2531,7 @@ class OpenSearchRequiresEvents(CharmEvents):
 class OpenSearchProvides(DataProvides):
     """Provider-side of the OpenSearch relation."""
 
-    on = OpenSearchProvidesEvents()  # pyright: ignore[reportGeneralTypeIssues]
+    on = OpenSearchProvidesEvents()  # pyright: ignore[reportAssignmentType]
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         super().__init__(charm, relation_name)
@@ -2584,7 +2584,7 @@ class OpenSearchProvides(DataProvides):
 class OpenSearchRequires(DataRequires):
     """Requires-side of the OpenSearch relation."""
 
-    on = OpenSearchRequiresEvents()  # pyright: ignore[reportGeneralTypeIssues]
+    on = OpenSearchRequiresEvents()  # pyright: ignore[reportAssignmentType]
 
     def __init__(
         self,
