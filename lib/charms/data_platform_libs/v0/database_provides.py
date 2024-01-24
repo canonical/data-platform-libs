@@ -130,7 +130,7 @@ deleted - key that were deleted"""
 class DatabaseProvides(Object):
     """Provides-side of the database relation."""
 
-    on = DatabaseEvents()  # pyright: ignore [reportGeneralTypeIssues]
+    on = DatabaseEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         super().__init__(charm, relation_name)
