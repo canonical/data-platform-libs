@@ -320,7 +320,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 27
+LIBPATCH = 28
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -337,14 +337,36 @@ deleted - key that were deleted"""
 
 PROV_SECRET_PREFIX = "secret-"
 REQ_SECRET_FIELDS = "requested-secrets"
+GROUP_MAPPING_FIELD = "secret_group_mapping"
 
 
-class SecretGroup(Enum):
-    """Secret groups as constants."""
+class SecretGroup(str):
+    """Secret groups specific type."""
 
-    USER = "user"
-    TLS = "tls"
-    EXTRA = "extra"
+    pass
+
+
+class SecretGroupsAggregate(str):
+    """Secret groups with option to extend with additional constants."""
+
+    def __init__(self):
+        self.USER = SecretGroup("user")
+        self.TLS = SecretGroup("tls")
+        self.EXTRA = SecretGroup("extra")
+
+    def __setattr__(self, name, value):
+        """Setting internal constants."""
+        if name in self.__dict__:
+            raise RuntimeError("Can't set constant!")
+        else:
+            super().__setattr__(name, SecretGroup(value))
+
+    def groups(self) -> list:
+        """Return the list of stored SecretGroups."""
+        return list(self.__dict__.values())
+
+
+SECRET_GROUPS = SecretGroupsAggregate()
 
 
 class DataInterfacesError(Exception):
@@ -471,6 +493,11 @@ class Scope(Enum):
     UNIT = "unit"
 
 
+################################################################################
+# Secrets internal caching
+################################################################################
+
+
 class CachedSecret:
     """Locally cache a secret.
 
@@ -586,6 +613,11 @@ class SecretCache:
         return self._secrets[label]
 
 
+################################################################################
+# Relation Data base/abstract ancestors (i.e. parent classes)
+################################################################################
+
+
 # Base DataRelation
 
 
@@ -596,11 +628,11 @@ class DataRelation(Object, ABC):
 
     # Local map to associate mappings with secrets potentially as a group
     SECRET_LABEL_MAP = {
-        "username": SecretGroup.USER,
-        "password": SecretGroup.USER,
-        "uris": SecretGroup.USER,
-        "tls": SecretGroup.TLS,
-        "tls-ca": SecretGroup.TLS,
+        "username": SECRET_GROUPS.USER,
+        "password": SECRET_GROUPS.USER,
+        "uris": SECRET_GROUPS.USER,
+        "tls": SECRET_GROUPS.TLS,
+        "tls-ca": SECRET_GROUPS.TLS,
     }
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
@@ -632,6 +664,11 @@ class DataRelation(Object, ABC):
         if not self._jujuversion:
             self._jujuversion = JujuVersion.from_environ()
         return self._jujuversion.has_secrets
+
+    @property
+    def secret_label_map(self):
+        """Exposing secret-label map via a property -- could be overridden in descendants!"""
+        return self.SECRET_LABEL_MAP
 
     # Mandatory overrides for internal/helper methods
 
@@ -692,11 +729,11 @@ class DataRelation(Object, ABC):
         relation_name: str, relation_id: int, group_mapping: SecretGroup
     ) -> str:
         """Generate unique group_mappings for secrets within a relation context."""
-        return f"{relation_name}.{relation_id}.{group_mapping.value}.secret"
+        return f"{relation_name}.{relation_id}.{group_mapping}.secret"
 
     def _generate_secret_field_name(self, group_mapping: SecretGroup) -> str:
         """Generate unique group_mappings for secrets within a relation context."""
-        return f"{PROV_SECRET_PREFIX}{group_mapping.value}"
+        return f"{PROV_SECRET_PREFIX}{group_mapping}"
 
     def _relation_from_secret_label(self, secret_label: str) -> Optional[Relation]:
         """Retrieve the relation that belongs to a secret label."""
@@ -721,8 +758,7 @@ class DataRelation(Object, ABC):
         except ModelError:
             return
 
-    @classmethod
-    def _group_secret_fields(cls, secret_fields: List[str]) -> Dict[SecretGroup, List[str]]:
+    def _group_secret_fields(self, secret_fields: List[str]) -> Dict[SecretGroup, List[str]]:
         """Helper function to arrange secret mappings under their group.
 
         NOTE: All unrecognized items end up in the 'extra' secret bucket.
@@ -730,10 +766,10 @@ class DataRelation(Object, ABC):
         """
         secret_fieldnames_grouped = {}
         for key in secret_fields:
-            if group := cls.SECRET_LABEL_MAP.get(key):
+            if group := self.secret_label_map.get(key):
                 secret_fieldnames_grouped.setdefault(group, []).append(key)
             else:
-                secret_fieldnames_grouped.setdefault(SecretGroup.EXTRA, []).append(key)
+                secret_fieldnames_grouped.setdefault(SECRET_GROUPS.EXTRA, []).append(key)
         return secret_fieldnames_grouped
 
     def _get_group_secret_contents(
@@ -752,22 +788,21 @@ class DataRelation(Object, ABC):
             return {k: v for k, v in secret_data.items() if k in secret_fields}
         return {}
 
-    @classmethod
     def _content_for_secret_group(
-        cls, content: Dict[str, str], secret_fields: Set[str], group_mapping: SecretGroup
+        self, content: Dict[str, str], secret_fields: Set[str], group_mapping: SecretGroup
     ) -> Dict[str, str]:
         """Select <field>: <value> pairs from input, that belong to this particular Secret group."""
-        if group_mapping == SecretGroup.EXTRA:
+        if group_mapping == SECRET_GROUPS.EXTRA:
             return {
                 k: v
                 for k, v in content.items()
-                if k in secret_fields and k not in cls.SECRET_LABEL_MAP.keys()
+                if k in secret_fields and k not in self.secret_label_map.keys()
             }
 
         return {
             k: v
             for k, v in content.items()
-            if k in secret_fields and cls.SECRET_LABEL_MAP.get(k) == group_mapping
+            if k in secret_fields and self.secret_label_map.get(k) == group_mapping
         }
 
     @juju_secrets_only
@@ -1338,7 +1373,7 @@ class DataRequires(DataRelation):
         if not relation.app:
             return
 
-        for group in SecretGroup:
+        for group in SECRET_GROUPS.groups():
             secret_field = self._generate_secret_field_name(group)
             if secret_field in params_name_list:
                 if secret_uri := relation.data[relation.app].get(secret_field):
@@ -1463,7 +1498,9 @@ class DataRequires(DataRelation):
     fetch_my_relation_field = leader_only(DataRelation.fetch_my_relation_field)
 
 
-# Base DataPeer
+################################################################################
+# Peer Relation Data
+################################################################################
 
 
 class DataPeer(DataRequires, DataProvides):
@@ -1488,6 +1525,7 @@ class DataPeer(DataRequires, DataProvides):
         )
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
         self.deleted_label = deleted_label
+        self._secret_label_map = {}
 
     @property
     def scope(self) -> Optional[Scope]:
@@ -1497,6 +1535,96 @@ class DataPeer(DataRequires, DataProvides):
         if isinstance(self.component, Unit):
             return Scope.UNIT
 
+    @property
+    def secret_fields(self):
+        """Re-definition of the property in a way that dynamically extended list is retrieved."""
+        if len(self.charm.model.relations[self.relation_name]) > 1:
+            raise ValueError(f"More than one peer relation on {self.relation_name}")
+
+        relation = self.charm.model.relations[self.relation_name][0]
+        databag_secrets = get_encoded_list(relation, self.local_app, REQ_SECRET_FIELDS)
+        if databag_secrets and len(databag_secrets) != len(self._secret_fields):
+            self._secret_fields = list(set(self._secret_fields) | set(databag_secrets))
+        return self._secret_fields
+
+    @property
+    def secret_label_map(self):
+        """Exposing secret-label map via a property -- could be overridden in descendants!"""
+        if len(self.charm.model.relations[self.relation_name]) > 1:
+            raise ValueError(f"More than one peer relation on {self.relation_name}")
+
+        if not self._secret_label_map:
+            if relation := self.charm.model.relations[self.relation_name][0]:
+                if databag_map := get_encoded_dict(relation, self.local_app, GROUP_MAPPING_FIELD):
+                    self._secret_label_map = databag_map
+        return self._secret_label_map
+
+    def add_secret(
+        self,
+        relation_id: int,
+        field: str,
+        value: str,
+        standalone: bool = False,
+        group_mapping: Optional[Union[SecretGroup, str]] = None,
+    ) -> None:
+        """Public interface method to add a Relation Data field specifically as a Juju Secret.
+
+        Args:
+            relation_id: ID of the relation
+            field: The secret field that is to be added
+            value: The string value of the secret
+            standalone: A new secret is to be created, holding this field (only)?
+            group_mapping: The name of the "secret group", in case the field is to be added to an existing secret
+        """
+        self._add_secret_context(relation_id, field, standalone, group_mapping)
+        self.update_relation_data(relation_id, {field: value})
+
+    # Helpers
+
+    def _add_secret_group(self, group: str) -> None:
+        if group not in SECRET_GROUPS.groups():
+            setattr(SECRET_GROUPS, group, group)
+
+    def _add_secret_field(self, field) -> None:
+        self._secret_fields = self.secret_fields + [field]
+
+    def _add_secret_mapping(self, field, group) -> None:
+        self._secret_label_map = {field: group, **self.secret_label_map}
+
+    def _push_secret_fields_to_databag(self, relation):
+        set_encoded_field(relation, self.local_app, REQ_SECRET_FIELDS, self._secret_fields)
+
+    def _push_secret_mapping_to_databag(self, relation):
+        set_encoded_field(relation, self.local_app, GROUP_MAPPING_FIELD, self._secret_label_map)
+
+    def _add_secret_context(
+        self,
+        relation_id: int,
+        field: str,
+        standalone: bool = False,
+        group_mapping: Optional[Union[SecretGroup, str]] = None,
+    ) -> None:
+        """Local access to secrets field, in case they are being used."""
+        if not self.secrets_enabled:
+            return
+
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+        if not relation:
+            return
+
+        self._add_secret_field(field)
+        self._push_secret_fields_to_databag(relation)
+
+        if standalone:
+            self._add_secret_group(field)
+            self._add_secret_mapping(field, field)
+        elif group_mapping:
+            self._add_secret_group(group_mapping)
+            self._add_secret_mapping(field, group_mapping)
+        self._push_secret_mapping_to_databag(relation)
+
+    # Event handlers
+
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
         pass
@@ -1505,15 +1633,19 @@ class DataPeer(DataRequires, DataProvides):
         """Event emitted when the secret has changed."""
         pass
 
+    # Overrides of Relation Data handling functions
+
     def _generate_secret_label(
         self, relation_name: str, relation_id: int, group_mapping: SecretGroup
     ) -> str:
         members = [self.charm.app.name]
         if self.scope:
             members.append(self.scope.value)
+        if group_mapping != SECRET_GROUPS.EXTRA:
+            members.append(group_mapping)
         return f"{'.'.join(members)}"
 
-    def _generate_secret_field_name(self, group_mapping: SecretGroup = SecretGroup.EXTRA) -> str:
+    def _generate_secret_field_name(self, group_mapping: SecretGroup = SECRET_GROUPS.EXTRA) -> str:
         """Generate unique group_mappings for secrets within a relation context."""
         return f"{self.secret_field_name}"
 
@@ -1521,7 +1653,7 @@ class DataPeer(DataRequires, DataProvides):
     def _get_relation_secret(
         self,
         relation_id: int,
-        group_mapping: SecretGroup = SecretGroup.EXTRA,
+        group_mapping: SecretGroup = SECRET_GROUPS.EXTRA,
         relation_name: Optional[str] = None,
     ) -> Optional[CachedSecret]:
         """Retrieve a Juju Secret specifically for peer relations.
@@ -1672,7 +1804,11 @@ class DataPeerUnit(DataPeer):
         super().__init__(*args, **kwargs)
 
 
-# General events
+################################################################################
+# Cross-charm Relatoins Data Handling and Evenets
+################################################################################
+
+# Generic events
 
 
 class ExtraRoleEvent(RelationEvent):
@@ -2191,7 +2327,7 @@ class DatabaseRequires(DataRequires):
 
         # Check if the database is created
         # (the database charm shared the credentials).
-        secret_field_user = self._generate_secret_field_name(SecretGroup.USER)
+        secret_field_user = self._generate_secret_field_name(SECRET_GROUPS.USER)
         if (
             "username" in diff.added and "password" in diff.added
         ) or secret_field_user in diff.added:
@@ -2237,7 +2373,11 @@ class DatabaseRequires(DataRequires):
             self._emit_aliased_event(event, "read_only_endpoints_changed")
 
 
-# Kafka related events
+################################################################################
+# Charm-specific Relations Data and Events
+################################################################################
+
+# Kafka Events
 
 
 class KafkaProvidesEvent(RelationEvent):
@@ -2455,7 +2595,7 @@ class KafkaRequires(DataRequires):
         if any(newval for newval in diff.added if self._is_secret_field(newval)):
             self._register_secrets_to_relation(event.relation, diff.added)
 
-        secret_field_user = self._generate_secret_field_name(SecretGroup.USER)
+        secret_field_user = self._generate_secret_field_name(SECRET_GROUPS.USER)
         if (
             "username" in diff.added and "password" in diff.added
         ) or secret_field_user in diff.added:
@@ -2651,8 +2791,8 @@ class OpenSearchRequires(DataRequires):
         if any(newval for newval in diff.added if self._is_secret_field(newval)):
             self._register_secrets_to_relation(event.relation, diff.added)
 
-        secret_field_user = self._generate_secret_field_name(SecretGroup.USER)
-        secret_field_tls = self._generate_secret_field_name(SecretGroup.TLS)
+        secret_field_user = self._generate_secret_field_name(SECRET_GROUPS.USER)
+        secret_field_tls = self._generate_secret_field_name(SECRET_GROUPS.TLS)
         updates = {"username", "password", "tls", "tls-ca", secret_field_user, secret_field_tls}
         if len(set(diff._asdict().keys()) - updates) < len(diff):
             logger.info("authentication updated at: %s", datetime.now())

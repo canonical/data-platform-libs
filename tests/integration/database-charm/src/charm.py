@@ -102,6 +102,7 @@ class DatabaseCharm(CharmBase):
         self.framework.observe(
             self.on.set_peer_relation_field_action, self._on_set_peer_relation_field
         )
+        self.framework.observe(self.on.set_peer_secret_action, self._on_set_peer_secret)
         self.framework.observe(
             self.on.delete_peer_relation_field_action, self._on_delete_peer_relation_field
         )
@@ -310,6 +311,38 @@ class DatabaseCharm(CharmBase):
                 relation.id, {event.params["field"]: event.params["value"]}
             )
 
+    def _on_set_peer_secret(self, event: ActionEvent):
+        """Set requested relation field."""
+        component = event.params["component"]
+
+        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        if DATA_INTERFACES_VERSION <= 17:
+            relation = self.model.get_relation(PEER)
+            if component == "app":
+                relation.data[self.app][event.params["field"]] = event.params["value"]
+            else:
+                relation.data[self.unit][event.params["field"]] = event.params["value"]
+            return
+
+        if component == "app":
+            relation = self.peer_relation_app.relations[0]
+            self.peer_relation_app.add_secret(
+                relation.id,
+                event.params["field"],
+                event.params["value"],
+                event.params["individual"],
+                event.params["group"],
+            )
+        else:
+            relation = self.peer_relation_unit.relations[0]
+            self.peer_relation_unit.add_secret(
+                relation.id,
+                event.params["field"],
+                event.params["value"],
+                event.params["individual"],
+                event.params["group"],
+            )
+
     def _on_delete_peer_relation_field(self, event: ActionEvent):
         """Delete requested relation field."""
         component = event.params["component"]
@@ -339,10 +372,11 @@ class DatabaseCharm(CharmBase):
             return
 
         secret = None
+        group_str = "" if not event.params["group"] else f".{event.params['group']}"
         if component == "app":
-            secret = self.model.get_secret(label="database.app")
+            secret = self.model.get_secret(label=f"database.app{group_str}")
         else:
-            secret = self.model.get_secret(label="database.unit")
+            secret = self.model.get_secret(label=f"database.unit{group_str}")
 
         if secret:
             secret.remove_all_revisions()

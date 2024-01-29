@@ -79,6 +79,25 @@ set-peer-relation-field:
       type: string
       description: Value of the field to set
 
+set-peer-secret:
+  description: Set fields from the second-database relation
+  params:
+    component:
+      type: string
+      description: app/unit
+    field:
+      type: string
+      description: Relation field
+    value:
+      type: string
+      description: Value of the field to set
+    individual:
+      type: boolean
+      default: False
+    group:
+      type: string
+      default: ''
+
 delete-peer-relation-field:
   description: Delete fields from the sedond-database relation
   params:
@@ -95,3 +114,6 @@ delete-peer-secret:
     component:
       type: string
       description: app/unit
+    group:
+      type: string
+      default: ''
