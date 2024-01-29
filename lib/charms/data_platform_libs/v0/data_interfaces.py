@@ -337,6 +337,7 @@ deleted - key that were deleted"""
 
 PROV_SECRET_PREFIX = "secret-"
 REQ_SECRET_FIELDS = "requested-secrets"
+GROUP_MAPPING_FIELD = "secret_group_mapping"
 
 
 class SecretGroup(str):
@@ -1524,6 +1525,7 @@ class DataPeer(DataRequires, DataProvides):
         )
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
         self.deleted_label = deleted_label
+        self._secret_label_map = {}
 
     @property
     def scope(self) -> Optional[Scope]:
@@ -1533,15 +1535,95 @@ class DataPeer(DataRequires, DataProvides):
         if isinstance(self.component, Unit):
             return Scope.UNIT
 
-    def add_secret_field(
-        self, field: List, individual: bool = False, group_mapping: Optional[SecretGroup] = None
+    @property
+    def secret_fields(self):
+        """Re-definition of the property in a way that dynamically extended list is retrieved."""
+        if len(self.charm.model.relations[self.relation_name]) > 1:
+            raise ValueError(f"More than one peer relation on {self.relation_name}")
+
+        relation = self.charm.model.relations[self.relation_name][0]
+        databag_secrets = get_encoded_list(relation, self.local_app, REQ_SECRET_FIELDS)
+        if databag_secrets and len(databag_secrets) != len(self._secret_fields):
+            self._secret_fields = list(set(self._secret_fields) | set(databag_secrets))
+        return self._secret_fields
+
+    @property
+    def secret_label_map(self):
+        """Exposing secret-label map via a property -- could be overridden in descendants!"""
+        if len(self.charm.model.relations[self.relation_name]) > 1:
+            raise ValueError(f"More than one peer relation on {self.relation_name}")
+
+        if not self._secret_label_map:
+            if relation := self.charm.model.relations[self.relation_name][0]:
+                if databag_map := get_encoded_dict(relation, self.local_app, GROUP_MAPPING_FIELD):
+                    self._secret_label_map = databag_map
+        return self._secret_label_map
+
+    def add_secret(
+        self,
+        relation_id: int,
+        field: str,
+        value: str,
+        standalone: bool = False,
+        group_mapping: Optional[Union[SecretGroup, str]] = None,
+    ) -> None:
+        """Public interface method to add a Relation Data field specifically as a Juju Secret.
+
+        Args:
+            relation_id: ID of the relation
+            field: The secret field that is to be added
+            value: The string value of the secret
+            standalone: A new secret is to be created, holding this field (only)?
+            group_mapping: The name of the "secret group", in case the field is to be added to an existing secret
+        """
+        self._add_secret_context(relation_id, field, standalone, group_mapping)
+        self.update_relation_data(relation_id, {field: value})
+
+    # Helpers
+
+    def _add_secret_group(self, group: str) -> None:
+        if group not in SECRET_GROUPS.groups():
+            setattr(SECRET_GROUPS, group, group)
+
+    def _add_secret_field(self, field) -> None:
+        self._secret_fields = self.secret_fields + [field]
+
+    def _add_secret_mapping(self, field, group) -> None:
+        self._secret_label_map = {field: group, **self.secret_label_map}
+
+    def _push_secret_fields_to_databag(self, relation):
+        set_encoded_field(relation, self.local_app, REQ_SECRET_FIELDS, self._secret_fields)
+
+    def _push_secret_mapping_to_databag(self, relation):
+        set_encoded_field(relation, self.local_app, GROUP_MAPPING_FIELD, self._secret_label_map)
+
+    def _add_secret_context(
+        self,
+        relation_id: int,
+        field: str,
+        standalone: bool = False,
+        group_mapping: Optional[Union[SecretGroup, str]] = None,
     ) -> None:
         """Local access to secrets field, in case they are being used."""
-        if self.secrets_enabled:
-            self._secret_fields += field
-        if group_mapping:
-            pass
-            # HERE
+        if not self.secrets_enabled:
+            return
+
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+        if not relation:
+            return
+
+        self._add_secret_field(field)
+        self._push_secret_fields_to_databag(relation)
+
+        if standalone:
+            self._add_secret_group(field)
+            self._add_secret_mapping(field, field)
+        elif group_mapping:
+            self._add_secret_group(group_mapping)
+            self._add_secret_mapping(field, group_mapping)
+        self._push_secret_mapping_to_databag(relation)
+
+    # Event handlers
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
@@ -1551,12 +1633,16 @@ class DataPeer(DataRequires, DataProvides):
         """Event emitted when the secret has changed."""
         pass
 
+    # Overrides of Relation Data handling functions
+
     def _generate_secret_label(
         self, relation_name: str, relation_id: int, group_mapping: SecretGroup
     ) -> str:
         members = [self.charm.app.name]
         if self.scope:
             members.append(self.scope.value)
+        if group_mapping != SECRET_GROUPS.EXTRA:
+            members.append(group_mapping)
         return f"{'.'.join(members)}"
 
     def _generate_secret_field_name(self, group_mapping: SecretGroup = SECRET_GROUPS.EXTRA) -> str:
