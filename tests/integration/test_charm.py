@@ -260,6 +260,112 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
 
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
+@pytest.mark.parametrize("component", ["app", "unit"])
+async def test_peer_relation_add_secret(component, ops_test: OpsTest):
+    """Testing peer relation using the DataPeer class."""
+    # Setting and verifying two secret fields
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
+
+    # Generally we shouldn't have test decision based on pytest.mark.parametrize
+    # but I think this is a valid exception
+    owner = "database" if component == "app" else unit_name
+
+    # Setting a new secret field dynamically
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-secret",
+        **{"component": component, "field": "new-field", "value": "blablabla"},
+    )
+    await action.wait()
+
+    secret = await get_secret_by_label(ops_test, f"database.{component}", owner)
+    assert secret.get("new-field") == "blablabla"
+
+    # Setting a new secret field dynamically in a new, dedicated secret
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-secret",
+        **{
+            "component": component,
+            "field": "indie-field",
+            "value": "blablabla2",
+            "individual": True,
+        },
+    )
+    await action.wait()
+
+    secret = await get_secret_by_label(ops_test, f"database.{component}.indie-field", owner)
+    assert secret.get("indie-field") == "blablabla2"
+
+    # Setting a new secret field dynamically in a new, dedicated secret
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-secret",
+        **{
+            "component": component,
+            "field": "mygroup-field1",
+            "value": "blablabla3",
+            "group": "mygroup",
+        },
+    )
+    await action.wait()
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-secret",
+        **{
+            "component": component,
+            "field": "mygroup-field2",
+            "value": "blablabla4",
+            "group": "mygroup",
+        },
+    )
+    await action.wait()
+
+    secret = await get_secret_by_label(ops_test, f"database.{component}.mygroup", owner)
+    assert secret.get("mygroup-field1") == "blablabla3"
+    assert secret.get("mygroup-field2") == "blablabla4"
+
+    # Getting the secret
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "new-field"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "indie-field"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla2"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "mygroup-field1"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla3"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "mygroup-field2"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla4"
+
+    # Cleanup
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-secret", **{"component": component}
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-secret", **{"component": component, "group": "indie-field"}
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-secret", **{"component": component, "group": "mygroup"}
+    )
+    await action.wait()
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_peer_relation_non_leader_unit_secrets(ops_test: OpsTest):
     """Testing peer relation using the DataPeer class."""
     # Setting and verifying two secret fields
