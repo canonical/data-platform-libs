@@ -509,21 +509,6 @@ async def test_two_applications_dont_share_the_same_relation_data(
     assert application_connection_string != another_application_connection_string
 
 
-async def test_expose_field(ops_test: OpsTest, application_charm):
-    # Check that the first relation raises the flag
-    assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "expose"
-        )
-    ) == "true"
-    # Check that the flag is missing if not requested
-    assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "expose"
-        )
-    ) is None
-
-
 @pytest.mark.usefixtures("only_without_juju_secrets")
 async def test_databag_usage_correct(ops_test: OpsTest, application_charm):
     for field in ["username", "password"]:
@@ -636,6 +621,30 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
 
     # Assert the two application have different relation (connection) data.
     assert first_database_connection_string != second_database_connection_string
+
+
+async def test_expose_field(ops_test: OpsTest, application_charm):
+    # Check that the flag is missing if not requested
+    assert (
+        await get_application_relation_data(
+            ops_test,
+            DATABASE_APP_NAME,
+            "database",
+            "expose",
+            related_endpoint=FIRST_DATABASE_RELATION_NAME,
+        )
+    ) is None
+
+    # Check that the second relation raises the flag
+    assert (
+        await get_application_relation_data(
+            ops_test,
+            DATABASE_APP_NAME,
+            "database",
+            "expose",
+            related_endpoint=SECOND_DATABASE_RELATION_NAME,
+        )
+    ) == "true"
 
 
 @pytest.mark.usefixtures("only_with_juju_secrets")
