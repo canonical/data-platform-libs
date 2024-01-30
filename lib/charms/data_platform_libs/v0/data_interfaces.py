@@ -320,7 +320,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 27
+LIBPATCH = 28
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -1276,10 +1276,12 @@ class DataRequires(DataRelation):
         relation_name: str,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
+        expose: bool = False,
     ):
         """Manager of base client relations."""
         super().__init__(charm, relation_name)
         self.extra_user_roles = extra_user_roles
+        self.expose = expose
         self._secret_fields = list(self.SECRET_FIELDS)
         if additional_secret_fields:
             self._secret_fields += additional_secret_fields
@@ -1686,6 +1688,14 @@ class ExtraRoleEvent(RelationEvent):
 
         return self.relation.data[self.relation.app].get("extra-user-roles")
 
+    @property
+    def expose(self) -> bool:
+        """Returns the requested expose field."""
+        if not self.relation.app:
+            return False
+
+        return self.relation.data[self.relation.app].get("expose", "false") == "true"
+
 
 class RelationEventWithSecret(RelationEvent):
     """Base class for Relation Events that need to handle secrets."""
@@ -2014,9 +2024,10 @@ class DatabaseRequires(DataRequires):
         extra_user_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
         additional_secret_fields: Optional[List[str]] = [],
+        expose: bool = False,
     ):
         """Manager of database client relations."""
-        super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields)
+        super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields, expose)
         self.database = database_name
         self.relations_aliases = relations_aliases
 
@@ -2169,16 +2180,16 @@ class DatabaseRequires(DataRequires):
         if not self.local_unit.is_leader():
             return
 
+        event_data = {"database": self.database}
+
         if self.extra_user_roles:
-            self.update_relation_data(
-                event.relation.id,
-                {
-                    "database": self.database,
-                    "extra-user-roles": self.extra_user_roles,
-                },
-            )
-        else:
-            self.update_relation_data(event.relation.id, {"database": self.database})
+            event_data["extra-user-roles"] = self.extra_user_roles
+
+        # set expose field
+        if self.expose:
+            event_data["expose"] = "true"
+
+        self.update_relation_data(event.relation.id, event_data)
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
