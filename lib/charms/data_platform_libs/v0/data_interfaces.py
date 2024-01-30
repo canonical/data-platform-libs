@@ -1276,12 +1276,10 @@ class DataRequires(DataRelation):
         relation_name: str,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
-        expose: bool = False,
     ):
         """Manager of base client relations."""
         super().__init__(charm, relation_name)
         self.extra_user_roles = extra_user_roles
-        self.expose = expose
         self._secret_fields = list(self.SECRET_FIELDS)
         if additional_secret_fields:
             self._secret_fields += additional_secret_fields
@@ -1688,14 +1686,6 @@ class ExtraRoleEvent(RelationEvent):
 
         return self.relation.data[self.relation.app].get("extra-user-roles")
 
-    @property
-    def expose(self) -> bool:
-        """Returns the requested expose field."""
-        if not self.relation.app:
-            return False
-
-        return self.relation.data[self.relation.app].get("expose", "false") == "true"
-
 
 class RelationEventWithSecret(RelationEvent):
     """Base class for Relation Events that need to handle secrets."""
@@ -1805,6 +1795,14 @@ class DatabaseProvidesEvent(RelationEvent):
 
 class DatabaseRequestedEvent(DatabaseProvidesEvent, ExtraRoleEvent):
     """Event emitted when a new database is requested for use on this relation."""
+
+    @property
+    def expose(self) -> bool:
+        """Returns the requested expose field."""
+        if not self.relation.app:
+            return False
+
+        return self.relation.data[self.relation.app].get("expose", "false") == "true"
 
 
 class DatabaseProvidesEvents(CharmEvents):
@@ -2027,9 +2025,10 @@ class DatabaseRequires(DataRequires):
         expose: bool = False,
     ):
         """Manager of database client relations."""
-        super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields, expose)
+        super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields)
         self.database = database_name
         self.relations_aliases = relations_aliases
+        self.expose = expose
 
         # Define custom event names for each alias.
         if relations_aliases:
