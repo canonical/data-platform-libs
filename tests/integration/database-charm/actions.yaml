@@ -91,9 +91,6 @@ set-peer-secret:
     value:
       type: string
       description: Value of the field to set
-    individual:
-      type: boolean
-      default: False
     group:
       type: string
       default: ''

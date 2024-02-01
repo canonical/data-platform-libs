@@ -59,6 +59,7 @@ class DatabaseCharm(CharmBase):
                     "monitor-password",
                     "secret-field",
                 ],
+                additional_secret_group_mapping={"mygroup": ["mygroup-field1", "mygroup-field2"]},
                 secret_field_name=SECRET_INTERNAL_LABEL,
                 deleted_label=SECRET_DELETED_LABEL,
             )
@@ -330,7 +331,6 @@ class DatabaseCharm(CharmBase):
                 relation.id,
                 event.params["field"],
                 event.params["value"],
-                event.params["individual"],
                 event.params["group"],
             )
         else:
@@ -339,7 +339,6 @@ class DatabaseCharm(CharmBase):
                 relation.id,
                 event.params["field"],
                 event.params["value"],
-                event.params["individual"],
                 event.params["group"],
             )
 

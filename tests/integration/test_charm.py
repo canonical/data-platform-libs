@@ -286,21 +286,6 @@ async def test_peer_relation_add_secret(component, ops_test: OpsTest):
         "set-peer-secret",
         **{
             "component": component,
-            "field": "indie-field",
-            "value": "blablabla2",
-            "individual": True,
-        },
-    )
-    await action.wait()
-
-    secret = await get_secret_by_label(ops_test, f"database.{component}.indie-field", owner)
-    assert secret.get("indie-field") == "blablabla2"
-
-    # Setting a new secret field dynamically in a new, dedicated secret
-    action = await ops_test.model.units.get(unit_name).run_action(
-        "set-peer-secret",
-        **{
-            "component": component,
             "field": "mygroup-field1",
             "value": "blablabla3",
             "group": "mygroup",
@@ -330,19 +315,13 @@ async def test_peer_relation_add_secret(component, ops_test: OpsTest):
     assert action.results.get("value") == "blablabla"
 
     action = await ops_test.model.units.get(unit_name).run_action(
-        "get-peer-relation-field", **{"component": component, "field": "indie-field"}
-    )
-    await action.wait()
-    assert action.results.get("value") == "blablabla2"
-
-    action = await ops_test.model.units.get(unit_name).run_action(
-        "get-peer-relation-field", **{"component": component, "field": "mygroup-field1"}
+        "get-peer-relation-field", **{"component": component, "field": "mygroup-field1@mygroup"}
     )
     await action.wait()
     assert action.results.get("value") == "blablabla3"
 
     action = await ops_test.model.units.get(unit_name).run_action(
-        "get-peer-relation-field", **{"component": component, "field": "mygroup-field2"}
+        "get-peer-relation-field", **{"component": component, "field": "mygroup-field2@mygroup"}
     )
     await action.wait()
     assert action.results.get("value") == "blablabla4"
@@ -350,11 +329,6 @@ async def test_peer_relation_add_secret(component, ops_test: OpsTest):
     # Cleanup
     action = await ops_test.model.units.get(unit_name).run_action(
         "delete-peer-secret", **{"component": component}
-    )
-    await action.wait()
-
-    action = await ops_test.model.units.get(unit_name).run_action(
-        "delete-peer-secret", **{"component": component, "group": "indie-field"}
     )
     await action.wait()
 
