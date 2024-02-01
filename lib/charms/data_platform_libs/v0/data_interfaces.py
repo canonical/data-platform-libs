@@ -338,6 +338,7 @@ deleted - key that were deleted"""
 PROV_SECRET_PREFIX = "secret-"
 REQ_SECRET_FIELDS = "requested-secrets"
 GROUP_MAPPING_FIELD = "secret_group_mapping"
+GROUP_SEPARATOR = "@"
 
 
 class SecretGroup(str):
@@ -364,6 +365,14 @@ class SecretGroupsAggregate(str):
     def groups(self) -> list:
         """Return the list of stored SecretGroups."""
         return list(self.__dict__.values())
+
+    def get_group(self, group: str) -> Optional[SecretGroup]:
+        """If the input str translates to a grupname, return that."""
+        try:
+            index = self.groups().index(group)
+        except ValueError:
+            return
+        return self.groups()[index]
 
 
 SECRET_GROUPS = SecretGroupsAggregate()
@@ -776,7 +785,7 @@ class DataRelation(Object, ABC):
         self,
         relation: Relation,
         group: SecretGroup,
-        secret_fields: Optional[Union[Set[str], List[str]]] = None,
+        secret_fields: Union[Set[str], List[str]] = [],
     ) -> Dict[str, str]:
         """Helper function to retrieve collective, requested contents of a secret."""
         if not secret_fields:
@@ -1515,7 +1524,8 @@ class DataPeer(DataRequires, DataProvides):
         charm,
         relation_name: str,
         extra_user_roles: Optional[str] = None,
-        additional_secret_fields: Optional[List[str]] = [],
+        additional_secret_fields: List[str] = [],
+        additional_secret_group_mapping: Dict[str, str] = {},
         secret_field_name: Optional[str] = None,
         deleted_label: Optional[str] = None,
     ):
@@ -1526,6 +1536,14 @@ class DataPeer(DataRequires, DataProvides):
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
         self.deleted_label = deleted_label
         self._secret_label_map = {}
+        for group, fields in additional_secret_group_mapping.items():
+            if group not in SECRET_GROUPS.groups():
+                setattr(SECRET_GROUPS, group, group)
+            for field in fields:
+                if secret_group := SECRET_GROUPS.get_group(group):
+                    internal_field = self._field_to_internal_name(field, secret_group)
+                    self._secret_label_map.setdefault(group, []).append(internal_field)
+                    self._secret_fields.append(internal_field)
 
     @property
     def scope(self) -> Optional[Scope]:
@@ -1534,6 +1552,11 @@ class DataPeer(DataRequires, DataProvides):
             return Scope.APP
         if isinstance(self.component, Unit):
             return Scope.UNIT
+
+    @property
+    def secret_label_map(self):
+        """Property storing secret mappings."""
+        return self._secret_label_map
 
     @property
     def secret_fields(self):
@@ -1547,25 +1570,12 @@ class DataPeer(DataRequires, DataProvides):
             self._secret_fields = list(set(self._secret_fields) | set(databag_secrets))
         return self._secret_fields
 
-    @property
-    def secret_label_map(self):
-        """Exposing secret-label map via a property -- could be overridden in descendants!"""
-        if len(self.charm.model.relations[self.relation_name]) > 1:
-            raise ValueError(f"More than one peer relation on {self.relation_name}")
-
-        if not self._secret_label_map:
-            if relation := self.charm.model.relations[self.relation_name][0]:
-                if databag_map := get_encoded_dict(relation, self.local_app, GROUP_MAPPING_FIELD):
-                    self._secret_label_map = databag_map
-        return self._secret_label_map
-
     def add_secret(
         self,
         relation_id: int,
         field: str,
         value: str,
-        standalone: bool = False,
-        group_mapping: Optional[Union[SecretGroup, str]] = None,
+        group_mapping: Optional[SecretGroup] = None,
     ) -> None:
         """Public interface method to add a Relation Data field specifically as a Juju Secret.
 
@@ -1576,52 +1586,74 @@ class DataPeer(DataRequires, DataProvides):
             standalone: A new secret is to be created, holding this field (only)?
             group_mapping: The name of the "secret group", in case the field is to be added to an existing secret
         """
-        self._add_secret_context(relation_id, field, standalone, group_mapping)
-        self.update_relation_data(relation_id, {field: value})
+        full_field = self._field_to_internal_name(field, group_mapping)
+        self._add_secret_context(relation_id, full_field)
+        self.update_relation_data(relation_id, {full_field: value})
 
-    # Helpers
-
-    def _add_secret_group(self, group: str) -> None:
-        if group not in SECRET_GROUPS.groups():
-            setattr(SECRET_GROUPS, group, group)
-
-    def _add_secret_field(self, field) -> None:
-        self._secret_fields = self.secret_fields + [field]
-
-    def _add_secret_mapping(self, field, group) -> None:
-        self._secret_label_map = {field: group, **self.secret_label_map}
-
-    def _push_secret_fields_to_databag(self, relation):
-        set_encoded_field(relation, self.local_app, REQ_SECRET_FIELDS, self._secret_fields)
-
-    def _push_secret_mapping_to_databag(self, relation):
-        set_encoded_field(relation, self.local_app, GROUP_MAPPING_FIELD, self._secret_label_map)
-
-    def _add_secret_context(
+    def get_secret(
         self,
         relation_id: int,
         field: str,
-        standalone: bool = False,
-        group_mapping: Optional[Union[SecretGroup, str]] = None,
-    ) -> None:
-        """Local access to secrets field, in case they are being used."""
-        if not self.secrets_enabled:
+        group_mapping: Optional[SecretGroup] = None,
+    ) -> Optional[str]:
+        """Public interface method to fetch secrets only."""
+        full_field = self._field_to_internal_name(field, group_mapping)
+        if full_field not in self.secret_fields:
+            raise SecretsUnavailableError(
+                f"Secret {field} from group {group_mapping} was not found"
+            )
+        self.fetch_my_relation_field(relation_id, full_field)
+
+    # Helpers
+
+    def _add_secret_context(self, relation_id: int, field: str) -> None:
+        """Dynamically add a new secret field on request."""
+        if not self.secrets_enabled or field in self.secret_fields:
             return
 
-        relation = self.charm.model.get_relation(self.relation_name, relation_id)
-        if not relation:
-            return
+        if relation := self.charm.model.get_relation(self.relation_name, relation_id):
+            self._secret_fields = self.secret_fields + [field]
+            set_encoded_field(relation, self.local_app, REQ_SECRET_FIELDS, self._secret_fields)
 
-        self._add_secret_field(field)
-        self._push_secret_fields_to_databag(relation)
+    @staticmethod
+    def _field_to_internal_name(field: str, group: Optional[SecretGroup]) -> str:
+        if not group or group == SECRET_GROUPS.EXTRA:
+            return field
+        return f"{field}{GROUP_SEPARATOR}{group}"
 
-        if standalone:
-            self._add_secret_group(field)
-            self._add_secret_mapping(field, field)
-        elif group_mapping:
-            self._add_secret_group(group_mapping)
-            self._add_secret_mapping(field, group_mapping)
-        self._push_secret_mapping_to_databag(relation)
+    @staticmethod
+    def _internal_name_to_field(name: str) -> Tuple[str, SecretGroup]:
+        parts = name.split(GROUP_SEPARATOR)
+        if not len(parts) > 1:
+            return (parts[0], SECRET_GROUPS.EXTRA)
+        secret_group = SECRET_GROUPS.get_group(parts[1])
+        if not secret_group:
+            raise ValueError(f"Invalid secret field {name}")
+        return (parts[0], secret_group)
+
+    def _group_secret_fields(self, secret_fields: List[str]) -> Dict[SecretGroup, List[str]]:
+        """Helper function to arrange secret mappings under their group.
+
+        NOTE: All unrecognized items end up in the 'extra' secret bucket.
+        Make sure only secret fields are passed!
+        """
+        secret_fieldnames_grouped = {}
+        for key in secret_fields:
+            field, group = self._internal_name_to_field(key)
+            secret_fieldnames_grouped.setdefault(group, []).append(field)
+        return secret_fieldnames_grouped
+
+    def _content_for_secret_group(
+        self, content: Dict[str, str], secret_fields: Set[str], group_mapping: SecretGroup
+    ) -> Dict[str, str]:
+        """Select <field>: <value> pairs from input, that belong to this particular Secret group."""
+        if group_mapping == SECRET_GROUPS.EXTRA:
+            return {k: v for k, v in content.items() if k in self.secret_fields}
+        return {
+            self._internal_name_to_field(k)[0]: v
+            for k, v in content.items()
+            if k in self.secret_fields
+        }
 
     # Event handlers
 
@@ -1687,13 +1719,18 @@ class DataPeer(DataRequires, DataProvides):
         self,
         relation: Relation,
         group: SecretGroup,
-        secret_fields: Optional[Union[Set[str], List[str]]] = None,
+        secret_fields: Union[Set[str], List[str]] = [],
     ) -> Dict[str, str]:
         """Helper function to retrieve collective, requested contents of a secret."""
+        secret_fields = [self._internal_name_to_field(k)[0] for k in secret_fields]
         result = super()._get_group_secret_contents(relation, group, secret_fields)
         if not self.deleted_label:
             return result
-        return {key: result[key] for key in result if result[key] != self.deleted_label}
+        return {
+            self._field_to_internal_name(key, group): result[key]
+            for key in result
+            if result[key] != self.deleted_label
+        }
 
     def _remove_secret_from_databag(self, relation, fields: List[str]) -> None:
         """For Rolling Upgrades -- when moving from databag to secrets usage.
@@ -2149,7 +2186,7 @@ class DatabaseRequires(DataRequires):
         database_name: str,
         extra_user_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
-        additional_secret_fields: Optional[List[str]] = [],
+        additional_secret_fields: List[str] = [],
     ):
         """Manager of database client relations."""
         super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields)
@@ -2543,7 +2580,7 @@ class KafkaRequires(DataRequires):
         topic: str,
         extra_user_roles: Optional[str] = None,
         consumer_group_prefix: Optional[str] = None,
-        additional_secret_fields: Optional[List[str]] = [],
+        additional_secret_fields: List[str] = [],
     ):
         """Manager of Kafka client relations."""
         # super().__init__(charm, relation_name)
@@ -2732,7 +2769,7 @@ class OpenSearchRequires(DataRequires):
         relation_name: str,
         index: str,
         extra_user_roles: Optional[str] = None,
-        additional_secret_fields: Optional[List[str]] = [],
+        additional_secret_fields: List[str] = [],
     ):
         """Manager of OpenSearch client relations."""
         super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields)
