@@ -623,14 +623,14 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
     assert first_database_connection_string != second_database_connection_string
 
 
-async def test_expose_field(ops_test: OpsTest, application_charm):
+async def test_external_node_connectivity_field(ops_test: OpsTest, application_charm):
     # Check that the flag is missing if not requested
     assert (
         await get_application_relation_data(
             ops_test,
             DATABASE_APP_NAME,
             "database",
-            "expose",
+            "external-node-connectivity",
             related_endpoint=FIRST_DATABASE_RELATION_NAME,
         )
     ) is None
@@ -641,7 +641,7 @@ async def test_expose_field(ops_test: OpsTest, application_charm):
             ops_test,
             DATABASE_APP_NAME,
             "database",
-            "expose",
+            "external-node-connectivity",
             related_endpoint=SECOND_DATABASE_RELATION_NAME,
         )
     ) == "true"

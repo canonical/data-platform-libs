@@ -1797,12 +1797,15 @@ class DatabaseRequestedEvent(DatabaseProvidesEvent, ExtraRoleEvent):
     """Event emitted when a new database is requested for use on this relation."""
 
     @property
-    def expose(self) -> bool:
-        """Returns the requested expose field."""
+    def external_node_connectivity(self) -> bool:
+        """Returns the requested external_node_connectivity field."""
         if not self.relation.app:
             return False
 
-        return self.relation.data[self.relation.app].get("expose", "false") == "true"
+        return (
+            self.relation.data[self.relation.app].get("external-node-connectivity", "false")
+            == "true"
+        )
 
 
 class DatabaseProvidesEvents(CharmEvents):
@@ -2022,13 +2025,13 @@ class DatabaseRequires(DataRequires):
         extra_user_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
         additional_secret_fields: Optional[List[str]] = [],
-        expose: bool = False,
+        external_node_connectivity: bool = False,
     ):
         """Manager of database client relations."""
         super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields)
         self.database = database_name
         self.relations_aliases = relations_aliases
-        self.expose = expose
+        self.external_node_connectivity = external_node_connectivity
 
         # Define custom event names for each alias.
         if relations_aliases:
@@ -2184,9 +2187,9 @@ class DatabaseRequires(DataRequires):
         if self.extra_user_roles:
             event_data["extra-user-roles"] = self.extra_user_roles
 
-        # set expose field
-        if self.expose:
-            event_data["expose"] = "true"
+        # set external-node-connectivity field
+        if self.external_node_connectivity:
+            event_data["external-node-connectivity"] = "true"
 
         self.update_relation_data(event.relation.id, event_data)
 

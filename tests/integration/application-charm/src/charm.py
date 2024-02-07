@@ -74,7 +74,7 @@ class ApplicationCharm(CharmBase):
                 database_name,
                 EXTRA_USER_ROLES,
                 additional_secret_fields=["topsecret", "donttellanyone"],
-                expose=True,
+                external_node_connectivity=True,
             )
         else:
             self.second_database = DatabaseRequires(
