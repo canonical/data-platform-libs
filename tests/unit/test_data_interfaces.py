@@ -275,6 +275,16 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_database_requested.call_args[0][0]
         assert event.database == DATABASE
         assert event.extra_user_roles == EXTRA_USER_ROLES
+        assert event.external_node_connectivity is False
+
+        # Assert that the event will detect a raised external-node-connectivity flag
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {"database": DATABASE, "external-node-connectivity": "true"},
+        )
+        event = _on_database_requested.call_args[0][0]
+        assert event.external_node_connectivity is True
 
     def test_set_endpoints(self):
         """Asserts that the endpoints are in the relation databag when they change."""

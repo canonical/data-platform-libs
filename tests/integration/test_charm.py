@@ -623,6 +623,30 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
     assert first_database_connection_string != second_database_connection_string
 
 
+async def test_external_node_connectivity_field(ops_test: OpsTest, application_charm):
+    # Check that the flag is missing if not requested
+    assert (
+        await get_application_relation_data(
+            ops_test,
+            DATABASE_APP_NAME,
+            "database",
+            "external-node-connectivity",
+            related_endpoint=FIRST_DATABASE_RELATION_NAME,
+        )
+    ) is None
+
+    # Check that the second relation raises the flag
+    assert (
+        await get_application_relation_data(
+            ops_test,
+            DATABASE_APP_NAME,
+            "database",
+            "external-node-connectivity",
+            related_endpoint=SECOND_DATABASE_RELATION_NAME,
+        )
+    ) == "true"
+
+
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_with_additional_secrets(ops_test: OpsTest, database_charm):
     # Let's make sure that there was enough time for the relation initialization to communicate secrets
