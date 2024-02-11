@@ -558,6 +558,18 @@ class CachedSecret:
         if self.meta:
             return self.meta.get_info()
 
+    def remove(self) -> None:
+        """Remove secret."""
+        if not self.meta:
+            raise SecretsUnavailableError("Non-existent secret was attempted to be removed.")
+        try:
+            self.meta.remove_all_revisions()
+        except SecretNotFoundError:
+            pass
+        self._secret_content = {}
+        self._secret_meta = None
+        self._secret_uri = None
+
 
 class SecretCache:
     """A data structure storing CachedSecret objects."""
@@ -603,8 +615,12 @@ class DataRelation(Object, ABC):
         "tls-ca": SecretGroup.TLS,
     }
 
-    def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        super().__init__(charm, relation_name)
+    def __init__(
+        self, charm: CharmBase, relation_name: str, unique_key: Optional[str] = None
+    ) -> None:
+        if not unique_key:
+            unique_key = relation_name
+        super().__init__(charm, unique_key)
         self.charm = charm
         self.local_app = self.charm.model.app
         self.local_unit = self.charm.unit
@@ -799,7 +815,7 @@ class DataRelation(Object, ABC):
         # self.local_app is sufficient to check (ignored if Requires, never has secrets -- works if Provides)
         fallback_to_databag = (
             req_secret_fields
-            and self.local_unit.is_leader()
+            and (self.local_unit == self.charm.unit and self.local_unit.is_leader())
             and set(req_secret_fields) & set(relation.data[self.component])
         )
 
@@ -860,16 +876,19 @@ class DataRelation(Object, ABC):
         normal_fields = []
 
         if not fields:
-            if component not in relation.data or not relation.data[component]:
+            if component not in relation.data:
                 return {}
 
             all_fields = list(relation.data[component].keys())
             normal_fields = [field for field in all_fields if not self._is_secret_field(field)]
-
-            # There must have been secrets there
-            if all_fields != normal_fields and req_secret_fields:
-                # So we assemble the full fields list (without 'secret-<X>' fields)
-                fields = normal_fields + req_secret_fields
+            #
+            # # There must have been secrets there
+            # if all_fields != normal_fields and req_secret_fields:
+            #     # So we assemble the full fields list (without 'secret-<X>' fields)
+            #     fields = normal_fields + req_secret_fields
+            fields = normal_fields
+            if req_secret_fields:
+                fields += req_secret_fields
 
         if fields:
             result, normal_fields = self._process_secret_fields(
@@ -1029,8 +1048,10 @@ class DataRelation(Object, ABC):
 class DataProvides(DataRelation):
     """Base provides-side of the data products relation."""
 
-    def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        super().__init__(charm, relation_name)
+    def __init__(
+        self, charm: CharmBase, relation_name: str, unique_key: Optional[str] = None
+    ) -> None:
+        super().__init__(charm, relation_name, unique_key)
 
     def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
@@ -1136,8 +1157,6 @@ class DataProvides(DataRelation):
                 )
                 return False
 
-        secret.set_content(new_content)
-
         # Remove secret from the relation if it's fully gone
         if not new_content:
             field = self._generate_secret_field_name(group)
@@ -1145,6 +1164,9 @@ class DataProvides(DataRelation):
                 relation.data[self.component].pop(field)
             except KeyError:
                 pass
+            secret.remove()
+        else:
+            secret.set_content(new_content)
 
         # Return the content that was removed
         return True
@@ -1276,9 +1298,10 @@ class DataRequires(DataRelation):
         relation_name: str,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
+        unique_key: Optional[str] = None,
     ):
         """Manager of base client relations."""
-        super().__init__(charm, relation_name)
+        super().__init__(charm, relation_name, unique_key)
         self.extra_user_roles = extra_user_roles
         self._secret_fields = list(self.SECRET_FIELDS)
         if additional_secret_fields:
@@ -1481,10 +1504,16 @@ class DataPeer(DataRequires, DataProvides):
         additional_secret_fields: Optional[List[str]] = [],
         secret_field_name: Optional[str] = None,
         deleted_label: Optional[str] = None,
+        unique_key: Optional[str] = None,
     ):
         """Manager of base client relations."""
         DataRequires.__init__(
-            self, charm, relation_name, extra_user_roles, additional_secret_fields
+            self,
+            charm,
+            relation_name,
+            extra_user_roles,
+            additional_secret_fields,
+            unique_key=unique_key,
         )
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
         self.deleted_label = deleted_label
@@ -1670,6 +1699,16 @@ class DataPeerUnit(DataPeer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+
+class DataPeerOtherUnit(DataPeerUnit):
+    """Unit databag representation for another unit than the executor."""
+
+    def __init__(self, unit: Unit, relation_name: str, *args, **kwargs):
+        unique_key = f"{relation_name}-{unit.name}"
+        super().__init__(unique_key=unique_key, relation_name=relation_name, *args, **kwargs)
+        self.local_unit = unit
+        self.component = unit
 
 
 # General events
