@@ -320,7 +320,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 28
+LIBPATCH = 27
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -584,6 +584,14 @@ class SecretCache:
         secret.add_secret(content, relation)
         self._secrets[label] = secret
         return self._secrets[label]
+
+    def remove(self, label: str) -> None:
+        """Remove a secret from the cache."""
+        if secret := self.get(label):
+            secret.remove()
+            self._secrets.pop(label)
+        else:
+            logging.error("Non-existing Juju Secret was attempted to be removed %s", label)
 
 
 # Base DataRelation
@@ -1481,6 +1489,11 @@ class DataPeer(DataRequires, DataProvides):
         additional_secret_fields: Optional[List[str]] = [],
         secret_field_name: Optional[str] = None,
         deleted_label: Optional[str] = None,
+        # This parameter is specifically set up for charms that had `ca`-like,
+        # Juju Secrets incompatible fields. Don't use this parameter except if you
+        # EXPLICITLY target this case.
+        # NOTE: 'additional_secret_fields' can be specified either before or after translation
+        field_translations: Dict[str, str] = {},
     ):
         """Manager of base client relations."""
         DataRequires.__init__(
@@ -1488,6 +1501,8 @@ class DataPeer(DataRequires, DataProvides):
         )
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
         self.deleted_label = deleted_label
+        self.field_translations = field_translations
+        self._secret_fields = self._bc_translate_list(self._secret_fields)
 
     @property
     def scope(self) -> Optional[Scope]:
@@ -1497,6 +1512,8 @@ class DataPeer(DataRequires, DataProvides):
         if isinstance(self.component, Unit):
             return Scope.UNIT
 
+    # No event handlers needed
+
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
         pass
@@ -1504,6 +1521,114 @@ class DataPeer(DataRequires, DataProvides):
     def _on_secret_changed_event(self, event: SecretChangedEvent) -> None:
         """Event emitted when the secret has changed."""
         pass
+
+    # Backwards compatibility (bc) functions
+
+    def _bc_translate_list(
+        self, content: List[str], relation: Optional[Relation] = None
+    ) -> List[str]:
+        """Backwards compatibility function to deal with legacy secret fields naming.
+
+        Translate (typically incompatible, old) fields to Juju Secrets compatible fields.
+        We only perform a translation, if the old field is not in use in the databag anymore.
+        Relation is optional, as the same function is used to translate self._secret_fields.
+        """
+        # No action taken if no translations specified or if no "old" fields were requested
+        if not self.field_translations or not (
+            impacted := set(self.field_translations) & set(content)
+        ):
+            return content
+
+        translated = content.copy()
+        for old in impacted:
+            new = self.field_translations[old]
+
+            # We translate old field to new secret field, if the old field is not in use in the databag
+            if relation and self._fetch_relation_data_without_secrets(
+                self.component, relation, [old]
+            ):
+                continue
+
+            translated.append(new)
+            translated.remove(old)
+        return translated
+
+    def _bc_translate_dict(self, content: Dict[str, str], relation: Relation) -> Dict[str, str]:
+        """Backwards compatibility function to deal with legacy secret fields naming.
+
+        Translate (typically incompatible, old) fields to Juju Secrets compatible fields.
+        We only perform a translation, if the old field is not in use in the databag anymore.
+        """
+        # No action taken if no translations specified or if no "old" fields were requested
+        if not self.field_translations or not (
+            impacted := set(self.field_translations) & set(content)
+        ):
+            return content
+
+        translated = content.copy()
+        for old in impacted:
+            new = self.field_translations[old]
+
+            # We translate old field to new secret field, if the old field is not in use in the databag
+            if self._fetch_relation_data_without_secrets(self.component, relation, [old]):
+                continue
+
+            translated[new] = translated.pop(old)
+        return translated
+
+    def _bc_reverse_translate(self, fields: Set[str], content: Dict[str, str]):
+        """Switch new field name keys to their old correspondent in a dictionary."""
+        if not self.field_translations or not (
+            impacted := set(content) & set(self.field_translations.values()) & fields
+        ):
+            return content
+
+        inverted = {value: key for key, value in self.field_translations.items()}
+        for new_key in impacted:
+            content[inverted[new_key]] = content.pop(new_key)
+        return content
+
+    def _bc_remove_secret_from_databag(self, relation, fields: List[str]) -> None:
+        """For Rolling Upgrades -- moving from databag to secrets usage.
+
+        Practically what happens here is to remove stuff from the databag that is
+        to be stored in secrets. This function is called right before secrets update,
+        where we're about to add the field that was just deleted as a brand-new
+        secret field.
+        """
+        if not self.secret_fields:
+            return
+
+        translated_fields = self._bc_translate_list(fields, relation)
+        for translated_field in translated_fields:
+            if self._fetch_relation_data_without_secrets(
+                self.component, relation, [translated_field]
+            ):
+                self._delete_relation_data_without_secrets(
+                    self.component, relation, [translated_field]
+                )
+
+    def _bc_verify_if_field_exists_when_deleted_label(
+        self, relation: Relation, fields: List[str]
+    ) -> None:
+        """Determining whether a secret is deleted or not.
+
+        Specific to Juju versions (pre 3.1.6) where secret field deletion was unreliable.
+        Thus a 'DELETED' label was introduced marking deleted fields.
+        """
+        current_data = self.fetch_my_relation_data([relation.id], fields)
+        if current_data is not None and self.secret_fields:
+            # Check if the secret we wanna delete actually exists
+            # Given the "deleted label", here we can't rely on the default mechanism (i.e. 'key not found')
+            if non_existent := (set(fields) & set(self.secret_fields)) - set(
+                current_data.get(relation.id, [])
+            ):
+                logger.error(
+                    "Non-existing secret %s was attempted to be removed.",
+                    ", ".join(non_existent),
+                )
+
+    # Internal overrides of parents, allowing to take advantage of a unified process
 
     def _generate_secret_label(
         self, relation_name: str, relation_id: int, group_mapping: SecretGroup
@@ -1563,77 +1688,54 @@ class DataPeer(DataRequires, DataProvides):
             return result
         return {key: result[key] for key in result if result[key] != self.deleted_label}
 
-    def _remove_secret_from_databag(self, relation, fields: List[str]) -> None:
-        """For Rolling Upgrades -- when moving from databag to secrets usage.
-
-        Practically what happens here is to remove stuff from the databag that is
-        to be stored in secrets.
-        """
-        if not self.secret_fields:
-            return
-
-        secret_fields_passed = set(self.secret_fields) & set(fields)
-        for field in secret_fields_passed:
-            if self._fetch_relation_data_without_secrets(self.component, relation, [field]):
-                self._delete_relation_data_without_secrets(self.component, relation, [field])
-
-    def _fetch_specific_relation_data(
-        self, relation: Relation, fields: Optional[List[str]]
-    ) -> Dict[str, str]:
-        """Fetch data available (directily or indirectly -- i.e. secrets) from the relation."""
-        return self._fetch_relation_data_with_secrets(
-            self.component, self.secret_fields, relation, fields
-        )
-
     def _fetch_my_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
         """Fetch data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
-        return self._fetch_relation_data_with_secrets(
-            self.component, self.secret_fields, relation, fields
+        translated_fields = self._bc_translate_list(fields, relation) if fields else None
+        result = self._fetch_relation_data_with_secrets(
+            self.component, self.secret_fields, relation, translated_fields
         )
+
+        if not fields or not translated_fields or translated_fields == fields:
+            return result
+        return self._bc_reverse_translate(set(translated_fields) - set(fields), result)
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Update data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
-        self._remove_secret_from_databag(relation, list(data.keys()))
+        self._bc_remove_secret_from_databag(relation, list(data.keys()))
+        translated_data = self._bc_translate_dict(data, relation)
         _, normal_fields = self._process_secret_fields(
             relation,
             self.secret_fields,
-            list(data),
+            list(translated_data),
             self._add_or_update_relation_secrets,
-            data=data,
+            data=translated_data,
             uri_to_databag=False,
         )
 
-        normal_content = {k: v for k, v in data.items() if k in normal_fields}
+        normal_content = {k: v for k, v in translated_data.items() if k in normal_fields}
         self._update_relation_data_without_secrets(self.component, relation, normal_content)
 
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
         """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
+        translated_fields = self._bc_translate_list(fields, relation)
         if self.secret_fields and self.deleted_label:
-            current_data = self.fetch_my_relation_data([relation.id], fields)
-            if current_data is not None:
-                # Check if the secret we wanna delete actually exists
-                # Given the "deleted label", here we can't rely on the default mechanism (i.e. 'key not found')
-                if non_existent := (set(fields) & set(self.secret_fields)) - set(
-                    current_data.get(relation.id, [])
-                ):
-                    logger.error(
-                        "Non-existing secret %s was attempted to be removed.",
-                        ", ".join(non_existent),
-                    )
+            self._bc_verify_if_field_exists_when_deleted_label(relation, translated_fields)
+            arguments = {
+                "operation": self._update_relation_secret,
+                "data": {field: self.deleted_label for field in translated_fields},
+            }
 
-            _, normal_fields = self._process_secret_fields(
-                relation,
-                self.secret_fields,
-                fields,
-                self._update_relation_secret,
-                data={field: self.deleted_label for field in fields},
-            )
         else:
-            _, normal_fields = self._process_secret_fields(
-                relation, self.secret_fields, fields, self._delete_relation_secret, fields=fields
-            )
+            arguments = {
+                "operation": self._delete_relation_secret,
+                "fields": translated_fields,
+            }
+
+        _, normal_fields = self._process_secret_fields(
+            relation, self.secret_fields, translated_fields, **arguments
+        )
         self._delete_relation_data_without_secrets(self.component, relation, list(normal_fields))
 
     def fetch_relation_data(
@@ -1795,17 +1897,6 @@ class DatabaseProvidesEvent(RelationEvent):
 
 class DatabaseRequestedEvent(DatabaseProvidesEvent, ExtraRoleEvent):
     """Event emitted when a new database is requested for use on this relation."""
-
-    @property
-    def external_node_connectivity(self) -> bool:
-        """Returns the requested external_node_connectivity field."""
-        if not self.relation.app:
-            return False
-
-        return (
-            self.relation.data[self.relation.app].get("external-node-connectivity", "false")
-            == "true"
-        )
 
 
 class DatabaseProvidesEvents(CharmEvents):
@@ -2025,13 +2116,11 @@ class DatabaseRequires(DataRequires):
         extra_user_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
         additional_secret_fields: Optional[List[str]] = [],
-        external_node_connectivity: bool = False,
     ):
         """Manager of database client relations."""
         super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields)
         self.database = database_name
         self.relations_aliases = relations_aliases
-        self.external_node_connectivity = external_node_connectivity
 
         # Define custom event names for each alias.
         if relations_aliases:
@@ -2182,16 +2271,16 @@ class DatabaseRequires(DataRequires):
         if not self.local_unit.is_leader():
             return
 
-        event_data = {"database": self.database}
-
         if self.extra_user_roles:
-            event_data["extra-user-roles"] = self.extra_user_roles
-
-        # set external-node-connectivity field
-        if self.external_node_connectivity:
-            event_data["external-node-connectivity"] = "true"
-
-        self.update_relation_data(event.relation.id, event_data)
+            self.update_relation_data(
+                event.relation.id,
+                {
+                    "database": self.database,
+                    "extra-user-roles": self.extra_user_roles,
+                },
+            )
+        else:
+            self.update_relation_data(event.relation.id, {"database": self.database})
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
