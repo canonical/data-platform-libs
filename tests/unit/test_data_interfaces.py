@@ -85,8 +85,18 @@ class DatabaseCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.peer_relation_app = DataPeer(self, PEER_RELATION_NAME)
-        self.peer_relation_app = DataPeerUnit(self, PEER_RELATION_NAME)
+        self.peer_relation_app = DataPeer(
+            self,
+            PEER_RELATION_NAME,
+            additional_secret_fields=["cfg_file"],
+            field_translations={"cfg_file": "cfg-file"},
+        )
+        self.peer_relation_unit = DataPeerUnit(
+            self,
+            PEER_RELATION_NAME,
+            additional_secret_fields=["ca"],
+            field_translations={"ca": "ca-auth"},
+        )
         self.provider = DatabaseProvides(
             self,
             DATABASE_RELATION_NAME,
@@ -239,6 +249,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
     def get_harness(self) -> Tuple[Harness, int]:
         harness = Harness(self.charm, meta=self.metadata)
         # Set up the initial relation and hooks.
+        self.peer_rel_id = harness.add_relation(PEER_RELATION_NAME, self.app_name)
         rel_id = harness.add_relation(self.relation_name, "application")
 
         # Juju 3 - specific setup
@@ -567,6 +578,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         with pytest.raises(SecretNotFoundError):
             self.harness.charm.model.get_secret(id=secret_id)
 
+    @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_database_requested_event(self):
         # Test custom event creation
 
@@ -582,6 +594,51 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         with capture(self.harness.charm, DatabaseRequestedEvent) as captured:
             self.harness.update_relation_data(self.rel_id, "application/0", {"database": DATABASE})
         assert captured.event.unit.name == "application/0"
+
+    @parameterized.expand(
+        [
+            ("app", "peer_relation_app", "cfg_file", "cfg-file", True),
+            ("unit", "peer_relation_unit", "ca", "ca-auth", True),
+        ]
+    )
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation(self, scope, endpoint_name, old_field, new_field, is_leader):
+        """Check if we're moving on to use secrets when live upgrade from databag to Secrets usage."""
+        # App has to be leader, unit can be either
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(is_leader)
+
+        endpoint = getattr(self.harness.charm, endpoint_name)
+
+        # Getting current password
+        entity = getattr(self.harness.charm, scope)
+        self.harness.update_relation_data(0, entity.name, {old_field: "bla"})
+        assert endpoint.fetch_my_relation_field(0, old_field) == "bla"
+
+        # Set secret via old name resulting in having it moved from databag to Juju Secret
+        endpoint.update_relation_data(0, {old_field: "blablabla"})
+        assert endpoint.fetch_my_relation_field(0, old_field) == "blablabla"
+        assert endpoint.fetch_my_relation_field(0, new_field) == "blablabla"
+        # A secret was created, while the databag field disappeared
+        assert self.harness.charm.model.get_secret(label=f"database.{scope}")
+        assert old_field not in self.harness.get_relation_data(self.rel_id, "database")
+
+        # Set secret via new name
+        endpoint.update_relation_data(0, {new_field: "blablabla-new"})
+        assert endpoint.fetch_my_relation_field(0, old_field) == "blablabla-new"
+        assert endpoint.fetch_my_relation_field(0, new_field) == "blablabla-new"
+
+        # Delete secret via old name
+        endpoint.delete_relation_data(0, [old_field])
+        assert endpoint.fetch_my_relation_field(0, old_field) is None
+        assert endpoint.fetch_my_relation_field(0, new_field) is None
+
+        # Delete secret via new name
+        endpoint.update_relation_data(0, {new_field: "blablabla-new2"})
+        assert endpoint.fetch_my_relation_field(0, old_field) == "blablabla-new2"
+        endpoint.delete_relation_data(0, [new_field])
+        assert endpoint.fetch_my_relation_field(0, old_field) is None
+        assert endpoint.fetch_my_relation_field(0, new_field) is None
 
     def test_peer_relation_disabled_functions(self):
         """Verify that fetch_relation_data/field() functions are disabled for Peer Relations."""
