@@ -889,10 +889,12 @@ class ApplicationCharmDatabase(CharmBase):
         )
         self.framework.observe(self.requirer.on.endpoints_changed, self._on_endpoints_changed)
         self.framework.observe(
-            self.requirer.on.read_only_endpoints_changed, self._on_read_only_endpoints_changed
+            self.requirer.on.read_only_endpoints_changed,
+            self._on_read_only_endpoints_changed,
         )
         self.framework.observe(
-            self.requirer.on.cluster1_database_created, self._on_cluster1_database_created
+            self.requirer.on.cluster1_database_created,
+            self._on_cluster1_database_created,
         )
 
     def log_relation_size(self, prefix=""):
