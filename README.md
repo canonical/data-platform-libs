@@ -1,4 +1,7 @@
 # Data Platform Libraries for Operator Framework Charms
+[![Charmhub](https://charmhub.io/data-platform-libs/badge.svg)](https://charmhub.io/data-platform-libs)
+[![Release](https://github.com/canonical/data-platform-libs/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/data-platform-libs/actions/workflows/release.yaml)
+[![Tests](https://github.com/canonical/data-platform-libs/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/canonical/data-platform-libs/actions/workflows/ci.yaml)
 
 ## Description
 
