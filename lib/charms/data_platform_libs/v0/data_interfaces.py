@@ -625,10 +625,10 @@ class DataRelation(ABC):
 
     def __init__(
         self,
-        charm: Union[CharmBase, Model],
+        model: Model,
         relation_name: str,
     ) -> None:
-        self._model = charm.model if isinstance(charm, CharmBase) else charm
+        self._model = model
         self.local_app = self._model.app
         self.local_unit = self._model.unit
         self.relation_name = relation_name
@@ -1066,10 +1066,10 @@ class DataProvides(DataRelation):
 
     def __init__(
         self,
-        charm: CharmBase,
+        model: Model,
         relation_name: str,
     ) -> None:
-        super().__init__(charm, relation_name)
+        super().__init__(model, relation_name)
 
     def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
@@ -1313,13 +1313,13 @@ class DataRequires(DataRelation):
 
     def __init__(
         self,
-        charm,
+        model,
         relation_name: str,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of base client relations."""
-        super().__init__(charm, relation_name)
+        super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
         self._secret_fields = list(self.SECRET_FIELDS)
         if additional_secret_fields:
@@ -1528,7 +1528,7 @@ class DataPeerData(DataRequires, DataProvides):
 
     def __init__(
         self,
-        charm,
+        model,
         relation_name: str,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -1538,7 +1538,7 @@ class DataPeerData(DataRequires, DataProvides):
         """Manager of base client relations."""
         DataRequires.__init__(
             self,
-            charm,
+            model,
             relation_name,
             extra_user_roles,
             additional_secret_fields,
@@ -1743,7 +1743,7 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
     ):
         DataPeerData.__init__(
             self,
-            charm,
+            charm.model,
             relation_name,
             extra_user_roles,
             additional_secret_fields,
@@ -1777,7 +1777,7 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
     ):
         DataPeerData.__init__(
             self,
-            charm,
+            charm.model,
             relation_name,
             extra_user_roles,
             additional_secret_fields,
@@ -1821,7 +1821,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
     ):
         DataPeerData.__init__(
             self,
-            charm,
+            charm.model,
             relation_name,
             extra_user_roles,
             additional_secret_fields,
@@ -2079,8 +2079,8 @@ class DatabaseRequiresEvents(CharmEvents):
 class DatabaseProvidesData(DataProvides):
     """Provider-side data of the database relations."""
 
-    def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        super().__init__(charm, relation_name)
+    def __init__(self, model: Model, relation_name: str) -> None:
+        super().__init__(model, relation_name)
 
     def set_database(self, relation_id: int, database_name: str) -> None:
         """Set database name.
@@ -2187,7 +2187,7 @@ class DatabaseProvides(DatabaseProvidesData, DatabaseProvidesEventHandlers):
     """Provider-side of the database relations."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        DatabaseProvidesData.__init__(self, charm, relation_name)
+        DatabaseProvidesData.__init__(self, charm.model, relation_name)
         DatabaseProvidesEventHandlers.__init__(self, charm, self)
 
 
@@ -2196,7 +2196,7 @@ class DatabaseRequiresData(DataRequires):
 
     def __init__(
         self,
-        charm: Union[CharmBase, Model],
+        model: Model,
         relation_name: str,
         database_name: str,
         extra_user_roles: Optional[str] = None,
@@ -2205,7 +2205,7 @@ class DatabaseRequiresData(DataRequires):
         external_node_connectivity: bool = False,
     ):
         """Manager of database client relations."""
-        super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields)
+        super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
         self.database = database_name
         self.relations_aliases = relations_aliases
         self.external_node_connectivity = external_node_connectivity
@@ -2459,7 +2459,7 @@ class DatabaseRequires(DatabaseRequiresData, DatabaseRequiresEventHandlers):
     ):
         DatabaseRequiresData.__init__(
             self,
-            charm,
+            charm.model,
             relation_name,
             database_name,
             extra_user_roles,
@@ -2566,8 +2566,8 @@ class KafkaRequiresEvents(CharmEvents):
 class KafkaProvidesData(DataProvides):
     """Provider-side of the Kafka relation."""
 
-    def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        super().__init__(charm, relation_name)
+    def __init__(self, model: Model, relation_name: str) -> None:
+        super().__init__(model, relation_name)
 
     def set_topic(self, relation_id: int, topic: str) -> None:
         """Set topic name in the application relation databag.
@@ -2637,7 +2637,7 @@ class KafkaProvides(KafkaProvidesData, KafkaProvidesEventHandlers):
     """Provider-side of the Kafka relation."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        KafkaProvidesData.__init__(self, charm, relation_name)
+        KafkaProvidesData.__init__(self, charm.model, relation_name)
         KafkaProvidesEventHandlers.__init__(self, charm, self)
 
 
@@ -2646,7 +2646,7 @@ class KafkaRequiresData(DataRequires):
 
     def __init__(
         self,
-        charm,
+        model: Model,
         relation_name: str,
         topic: str,
         extra_user_roles: Optional[str] = None,
@@ -2654,9 +2654,7 @@ class KafkaRequiresData(DataRequires):
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of Kafka client relations."""
-        # super().__init__(charm, relation_name)
-        super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields)
-        self.charm = charm
+        super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
         self.topic = topic
         self.consumer_group_prefix = consumer_group_prefix or ""
 
@@ -2751,7 +2749,7 @@ class KafkaRequires(KafkaRequiresData, KafkaRequiresEventHandlers):
     ) -> None:
         KafkaRequiresData.__init__(
             self,
-            charm,
+            charm.model,
             relation_name,
             topic,
             extra_user_roles,
@@ -2814,8 +2812,8 @@ class OpenSearchRequiresEvents(CharmEvents):
 class OpenSearchProvidesData(DataProvides):
     """Provider-side of the OpenSearch relation."""
 
-    def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        super().__init__(charm, relation_name)
+    def __init__(self, model: Model, relation_name: str) -> None:
+        super().__init__(model, relation_name)
 
     def set_index(self, relation_id: int, index: str) -> None:
         """Set the index in the application relation databag.
@@ -2877,7 +2875,7 @@ class OpenSearchProvides(OpenSearchProvidesData, OpenSearchProvidesEventHandlers
     """Provider-side of the OpenSearch relation."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        OpenSearchProvidesData.__init__(self, charm, relation_name)
+        OpenSearchProvidesData.__init__(self, charm.model, relation_name)
         OpenSearchProvidesEventHandlers.__init__(self, charm, self)
 
 
@@ -2886,15 +2884,14 @@ class OpenSearchRequiresData(DataRequires):
 
     def __init__(
         self,
-        charm,
+        model: Model,
         relation_name: str,
         index: str,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of OpenSearch client relations."""
-        super().__init__(charm, relation_name, extra_user_roles, additional_secret_fields)
-        self.charm = charm
+        super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
         self.index = index
 
 
@@ -3006,7 +3003,7 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
     ) -> None:
         OpenSearchRequiresData.__init__(
             self,
-            charm,
+            charm.model,
             relation_name,
             index,
             extra_user_roles,
