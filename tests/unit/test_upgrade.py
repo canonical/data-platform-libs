@@ -6,7 +6,6 @@ import logging
 
 import pytest
 from ops.charm import CharmBase
-from ops.framework import EventBase
 from ops.model import BlockedStatus
 from ops.testing import Harness
 from pydantic import ValidationError
@@ -769,7 +768,8 @@ def test_upgrade_charm_sets_right_state(harness, mocker, substrate, state):
     assert harness.charm.upgrade.state == state
 
 
-def test_upgrade_changed_defers_if_recovery(harness, mocker):
+def test_upgrade_changed_return_if_recovery(harness, caplog):
+    caplog.set_level(logging.DEBUG)
     harness.charm.upgrade = GandalfUpgrade(
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="vm"
     )
@@ -779,12 +779,12 @@ def test_upgrade_changed_defers_if_recovery(harness, mocker):
     with harness.hooks_disabled():
         harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
 
-    defer_spy = mocker.spy(EventBase, "defer")
     harness.update_relation_data(
         harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "failed"}
     )
 
-    assert defer_spy.call_count == 1
+    assert len(caplog.records) == 1
+    assert caplog.records[-1].message == "Cluster in recovery, skip..."
 
 
 def test_upgrade_changed_sets_idle_and_deps_if_all_completed(harness):
