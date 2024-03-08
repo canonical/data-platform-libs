@@ -814,7 +814,7 @@ class Data(ABC):
 
         # If the relation started on a databag, we just stay on the databag
         # (Rolling upgrades may result in a relation starting on databag, getting secrets enabled on-the-fly)
-        # self.local_app is sufficient to check (ignored if Requires, never has secrets -- works if Provides)
+        # self.local_app is sufficient to check (ignored if Requires, never has secrets -- works if Provider)
         fallback_to_databag = (
             req_secret_fields
             and (self.local_unit == self._model.unit and self.local_unit.is_leader())
@@ -847,7 +847,7 @@ class Data(ABC):
 
         Since the Provider's databag is the only one holding secrest, we can apply
         a simplified workflow to read the Require's side's databag.
-        This is used typically when the Provides side wants to read the Requires side's data,
+        This is used typically when the Provider side wants to read the Requires side's data,
         or when the Requires side may want to read its own data.
         """
         if component not in relation.data or not relation.data[component]:
@@ -871,8 +871,8 @@ class Data(ABC):
 
         This function has internal logic to resolve if a requested field may be "hidden"
         within a Relation Secret, or directly available as a databag field. Typically
-        used to read the Provides side's databag (eigher by the Requires side, or by
-        Provides side itself).
+        used to read the Provider side's databag (eigher by the Requires side, or by
+        Provider side itself).
         """
         result = {}
         normal_fields = []
@@ -891,7 +891,7 @@ class Data(ABC):
             )
 
         # Processing "normal" fields. May include leftover from what we couldn't retrieve as a secret.
-        # (Typically when Juju3 Requires meets Juju2 Provides)
+        # (Typically when Juju3 Requires meets Juju2 Provider)
         if normal_fields:
             result.update(
                 self._fetch_relation_data_without_secrets(component, relation, list(normal_fields))
@@ -1072,10 +1072,10 @@ class EventHandlers(Object):
         raise NotImplementedError
 
 
-# Base ProvidesData and RequiresData
+# Base ProviderData and RequiresData
 
 
-class ProvidesData(Data):
+class ProviderData(Data):
     """Base provides-side of the data products relation."""
 
     def __init__(
@@ -1218,9 +1218,9 @@ class ProvidesData(Data):
     def _fetch_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
-        """Fetching relation data for Provides.
+        """Fetching relation data for Provider.
 
-        NOTE: Since all secret fields are in the Provides side of the databag, we don't need to worry about that
+        NOTE: Since all secret fields are in the Provider side of the databag, we don't need to worry about that
         """
         if not relation.app:
             return {}
@@ -1309,8 +1309,8 @@ class ProvidesData(Data):
     fetch_my_relation_field = leader_only(Data.fetch_my_relation_field)
 
 
-class RequiresData(Data):
-    """Requires-side of the relation."""
+class RequirerData(Data):
+    """Requirer-side of the relation."""
 
     SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
 
@@ -1347,7 +1347,7 @@ class RequiresData(Data):
         then <arbitraty_label> will be "stuck" on the Secret object, whenever it may
         appear (i.e. as an event attribute, or fetched manually) on future occasions.
 
-        This will allow us to uniquely identify the secret on Provides side (typically on
+        This will allow us to uniquely identify the secret on Provider side (typically on
         'secret-changed' events), and map it to the corresponding relation.
         """
         label = self._generate_secret_label(relation_name, relation_id, group)
@@ -1429,7 +1429,7 @@ class RequiresData(Data):
     def _fetch_specific_relation_data(
         self, relation, fields: Optional[List[str]] = None
     ) -> Dict[str, str]:
-        """Fetching Requires data -- that may include secrets."""
+        """Fetching Requirer data -- that may include secrets."""
         if not relation.app:
             return {}
         return self._fetch_relation_data_with_secrets(
@@ -1471,10 +1471,10 @@ class RequiresData(Data):
     fetch_my_relation_field = leader_only(Data.fetch_my_relation_field)
 
 
-class RequiresEventHandlers(EventHandlers):
+class RequirerEventHandlers(EventHandlers):
     """Requires-side of the relation."""
 
-    def __init__(self, charm: CharmBase, relation_data: RequiresData, unique_key: str = ""):
+    def __init__(self, charm: CharmBase, relation_data: RequirerData, unique_key: str = ""):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
 
@@ -1511,7 +1511,7 @@ class RequiresEventHandlers(EventHandlers):
 # Base DataPeer
 
 
-class DataPeerData(RequiresData, ProvidesData):
+class DataPeerData(RequirerData, ProviderData):
     """Represents peer relations data."""
 
     SECRET_FIELDS = ["operator-password"]
@@ -1528,7 +1528,7 @@ class DataPeerData(RequiresData, ProvidesData):
         deleted_label: Optional[str] = None,
     ):
         """Manager of base client relations."""
-        RequiresData.__init__(
+        RequirerData.__init__(
             self,
             model,
             relation_name,
@@ -1707,7 +1707,7 @@ class DataPeerData(RequiresData, ProvidesData):
 class DataPeerEventHandlers(EventHandlers):
     """Requires-side of the relation."""
 
-    def __init__(self, charm: CharmBase, relation_data: RequiresData, unique_key: str = ""):
+    def __init__(self, charm: CharmBase, relation_data: RequirerData, unique_key: str = ""):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
 
@@ -2068,7 +2068,7 @@ class DatabaseRequiresEvents(CharmEvents):
 # Database Provider and Requires
 
 
-class DatabaseProvidesData(ProvidesData):
+class DatabaseProviderData(ProviderData):
     """Provider-side data of the database relations."""
 
     def __init__(self, model: Model, relation_name: str) -> None:
@@ -2146,13 +2146,13 @@ class DatabaseProvidesData(ProvidesData):
         self.update_relation_data(relation_id, {"version": version})
 
 
-class DatabaseProvidesEventHandlers(EventHandlers):
+class DatabaseProviderEventHandlers(EventHandlers):
     """Provider-side of the database relation handlers."""
 
     on = DatabaseProvidesEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(
-        self, charm: CharmBase, relation_data: DatabaseProvidesData, unique_key: str = ""
+        self, charm: CharmBase, relation_data: DatabaseProviderData, unique_key: str = ""
     ):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
@@ -2175,16 +2175,16 @@ class DatabaseProvidesEventHandlers(EventHandlers):
             )
 
 
-class DatabaseProvides(DatabaseProvidesData, DatabaseProvidesEventHandlers):
+class DatabaseProvides(DatabaseProviderData, DatabaseProviderEventHandlers):
     """Provider-side of the database relations."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        DatabaseProvidesData.__init__(self, charm.model, relation_name)
-        DatabaseProvidesEventHandlers.__init__(self, charm, self)
+        DatabaseProviderData.__init__(self, charm.model, relation_name)
+        DatabaseProviderEventHandlers.__init__(self, charm, self)
 
 
-class DatabaseRequiresData(RequiresData):
-    """Requires-side of the database relation."""
+class DatabaseRequirerData(RequirerData):
+    """Requirer-side of the database relation."""
 
     def __init__(
         self,
@@ -2252,13 +2252,13 @@ class DatabaseRequiresData(RequiresData):
             return False
 
 
-class DatabaseRequiresEventHandlers(RequiresEventHandlers):
+class DatabaseRequirerEventHandlers(RequirerEventHandlers):
     """Requires-side of the relation."""
 
     on = DatabaseRequiresEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(
-        self, charm: CharmBase, relation_data: DatabaseRequiresData, unique_key: str = ""
+        self, charm: CharmBase, relation_data: DatabaseRequirerData, unique_key: str = ""
     ):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
@@ -2436,7 +2436,7 @@ class DatabaseRequiresEventHandlers(RequiresEventHandlers):
             self._emit_aliased_event(event, "read_only_endpoints_changed")
 
 
-class DatabaseRequires(DatabaseRequiresData, DatabaseRequiresEventHandlers):
+class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
     """Provider-side of the database relations."""
 
     def __init__(
@@ -2449,7 +2449,7 @@ class DatabaseRequires(DatabaseRequiresData, DatabaseRequiresEventHandlers):
         additional_secret_fields: Optional[List[str]] = [],
         external_node_connectivity: bool = False,
     ):
-        DatabaseRequiresData.__init__(
+        DatabaseRequirerData.__init__(
             self,
             charm.model,
             relation_name,
@@ -2459,7 +2459,7 @@ class DatabaseRequires(DatabaseRequiresData, DatabaseRequiresEventHandlers):
             additional_secret_fields,
             external_node_connectivity,
         )
-        DatabaseRequiresEventHandlers.__init__(self, charm, self)
+        DatabaseRequirerEventHandlers.__init__(self, charm, self)
 
 
 # Kafka related events
@@ -2555,7 +2555,7 @@ class KafkaRequiresEvents(CharmEvents):
 # Kafka Provides and Requires
 
 
-class KafkaProvidesData(ProvidesData):
+class KafkaProvidesData(ProviderData):
     """Provider-side of the Kafka relation."""
 
     def __init__(self, model: Model, relation_name: str) -> None:
@@ -2633,8 +2633,8 @@ class KafkaProvides(KafkaProvidesData, KafkaProvidesEventHandlers):
         KafkaProvidesEventHandlers.__init__(self, charm, self)
 
 
-class KafkaRequiresData(RequiresData):
-    """Requires-side of the Kafka relation."""
+class KafkaRequiresData(RequirerData):
+    """Requirer-side of the Kafka relation."""
 
     def __init__(
         self,
@@ -2663,7 +2663,7 @@ class KafkaRequiresData(RequiresData):
         self._topic = value
 
 
-class KafkaRequiresEventHandlers(RequiresEventHandlers):
+class KafkaRequiresEventHandlers(RequirerEventHandlers):
     """Requires-side of the Kafka relation."""
 
     on = KafkaRequiresEvents()  # pyright: ignore [reportAssignmentType]
@@ -2801,7 +2801,7 @@ class OpenSearchRequiresEvents(CharmEvents):
 # OpenSearch Provides and Requires Objects
 
 
-class OpenSearchProvidesData(ProvidesData):
+class OpenSearchProvidesData(ProviderData):
     """Provider-side of the OpenSearch relation."""
 
     def __init__(self, model: Model, relation_name: str) -> None:
@@ -2871,7 +2871,7 @@ class OpenSearchProvides(OpenSearchProvidesData, OpenSearchProvidesEventHandlers
         OpenSearchProvidesEventHandlers.__init__(self, charm, self)
 
 
-class OpenSearchRequiresData(RequiresData):
+class OpenSearchRequiresData(RequirerData):
     """Requires data side of the OpenSearch relation."""
 
     def __init__(
@@ -2887,7 +2887,7 @@ class OpenSearchRequiresData(RequiresData):
         self.index = index
 
 
-class OpenSearchRequiresEventHandlers(RequiresEventHandlers):
+class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
     """Requires events side of the OpenSearch relation."""
 
     on = OpenSearchRequiresEvents()  # pyright: ignore[reportAssignmentType]
