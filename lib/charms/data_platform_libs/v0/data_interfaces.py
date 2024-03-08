@@ -397,7 +397,7 @@ def set_encoded_field(
     relation.data[member].update({field: json.dumps(value)})
 
 
-def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
+def diff(event: RelationChangedEvent, bucket: Optional[Union[Unit, Application]]) -> Diff:
     """Retrieves the diff of the data in the relation changed databag.
 
     Args:
@@ -409,6 +409,9 @@ def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
             keys from the event relation databag.
     """
     # Retrieve the old data from the data key in the application relation databag.
+    if not bucket:
+        return Diff([], [], [])
+
     old_data = get_encoded_dict(event.relation, bucket, "data")
 
     if not old_data:
@@ -635,6 +638,7 @@ class Data(ABC):
         self._jujuversion = None
         self.component = self.local_app if self.SCOPE == Scope.APP else self.local_unit
         self.secrets = SecretCache(self._model, self.component)
+        self.data_component = None
 
     @property
     def relations(self) -> List[Relation]:
@@ -1050,7 +1054,17 @@ class EventHandlers(Object):
             self._on_relation_changed_event,
         )
 
-    # Event handlers
+    def _diff(self, event: RelationChangedEvent) -> Diff:
+        """Retrieves the diff of the data in the relation changed databag.
+
+        Args:
+            event: relation changed event.
+
+        Returns:
+            a Diff instance containing the added, deleted and changed
+                keys from the event relation databag.
+        """
+        return diff(event, self.relation_data.data_component)
 
     @abstractmethod
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
@@ -1070,18 +1084,7 @@ class ProvidesData(Data):
         relation_name: str,
     ) -> None:
         super().__init__(model, relation_name)
-
-    def _diff(self, event: RelationChangedEvent) -> Diff:
-        """Retrieves the diff of the data in the relation changed databag.
-
-        Args:
-            event: relation changed event.
-
-        Returns:
-            a Diff instance containing the added, deleted and changed
-                keys from the event relation databag.
-        """
-        return diff(event, self.local_app)
+        self.data_component = self.local_app
 
     # Private methods handling secrets
 
@@ -1324,24 +1327,13 @@ class RequiresData(Data):
         self._secret_fields = list(self.SECRET_FIELDS)
         if additional_secret_fields:
             self._secret_fields += additional_secret_fields
+        self.data_component = self.local_unit
 
     @property
     def secret_fields(self) -> Optional[List[str]]:
         """Local access to secrets field, in case they are being used."""
         if self.secrets_enabled:
             return self._secret_fields
-
-    def _diff(self, event: RelationChangedEvent) -> Diff:
-        """Retrieves the diff of the data in the relation changed databag.
-
-        Args:
-            event: relation changed event.
-
-        Returns:
-            a Diff instance containing the added, deleted and changed
-                keys from the event relation databag.
-        """
-        return diff(event, self.local_unit)
 
     # Internal helper functions
 
@@ -2173,7 +2165,7 @@ class DatabaseProvidesEventHandlers(EventHandlers):
         if not self.relation_data.local_unit.is_leader():
             return
         # Check which data has changed to emit customs events.
-        diff = self.relation_data._diff(event)
+        diff = self._diff(event)
 
         # Emit a database requested event if the setup key (database name and optional
         # extra user roles) was added to the relation databag by the application.
@@ -2390,7 +2382,7 @@ class DatabaseRequiresEventHandlers(RequiresEventHandlers):
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
         # Check which data has changed to emit customs events.
-        diff = self.relation_data._diff(event)
+        diff = self._diff(event)
 
         # Register all new secrets with their labels
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
@@ -2623,7 +2615,7 @@ class KafkaProvidesEventHandlers(EventHandlers):
             return
 
         # Check which data has changed to emit customs events.
-        diff = self.relation_data._diff(event)
+        diff = self._diff(event)
 
         # Emit a topic requested event if the setup key (topic name and optional
         # extra user roles) was added to the relation databag by the application.
@@ -2703,7 +2695,7 @@ class KafkaRequiresEventHandlers(RequiresEventHandlers):
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the Kafka relation has changed."""
         # Check which data has changed to emit customs events.
-        diff = self.relation_data._diff(event)
+        diff = self._diff(event)
 
         # Check if the topic is created
         # (the Kafka charm shared the credentials).
@@ -2861,7 +2853,7 @@ class OpenSearchProvidesEventHandlers(EventHandlers):
         if not self.relation_data.local_unit.is_leader():
             return
         # Check which data has changed to emit customs events.
-        diff = self.relation_data._diff(event)
+        diff = self._diff(event)
 
         # Emit an index requested event if the setup key (index name and optional extra user roles)
         # have been added to the relation databag by the application.
@@ -2951,7 +2943,7 @@ class OpenSearchRequiresEventHandlers(RequiresEventHandlers):
         This event triggers individual custom events depending on the changing relation.
         """
         # Check which data has changed to emit customs events.
-        diff = self.relation_data._diff(event)
+        diff = self._diff(event)
 
         # Register all new secrets with their labels
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
