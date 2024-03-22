@@ -57,7 +57,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
                 ]
             },
             application_name=DATABASE_APP_NAME,
-            num_units=2,
+            num_units=3,
             series="jammy",
         ),
         ops_test.model.deploy(
@@ -72,7 +72,10 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
         ),
     )
     await ops_test.model.wait_for_idle(
-        apps=[APPLICATION_APP_NAME, DATABASE_APP_NAME], status="active", wait_for_exact_units=2
+        apps=[APPLICATION_APP_NAME], status="active", wait_for_exact_units=2
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[DATABASE_APP_NAME], status="active", wait_for_exact_units=3
     )
     await ops_test.model.wait_for_idle(
         apps=[ANOTHER_DATABASE_APP_NAME], status="active", wait_for_exact_units=1
@@ -388,6 +391,102 @@ async def test_peer_relation_non_leader_can_read_app_data(ops_test: OpsTest):
     )
     await action.wait()
     assert action.results.get("value") == "plain text"
+
+
+@pytest.mark.abort_on_fail
+async def test_other_peer_relation(ops_test: OpsTest):
+    """Testing peer relation using the DataPeer class."""
+    # Setting and verifying two secret fields
+    component = "unit"
+    units = ops_test.model.applications[DATABASE_APP_NAME].units
+    for unit in units:
+        action = await unit.run_action(
+            "set-peer-relation-field",
+            **{"component": component, "field": "monitor-password", "value": "blablabla"},
+        )
+        await action.wait()
+
+        action = await unit.run_action(
+            "set-peer-relation-field",
+            **{"component": component, "field": "non-secret-field", "value": "blablabla2"},
+        )
+        await action.wait()
+
+    for main_unit in units:
+
+        action = await main_unit.run_action(
+            "get-other-peer-relation-field", **{"field": "monitor-password"}
+        )
+        await action.wait()
+
+        for unit in units:
+            if unit != main_unit:
+                assert action.results.get(unit.name.replace("/", "-")) == "blablabla"
+
+        action = await main_unit.run_action(
+            "get-other-peer-relation-field", **{"field": "non-secret-field"}
+        )
+        await action.wait()
+
+        for unit in units:
+            if unit != main_unit:
+                assert action.results.get(unit.name.replace("/", "-")) == "blablabla2"
+
+
+@pytest.mark.abort_on_fail
+async def test_other_peer_relation_scale(ops_test: OpsTest):
+    """The scaling test is the 'continuation' of the previous (test_other_peer_relation()) test.
+
+    We assume data set up there.
+    """
+    await ops_test.model.applications[DATABASE_APP_NAME].scale(scale_change=-1)
+    await ops_test.model.wait_for_idle(
+        apps=[DATABASE_APP_NAME], status="active", wait_for_exact_units=2
+    )
+    units = ops_test.model.applications[DATABASE_APP_NAME].units
+
+    for main_unit in units:
+
+        action = await main_unit.run_action(
+            "get-other-peer-relation-field", **{"field": "monitor-password"}
+        )
+        await action.wait()
+
+        for unit in units:
+            if unit != main_unit:
+                assert action.results.get(unit.name.replace("/", "-")) == "blablabla"
+
+        action = await main_unit.run_action(
+            "get-other-peer-relation-field", **{"field": "non-secret-field"}
+        )
+        await action.wait()
+
+        for unit in units:
+            if unit != main_unit:
+                assert action.results.get(unit.name.replace("/", "-")) == "blablabla2"
+
+    await ops_test.model.applications[DATABASE_APP_NAME].add_units(count=1)
+    await ops_test.model.wait_for_idle(
+        apps=[DATABASE_APP_NAME], status="active", wait_for_exact_units=3
+    )
+    new_units = ops_test.model.applications[DATABASE_APP_NAME].units
+    unit = list(set(new_units) - set(units))[0]
+
+    for main_unit in units:
+
+        action = await main_unit.run_action(
+            "get-other-peer-relation-field", **{"field": "monitor-password"}
+        )
+        await action.wait()
+
+        assert action.results.get(unit) is None
+
+        action = await main_unit.run_action(
+            "get-other-peer-relation-field", **{"field": "non-secret-field"}
+        )
+        await action.wait()
+
+        assert action.results.get(unit) is None
 
 
 @pytest.mark.abort_on_fail
