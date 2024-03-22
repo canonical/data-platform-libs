@@ -32,6 +32,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
 if DATA_INTERFACES_VERSION > 17:
     from charms.data_platform_libs.v0.data_interfaces import (
         DataPeer,
+        DataPeerOtherUnit,
         DataPeerUnit,
     )
 
@@ -41,6 +42,8 @@ logger = logging.getLogger(__name__)
 SECRET_INTERNAL_LABEL = "internal-secret"
 SECRET_DELETED_LABEL = "#DELETED#"
 PEER = "database-peers"
+APP_SECRETS = ["monitor-password", "secret-field"]
+UNIT_SECRETS = ["monitor-password", "secret-field", "my-unit-secret"]
 
 
 class DatabaseCharm(CharmBase):
@@ -50,22 +53,20 @@ class DatabaseCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self._servers_data = {}
 
         if DATA_INTERFACES_VERSION > 17:
             self.peer_relation_app = DataPeer(
                 self,
                 relation_name=PEER,
-                additional_secret_fields=[
-                    "monitor-password",
-                    "secret-field",
-                ],
+                additional_secret_fields=APP_SECRETS,
                 secret_field_name=SECRET_INTERNAL_LABEL,
                 deleted_label=SECRET_DELETED_LABEL,
             )
             self.peer_relation_unit = DataPeerUnit(
                 self,
                 relation_name=PEER,
-                additional_secret_fields=["monitor-password", "secret-field", "my-unit-secret"],
+                additional_secret_fields=UNIT_SECRETS,
                 secret_field_name=SECRET_INTERNAL_LABEL,
                 deleted_label=SECRET_DELETED_LABEL,
             )
@@ -106,6 +107,34 @@ class DatabaseCharm(CharmBase):
             self.on.delete_peer_relation_field_action, self._on_delete_peer_relation_field
         )
         self.framework.observe(self.on.delete_peer_secret_action, self._on_delete_peer_secret)
+
+        self.framework.observe(
+            self.on.get_other_peer_relation_field_action, self._on_get_other_peer_relation_field
+        )
+
+    @property
+    def peer_relation(self) -> Relation | None:
+        """The cluster peer relation."""
+        return self.model.get_relation(PEER)
+
+    @property
+    def peer_units_data_interfaces(self) -> dict:
+        """The cluster peer relation."""
+        if DATA_INTERFACES_VERSION <= 17:
+            return {}
+
+        if not self.peer_relation or not self.peer_relation.units:
+            return {}
+
+        for unit in self.peer_relation.units:
+            if unit not in self._servers_data:
+                self._servers_data[unit] = DataPeerOtherUnit(
+                    charm=self,
+                    unit=unit,
+                    relation_name=PEER,
+                    additional_secret_fields=UNIT_SECRETS,
+                )
+        return self._servers_data
 
     def _on_change_admin_password(self, event: ActionEvent):
         """Change the admin password."""
@@ -330,6 +359,19 @@ class DatabaseCharm(CharmBase):
             relation = self.peer_relation_unit.relations[0]
             self.peer_relation_unit.delete_relation_data(relation.id, [event.params["field"]])
 
+    # Other Peer Data
+    def _on_get_other_peer_relation_field(self, event: ActionEvent):
+        """[second_database]: Set requested relation field."""
+        value = {}
+        relation = self.model.get_relation(PEER)
+        if DATA_INTERFACES_VERSION > 17:
+            for unit, interface in self.peer_units_data_interfaces.items():
+                value[unit.name.replace("/", "-")] = interface.fetch_my_relation_field(
+                    relation.id, event.params["field"]
+                )
+        event.set_results(value)
+
+    # Remove peer secrets
     def _on_delete_peer_secret(self, event: ActionEvent):
         """Delete requested relation field."""
         component = event.params["component"]
