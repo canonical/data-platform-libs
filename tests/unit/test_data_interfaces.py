@@ -6,13 +6,14 @@ import re
 import unittest
 from abc import ABC, abstractmethod
 from logging import getLogger
-from typing import Tuple, Type
+from typing import Dict, Tuple, Type
 from unittest.mock import Mock, patch
 
 import psycopg
 import pytest
 from ops import JujuVersion, SecretChangedEvent, SecretNotFoundError
 from ops.charm import CharmBase
+from ops.model import Relation, Unit
 from ops.testing import Harness
 from parameterized import parameterized
 
@@ -27,6 +28,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseRequires,
     DatabaseRequiresEvents,
     DataPeer,
+    DataPeerOtherUnit,
     DataPeerUnit,
     Diff,
     IndexRequestedEvent,
@@ -80,18 +82,67 @@ provides:
 """
 
 
+#
+# Helper functions
+#
+
+
+def verify_relation_interface_functions(interface, relation_id):
+    """This function is used to verify that the 3 main interface functions work correctly."""
+    # Interface function: update_relation_data()
+    interface.update_relation_data(relation_id, {"something": "else"})
+
+    # Interface function: fetch_relation_field()
+    assert interface.fetch_my_relation_field(relation_id, "something") == "else"
+
+    # Interface function: fetch_relation_data()
+    rel_data = interface.fetch_my_relation_data([relation_id], ["something"])
+    assert rel_data[relation_id]["something"] == "else"
+
+    # Interface function: delete_relation_data()
+    interface.delete_relation_data(relation_id, ["something"])
+
+    assert interface.fetch_my_relation_field(relation_id, "something") is None
+    rel_data = interface.fetch_my_relation_data([relation_id], ["something"])
+    assert rel_data[relation_id] == {}
+
+
+#
+# Test Charms
+#
+
+
 class DatabaseCharm(CharmBase):
     """Mock database charm to use in units tests."""
 
     def __init__(self, *args):
         super().__init__(*args)
         self.peer_relation_app = DataPeer(self, PEER_RELATION_NAME)
-        self.peer_relation_app = DataPeerUnit(self, PEER_RELATION_NAME)
+        self.peer_relation_unit = DataPeerUnit(self, PEER_RELATION_NAME)
         self.provider = DatabaseProvides(
             self,
             DATABASE_RELATION_NAME,
         )
+        self._servers_data = {}
         self.framework.observe(self.provider.on.database_requested, self._on_database_requested)
+
+    @property
+    def peer_relation(self) -> Relation | None:
+        """The cluster peer relation."""
+        return self.model.get_relation(PEER_RELATION_NAME)
+
+    @property
+    def peer_units_data_interfaces(self) -> Dict[Unit, DataPeerOtherUnit]:
+        """The cluster peer relation."""
+        if not self.peer_relation or not self.peer_relation.units:
+            return {}
+
+        for unit in self.peer_relation.units:
+            if unit not in self._servers_data:
+                self._servers_data[unit] = DataPeerOtherUnit(
+                    charm=self, unit=unit, relation_name=PEER_RELATION_NAME
+                )
+        return self._servers_data
 
     def _on_database_requested(self, _) -> None:
         pass
@@ -125,6 +176,11 @@ class OpenSearchCharm(CharmBase):
 
     def _on_index_requested(self, _) -> None:
         pass
+
+
+#
+# Tests
+#
 
 
 class DataProvidesBaseTests(ABC):
@@ -181,6 +237,11 @@ class DataProvidesBaseTests(ABC):
         del data["password"]
         result = self.harness.charm.provider._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
+
+    def test_relation_interfce(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.provider
+        verify_relation_interface_functions(interface, self.rel_id)
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_credentials(self):
@@ -240,6 +301,9 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         harness = Harness(self.charm, meta=self.metadata)
         # Set up the initial relation and hooks.
         rel_id = harness.add_relation(self.relation_name, "application")
+        peer_rel_id = harness.add_relation(PEER_RELATION_NAME, self.app_name)
+        harness.add_relation_unit(peer_rel_id, f"{self.app_name}/1")
+        harness.add_relation_unit(peer_rel_id, f"{self.app_name}/2")
 
         # Juju 3 - specific setup
         self.setup_secrets_if_needed(harness, rel_id)
@@ -256,6 +320,87 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         application = self.harness.charm.model.get_app("database")
         self.harness.charm.provider.on.database_requested.emit(relation, application)
         return _on_database_requested.call_args[0][0]
+
+    #
+    # Peer Data tests
+    #
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    def test_peer_relation_disabled_functions(self, interface_attr):
+        """Verify that fetch_relation_data/field() functions are disabled for Peer Relations."""
+        interface = getattr(self.harness.charm, interface_attr)
+        with pytest.raises(NotImplementedError):
+            interface.fetch_relation_data(0, ["key"])
+
+        with pytest.raises(NotImplementedError):
+            interface.fetch_relation_field(0, "key")
+
+    def test_other_peer_relation_disabled_functions(self):
+        """Verify that fetch_relation_data/field() functions are disabled for Peer Relations."""
+        for unit, interface in self.harness.charm.peer_units_data_interfaces.items():
+            with pytest.raises(NotImplementedError):
+                interface.update_relation_data(0, {"key": "value"})
+
+            with pytest.raises(NotImplementedError):
+                interface.delete_relation_data(0, ["key"])
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    def test_peer_relation_interfce(self, interface_attr):
+        """Check the functionality of each public interface function."""
+        interface = getattr(self.harness.charm, interface_attr)
+        verify_relation_interface_functions(interface, self.harness.charm.peer_relation.id)
+
+    def test_peer_relation_other_unit(self):
+        """Check the functionality of each public interface function on each "other" unit."""
+        relation_id = self.harness.charm.peer_relation.id
+        for unit, interface in self.harness.charm.peer_units_data_interfaces.items():
+
+            self.harness.update_relation_data(relation_id, unit.name, {"something": "else"})
+
+            # fetch_relation_field()
+            assert interface.fetch_my_relation_field(relation_id, "something") == "else"
+
+            # fetch_relation_data()
+            rel_data = interface.fetch_my_relation_data([relation_id], ["something"])
+            assert rel_data[relation_id]["something"] == "else"
+
+            assert interface.fetch_my_relation_field(relation_id, "non-existent-field") is None
+            rel_data = interface.fetch_my_relation_data([relation_id], ["non-existent-field"])
+            assert rel_data[relation_id] == {}
+
+    #
+    # Relation Data tests
+    #
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_provider_interface_functions(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.provider
+        verify_relation_interface_functions(interface, self.rel_id)
+
+        rel_data = interface.fetch_relation_data()
+        assert rel_data == {0: {}}
+        rel_data = interface.fetch_my_relation_data()
+        assert rel_data == {0: {"data": json.dumps({})}}
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_provider_interface_functions_secrets(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.provider
+        verify_relation_interface_functions(interface, self.rel_id)
+
+        rel_data = interface.fetch_relation_data()
+        assert rel_data == {
+            0: {"requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]'}
+        }
+        rel_data = interface.fetch_my_relation_data()
+        assert rel_data == {
+            0: {
+                "data": json.dumps(
+                    {"requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]'}
+                )
+            }
+        }
 
     @patch.object(DatabaseCharm, "_on_database_requested")
     def test_on_database_requested(self, _on_database_requested):
@@ -582,14 +727,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         with capture(self.harness.charm, DatabaseRequestedEvent) as captured:
             self.harness.update_relation_data(self.rel_id, "application/0", {"database": DATABASE})
         assert captured.event.unit.name == "application/0"
-
-    def test_peer_relation_disabled_functions(self):
-        """Verify that fetch_relation_data/field() functions are disabled for Peer Relations."""
-        with pytest.raises(NotImplementedError):
-            self.harness.charm.peer_relation_app.fetch_relation_data(0, ["key"])
-
-        with pytest.raises(NotImplementedError):
-            self.harness.charm.peer_relation_app.fetch_relation_field(0, "key")
 
 
 class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
@@ -1052,6 +1189,11 @@ class DataRequirerBaseTests(ABC):
         result = self.harness.charm.requirer._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
 
+    def test_relation_interfce(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_functions(interface, self.rel_id)
+
 
 class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
     metadata = METADATA
@@ -1071,6 +1213,10 @@ class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
     def test_non_existing_resource_created(self):
         self.assertRaises(IndexError, lambda: self.harness.charm.requirer.is_resource_created(0))
         self.assertRaises(IndexError, lambda: self.harness.charm.requirer.is_resource_created(1))
+
+    def test_relation_interfce(self):
+        """Disabling irrelevant inherited test."""
+        pass
 
     def test_hide_relation_on_broken_event(self):
         with self.assertLogs(logger, "INFO") as logs:
@@ -1107,6 +1253,43 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness = self.get_harness()
         self.rel_id = self.add_relation(self.harness, self.provider)
         self.harness.begin_with_initial_hooks()
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_requires_interface_functions(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_functions(interface, self.rel_id)
+
+        rel_data = interface.fetch_relation_data()
+        assert rel_data == {0: {}}
+
+        rel_data = interface.fetch_my_relation_data()
+        assert rel_data == {
+            0: {
+                "alias": "cluster1",
+                "database": "data_platform",
+                "extra-user-roles": "CREATEDB,CREATEROLE",
+            }
+        }
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_requires_interface_functions_secrets(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_functions(interface, self.rel_id)
+
+        rel_data = interface.fetch_relation_data()
+        assert rel_data == {0: {}}
+
+        rel_data = interface.fetch_my_relation_data()
+        assert rel_data == {
+            0: {
+                "alias": "cluster1",
+                "database": "data_platform",
+                "extra-user-roles": "CREATEDB,CREATEROLE",
+                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+            }
+        }
 
     @patch.object(charm, "_on_database_created")
     @pytest.mark.usefixtures("only_without_juju_secrets")
