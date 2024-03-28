@@ -320,7 +320,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 30
+LIBPATCH = 31
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -610,6 +610,101 @@ class SecretCache:
 
 
 # Base Data
+
+
+class DataDict(dict):
+    """Python Standard Library 'dict' - like representation of Relation Data."""
+
+    def __init__(self, relation_data: "Data", relation_id: int):
+        self.relation_data = relation_data
+        self.relation_id = relation_id
+
+    def all_data(self) -> Dict[str, str]:
+        """Return the full content of the Abstract Relation Data dictionary."""
+        result = self.relation_data.fetch_my_relation_data([self.relation_id])
+        try:
+            result_remote = self.relation_data.fetch_relation_data([self.relation_id])
+        except NotImplementedError:
+            result_remote = {self.relation_id: {}}
+        if result:
+            result_remote[self.relation_id].update(result[self.relation_id])
+        return result_remote.get(self.relation_id, {})
+
+    def __setitem__(self, key: str, item: str) -> None:
+        """Set an item of the Abstract Relation Data dictionary."""
+        self.relation_data.update_relation_data(self.relation_id, {key: item})
+
+    def __getitem__(self, key: str) -> Optional[str]:
+        """Get an item of the Abstract Relation Data dictionary."""
+        result = None
+        if not (result := self.relation_data.fetch_my_relation_field(self.relation_id, key)):
+            try:
+                result = self.relation_data.fetch_relation_field(self.relation_id, key)
+            except NotImplementedError:
+                pass
+        if not result:
+            raise KeyError
+        return result
+
+    def __eq__(self, d: dict) -> bool:
+        """Equality."""
+        return set(self.keys()) == set(d.keys()) and all(self[key] == d[key] for key in d)
+
+    def __repr__(self) -> str:
+        """String representation Abstract Relation Data dictionary."""
+        return repr(self.all_data())
+
+    def __len__(self) -> int:
+        """Length of the Abstract Relation Data dictionary."""
+        return len(self.all_data())
+
+    def __delitem__(self, key: str) -> None:
+        """Delete an item of the Abstract Relation Data dictionary."""
+        self.relation_data.delete_relation_data(self.relation_id, [key])
+
+    def has_key(self, k) -> bool:
+        """Does the key exist in the Abstract Relation Data dictionary?"""
+        return k in self.all_data()
+
+    def update(self, items: Dict[str, str]):
+        """Update the Abstract Relation Data dictionary."""
+        self.relation_data.update_relation_data(self.relation_id, items)
+
+    def keys(self) -> List[str]:
+        """Keys of the Abstract Relation Data dictionary."""
+        return list(self.all_data().keys())
+
+    def values(self) -> List[str]:
+        """Values of the Abstract Relation Data dictionary."""
+        return list(self.all_data().values())
+
+    def items(self) -> List[Tuple[str, str]]:
+        """Items of the Abstract Relation Data dictionary."""
+        return list(self.all_data().items())
+
+    def pop(self, item: str) -> str:
+        """Pop an item of the Abstract Relation Data dictionary."""
+        result = self.relation_data.fetch_my_relation_field(self.relation_id, item)
+        if not result:
+            raise KeyError(f"Item {item} doesn't exist.")
+        self.relation_data.delete_relation_data(self.relation_id, [item])
+        return result
+
+    def __contains__(self, item: str) -> bool:
+        """Does the Abstract Relation Data dictionary contain item?"""
+        return item in self.all_data().values()
+
+    def __iter__(self):
+        """Iterate through the Abstract Relation Data dictionary."""
+        return iter(self.all_data())
+
+    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        """Safely get an item of the Abstract Relation Data dictionary."""
+        try:
+            if result := self[key]:
+                return result
+        except KeyError:
+            return default
 
 
 class Data(ABC):
@@ -928,6 +1023,10 @@ class Data(ABC):
 
     # Public interface methods
     # Handling Relation Fields seamlessly, regardless if in databag or a Juju Secret
+
+    def as_dict(self, relation_id: int):
+        """Dict behavior representation of the Abstract Data."""
+        return DataDict(self, relation_id)
 
     def get_relation(self, relation_name, relation_id) -> Relation:
         """Safe way of retrieving a relation."""
