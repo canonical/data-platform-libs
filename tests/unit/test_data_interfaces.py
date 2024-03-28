@@ -238,6 +238,11 @@ class DataProvidesBaseTests(ABC):
         result = self.harness.charm.provider._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
 
+    def test_relation_interfce(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.provider
+        verify_relation_interface_functions(interface, self.rel_id)
+
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_credentials(self):
         """Asserts that the database name is in the relation databag when it's requested."""
@@ -1184,6 +1189,11 @@ class DataRequirerBaseTests(ABC):
         result = self.harness.charm.requirer._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
 
+    def test_relation_interfce(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_functions(interface, self.rel_id)
+
 
 class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
     metadata = METADATA
@@ -1203,6 +1213,10 @@ class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
     def test_non_existing_resource_created(self):
         self.assertRaises(IndexError, lambda: self.harness.charm.requirer.is_resource_created(0))
         self.assertRaises(IndexError, lambda: self.harness.charm.requirer.is_resource_created(1))
+
+    def test_relation_interfce(self):
+        """Disabling irrelevant inherited test."""
+        pass
 
     def test_hide_relation_on_broken_event(self):
         with self.assertLogs(logger, "INFO") as logs:
