@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 change-admin-password:
   description: Change the admin password to a new, generated value
@@ -14,17 +14,7 @@ set-secret:
       description: The mapping name, i.e. what databag field ('secret-<mapping>') is to be changed
 
 get-relation-field:
-  description: Set fields from the relation
-  params:
-    relation_id:
-      type: integer 
-      description: The relation's unique ID
-    field:
-      type: string
-      description: Relation field
-
-get-relation-self-side-field:
-  description: Set fields from the relation
+  description: Get fields from the relation
   params:
     relation_id:
       type: integer 
@@ -57,7 +47,7 @@ delete-relation-field:
       description: Relation field
 
 get-peer-relation-field:
-  description: Get fields from the second-database relation
+  description: Get fields from the database relation
   params:
     component:
       type: string
@@ -67,7 +57,7 @@ get-peer-relation-field:
       description: Relation field
 
 set-peer-relation-field:
-  description: Set fields from the second-database relation
+  description: Set fields from the database relation
   params:
     component:
       type: string
@@ -80,7 +70,7 @@ set-peer-relation-field:
       description: Value of the field to set
 
 set-peer-secret:
-  description: Set fields from the second-database relation
+  description: Set peer relation secrets
   params:
     component:
       type: string
@@ -91,6 +81,19 @@ set-peer-secret:
     value:
       type: string
       description: Value of the field to set
+    group:
+      type: string
+      default: ''
+
+get-peer-secret:
+  description: Get peer relation secrets
+  params:
+    component:
+      type: string
+      description: app/unit
+    field:
+      type: string
+      description: Relation field
     group:
       type: string
       default: ''
