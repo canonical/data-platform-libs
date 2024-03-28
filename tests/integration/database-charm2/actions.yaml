@@ -80,7 +80,23 @@ set-peer-relation-field:
       description: Value of the field to set
 
 set-peer-secret:
-  description: Set fields from the second-database relation
+  description: Set peer relation secrets
+  params:
+    component:
+      type: string
+      description: app/unit
+    field:
+      type: string
+      description: Relation field
+    value:
+      type: string
+      description: Value of the field to set
+    group:
+      type: string
+      default: ''
+
+get-peer-secret:
+  description: Get peer relation secrets
   params:
     component:
       type: string

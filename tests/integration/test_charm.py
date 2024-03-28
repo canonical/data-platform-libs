@@ -27,21 +27,28 @@ logger = logging.getLogger(__name__)
 
 APPLICATION_APP_NAME = "application"
 DATABASE_APP_NAME = "database"
+DATABASE2_APP_NAME = "database2"
 ANOTHER_DATABASE_APP_NAME = "another-database"
 APP_NAMES = [APPLICATION_APP_NAME, DATABASE_APP_NAME, ANOTHER_DATABASE_APP_NAME]
 DATABASE_APP_METADATA = yaml.safe_load(
     Path("./tests/integration/database-charm/metadata.yaml").read_text()
 )
+DATABASE2_APP_METADATA = yaml.safe_load(
+    Path("./tests/integration/database-charm2/metadata.yaml").read_text()
+)
 FIRST_DATABASE_RELATION_NAME = "first-database"
 SECOND_DATABASE_RELATION_NAME = "second-database"
 MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "multiple-database-clusters"
 ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "aliased-multiple-database-clusters"
+DATABASE2_RELATION_NAME = "database2"
 
 SECRET_REF_PREFIX = "secret-"
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_charms(ops_test: OpsTest, application_charm, database_charm):
+async def test_deploy_charms(
+    ops_test: OpsTest, application_charm, database_charm, database_charm2
+):
     """Deploy both charms (application and database) to use in the tests."""
     # Deploy both charms (2 units for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
@@ -61,6 +68,17 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
             series="jammy",
         ),
         ops_test.model.deploy(
+            database_charm2,
+            resources={
+                "database-image": DATABASE2_APP_METADATA["resources"]["database-image"][
+                    "upstream-source"
+                ]
+            },
+            application_name=DATABASE2_APP_NAME,
+            num_units=2,
+            series="jammy",
+        ),
+        ops_test.model.deploy(
             database_charm,
             resources={
                 "database-image": DATABASE_APP_METADATA["resources"]["database-image"][
@@ -76,6 +94,9 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
     )
     await ops_test.model.wait_for_idle(
         apps=[DATABASE_APP_NAME], status="active", wait_for_exact_units=3
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[DATABASE2_APP_NAME], status="active", wait_for_exact_units=2
     )
     await ops_test.model.wait_for_idle(
         apps=[ANOTHER_DATABASE_APP_NAME], status="active", wait_for_exact_units=1
@@ -257,6 +278,86 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
     # Cleanup
     action = await ops_test.model.units.get(unit_name).run_action(
         "delete-peer-secret", **{"component": component}
+    )
+    await action.wait()
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+@pytest.mark.parametrize("component", ["app", "unit"])
+async def test_peer_relation_set_secret(component, ops_test: OpsTest):
+    """Testing peer relation using the DataPeer class."""
+    # Setting and verifying two secret fields
+    leader_id = await get_leader_id(ops_test, DATABASE2_APP_NAME)
+    unit_name = f"{DATABASE2_APP_NAME}/{leader_id}"
+
+    # Generally we shouldn't have test decision based on pytest.mark.parametrize
+    # but I think this is a valid exception
+    owner = "database2" if component == "app" else unit_name
+
+    # Setting a new secret field dynamically
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-secret",
+        **{"component": component, "field": "new-field", "value": "blablabla"},
+    )
+    await action.wait()
+
+    secret = await get_secret_by_label(ops_test, f"database2.{component}", owner)
+    assert secret.get("new-field") == "blablabla"
+
+    # Setting a new secret field dynamically in a new, dedicated secret
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-secret",
+        **{
+            "component": component,
+            "field": "mygroup-field1",
+            "value": "blablabla3",
+            "group": "mygroup",
+        },
+    )
+    await action.wait()
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-secret",
+        **{
+            "component": component,
+            "field": "mygroup-field2",
+            "value": "blablabla4",
+            "group": "mygroup",
+        },
+    )
+    await action.wait()
+
+    secret = await get_secret_by_label(ops_test, f"database2.{component}.mygroup", owner)
+    assert secret.get("mygroup-field1") == "blablabla3"
+    assert secret.get("mygroup-field2") == "blablabla4"
+
+    # Getting the secret
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "new-field"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "mygroup-field1@mygroup"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla3"
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "get-peer-relation-field", **{"component": component, "field": "mygroup-field2@mygroup"}
+    )
+    await action.wait()
+    assert action.results.get("value") == "blablabla4"
+
+    # Cleanup
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-secret", **{"component": component}
+    )
+    await action.wait()
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "delete-peer-secret", **{"component": component, "group": "mygroup"}
     )
     await action.wait()
 
