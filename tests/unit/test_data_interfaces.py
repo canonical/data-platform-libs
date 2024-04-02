@@ -107,6 +107,141 @@ def verify_relation_interface_functions(interface, relation_id):
     assert rel_data[relation_id] == {}
 
 
+def verify_relation_interface_dict(interface, relation_id):
+    interface_dict = interface.as_dict(relation_id)
+    orig_len = len(interface_dict)
+    orig_dict = dict(interface_dict)
+
+    # Interface function: update_relation_data()
+    interface_dict["something"] = "else"
+
+    # Interface function: fetch_relation_field()
+    assert interface_dict["something"] == "else"
+    assert len(interface_dict) == orig_len + 1
+
+    # Interface function: pop()
+    assert interface_dict.pop("something") == "else"
+    with pytest.raises(KeyError):
+        interface_dict["something"]
+    assert interface_dict.get("something") is None
+    assert interface_dict.get("something", "blah") == "blah"
+    assert len(interface_dict) == orig_len
+
+    # Interface function: del
+    interface_dict["something"] = "else again"
+    del interface_dict["something"]
+    with pytest.raises(KeyError):
+        interface_dict["something"]
+
+    # Overriding previous value
+    interface_dict["something"] = "anything"
+    interface_dict["something"] = "everything"
+    assert interface_dict["something"] == "everything"
+
+    # Multiple values
+    interface_dict["something new"] = "thing"
+    assert len(interface_dict) == orig_len + 2
+    assert set(interface_dict.items()) == {
+        ("something", "everything"),
+        ("something new", "thing"),
+    } | set(orig_dict.items())
+    assert set(interface_dict.keys()) == {"something", "something new"} | set(orig_dict.keys())
+    assert set(interface_dict.values()) == {"everything", "thing"} | set(orig_dict.values())
+
+    res = set()
+    for item in interface_dict:
+        res |= {item}
+    assert res == set(interface_dict.keys())
+
+    # Restore original state
+    del interface_dict["something"]
+    del interface_dict["something new"]
+
+    verify_relation_interface_using_interface_functions(interface, relation_id)
+
+
+def verify_relation_interface_using_interface_functions(interface, relation_id):
+    """Generic verification helper function to check that dict implementation relies on interface functions.
+
+    ***************************************************
+    !!!!! DO NOT CHANGE THIS TEST !!!!
+    ***************************************************
+    It is to ensure that 'dict' interface is a thin wrapper ONLY, fully relying on well-established interface functions
+        - fetch_my_relation_data() (fetch_my_relation_field())
+        - update_relation_data()
+        - delete_relation_data()
+    """
+    myclass = interface.__class__.__name__
+    interface_dict = interface.as_dict(relation_id)
+    interface_dict["something"] = "else"
+
+    with (
+        patch(
+            f"charms.data_platform_libs.v0.data_interfaces.{myclass}.fetch_my_relation_data"
+        ) as patched_fetch_mine,
+        patch(
+            f"charms.data_platform_libs.v0.data_interfaces.{myclass}.update_relation_data"
+        ) as patched_update,
+        patch(
+            f"charms.data_platform_libs.v0.data_interfaces.{myclass}.delete_relation_data"
+        ) as patched_delete,
+    ):
+        # Read
+        _ = interface_dict["something"]
+        patched_fetch_mine.assert_called_once()
+
+        _ = interface_dict.get("something")
+        assert patched_fetch_mine.call_count == 2
+
+        # Update
+        interface_dict["something"] = "new"
+        patched_update.assert_called_once()
+
+        # Delete
+        del interface_dict["something"]
+        patched_delete.assert_called_once()
+
+        interface_dict.pop("something")
+        assert patched_delete.call_count == 2
+
+    # Restore original state
+    del interface_dict["something"]
+
+
+def verify_relation_interface_dict_external_relation(interface, relation_id):
+    """Specific check for cross-charm (i.e. 'external') relations.
+
+    On these occasions both side of the relation is checked for data thus 'fetch_relation_data()' is also called
+    ***************************************************
+    !!!!! DO NOT CHANGE THIS TEST !!!!
+    ***************************************************
+    It is to ensure that 'dict' interface is a thin wrapper ONLY, fully relying on well-established interface functions
+        - fetch_relation_data() (fetch__relation_field())
+    """
+    myclass = interface.__class__.__name__
+    interface_dict = interface.as_dict(relation_id)
+    interface_dict["something"] = "else"
+
+    with (
+        patch(
+            f"charms.data_platform_libs.v0.data_interfaces.{myclass}.fetch_relation_data"
+        ) as patched_fetch,
+        patch(
+            f"charms.data_platform_libs.v0.data_interfaces.{myclass}.fetch_my_relation_data",
+            return_value={},
+        ),
+    ):
+        # Read
+        _ = interface_dict["something"]
+        patched_fetch.assert_called_once()
+
+        _ = interface_dict.get("something")
+        assert patched_fetch.call_count == 2
+
+    # Restore original state
+    del interface_dict["something"]
+
+
 #
 # Test Charms
 #
@@ -243,6 +378,12 @@ class DataProvidesBaseTests(ABC):
         interface = self.harness.charm.provider
         verify_relation_interface_functions(interface, self.rel_id)
 
+    def test_relation_interfce_dict(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.provider
+        verify_relation_interface_dict(interface, self.rel_id)
+        verify_relation_interface_dict_external_relation(interface, self.rel_id)
+
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_credentials(self):
         """Asserts that the database name is in the relation databag when it's requested."""
@@ -368,6 +509,30 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             rel_data = interface.fetch_my_relation_data([relation_id], ["non-existent-field"])
             assert rel_data[relation_id] == {}
 
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    def test_peer_relation_interfce_dict(self, interface_attr):
+        """Check the functionality of each public interface function."""
+        interface = getattr(self.harness.charm, interface_attr)
+        verify_relation_interface_dict(interface, self.harness.charm.peer_relation.id)
+
+    def test_peer_relation_other_unit_dict(self):
+        """Check the functionality of each public interface function on each "other" unit."""
+        relation_id = self.harness.charm.peer_relation.id
+        for unit, interface in self.harness.charm.peer_units_data_interfaces.items():
+
+            self.harness.update_relation_data(relation_id, unit.name, {"something": "else"})
+
+            # fetch_relation_field()
+            assert interface.fetch_my_relation_field(relation_id, "something") == "else"
+
+            # fetch_relation_data()
+            rel_data = interface.as_dict(relation_id)
+            assert rel_data["something"] == "else"
+
+            with pytest.raises(KeyError):
+                assert rel_data["non-existent-field"]
+            assert rel_data.get(relation_id) is None
+
     #
     # Relation Data tests
     #
@@ -400,6 +565,27 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                     {"requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]'}
                 )
             }
+        }
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_provider_interface_dict(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.provider
+        verify_relation_interface_dict(interface, self.rel_id)
+
+        assert interface.as_dict(self.rel_id) == {"data": json.dumps({})}
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_provider_interface_dict_secrets(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.provider
+        verify_relation_interface_dict(interface, self.rel_id)
+
+        assert interface.as_dict(self.rel_id) == {
+            "data": json.dumps(
+                {"requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]'}
+            ),
+            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
         }
 
     @patch.object(DatabaseCharm, "_on_database_requested")
@@ -1194,6 +1380,12 @@ class DataRequirerBaseTests(ABC):
         interface = self.harness.charm.requirer
         verify_relation_interface_functions(interface, self.rel_id)
 
+    def test_relation_interfce_dict(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_dict(interface, self.rel_id)
+        verify_relation_interface_dict_external_relation(interface, self.rel_id)
+
 
 class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
     metadata = METADATA
@@ -1215,6 +1407,10 @@ class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
         self.assertRaises(IndexError, lambda: self.harness.charm.requirer.is_resource_created(1))
 
     def test_relation_interfce(self):
+        """Disabling irrelevant inherited test."""
+        pass
+
+    def test_relation_interfce_dict(self):
         """Disabling irrelevant inherited test."""
         pass
 
@@ -1289,6 +1485,31 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "extra-user-roles": "CREATEDB,CREATEROLE",
                 "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
             }
+        }
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_requires_interface_dict(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_dict(interface, self.rel_id)
+
+        assert interface.as_dict(self.rel_id) == {
+            "alias": "cluster1",
+            "database": "data_platform",
+            "extra-user-roles": "CREATEDB,CREATEROLE",
+        }
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_requires_interface_dict_secrets(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_dict(interface, self.rel_id)
+
+        assert interface.as_dict(self.rel_id) == {
+            "alias": "cluster1",
+            "database": "data_platform",
+            "extra-user-roles": "CREATEDB,CREATEROLE",
+            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
         }
 
     @patch.object(charm, "_on_database_created")
