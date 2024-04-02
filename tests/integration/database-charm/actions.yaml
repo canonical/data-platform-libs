@@ -95,3 +95,10 @@ delete-peer-secret:
     component:
       type: string
       description: app/unit
+
+get-other-peer-relation-field:
+  description: Get fields from the second-database relation
+  params:
+    field:
+      type: string
+      description: Relation field

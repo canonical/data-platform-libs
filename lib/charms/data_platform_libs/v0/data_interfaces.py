@@ -320,7 +320,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 29
+LIBPATCH = 30
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -1787,6 +1787,14 @@ class DataPeerOtherUnitData(DataPeerUnitData):
         self.local_unit = unit
         self.component = unit
 
+    def update_relation_data(self, relation_id: int, data: dict) -> None:
+        """This method makes no sense for a Other Peer Relation."""
+        raise NotImplementedError("It's not possible to update data of another unit.")
+
+    def delete_relation_data(self, relation_id: int, fields: List[str]) -> None:
+        """This method makes no sense for a Other Peer Relation."""
+        raise NotImplementedError("It's not possible to delete data of another unit.")
+
 
 class DataPeerOtherUnitEventHandlers(DataPeerEventHandlers):
     """Requires-side of the relation."""
@@ -1809,10 +1817,10 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
         additional_secret_fields: Optional[List[str]] = [],
         secret_field_name: Optional[str] = None,
         deleted_label: Optional[str] = None,
-        unique_key: str = "",
     ):
-        DataPeerData.__init__(
+        DataPeerOtherUnitData.__init__(
             self,
+            unit,
             charm.model,
             relation_name,
             extra_user_roles,
@@ -1820,7 +1828,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
             secret_field_name,
             deleted_label,
         )
-        DataPeerEventHandlers.__init__(self, charm, self, unique_key)
+        DataPeerOtherUnitEventHandlers.__init__(self, charm, self)
 
 
 # General events
