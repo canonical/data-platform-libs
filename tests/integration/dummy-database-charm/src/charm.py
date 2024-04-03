@@ -14,7 +14,6 @@ import string
 
 from ops import Relation
 from ops.charm import ActionEvent, CharmBase
-from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus
 
@@ -32,8 +31,6 @@ PEER = "database-peers"
 class DatabaseCharm(CharmBase):
     """Database charm that accepts connections from application charms."""
 
-    _stored = StoredState()
-
     def __init__(self, *args):
         super().__init__(*args)
         self._servers_data = {}
@@ -49,25 +46,19 @@ class DatabaseCharm(CharmBase):
         self.framework.observe(self.on.start, self._on_start)
 
         # Stored state is used to track the password of the database superuser.
-        self._stored.set_default(password=self._new_password())
         self.framework.observe(
             self.on.change_admin_password_action, self._on_change_admin_password
         )
 
         self.framework.observe(self.on.set_secret_action, self._on_set_secret_action)
 
-        # Get/set/delete values on second-database relaton
+        # Get/set/delete values on database relaton
         self.framework.observe(
             self.on.get_peer_relation_field_action, self._on_get_peer_relation_field
         )
-        # self.framework.observe(
-        #     self.on.set_peer_relation_field_action, self._on_set_peer_relation_field
-        # )
+
         self.framework.observe(self.on.set_peer_secret_action, self._on_set_peer_secret)
         self.framework.observe(self.on.get_peer_secret_action, self._on_get_peer_secret)
-        # self.framework.observe(
-        #     self.on.delete_peer_relation_field_action, self._on_delete_peer_relation_field
-        # )
         self.framework.observe(self.on.delete_peer_secret_action, self._on_delete_peer_secret)
 
     @property
@@ -127,7 +118,7 @@ class DatabaseCharm(CharmBase):
         """Set requested relation field."""
         component = event.params["component"]
 
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         if component == "app":
             relation = self.peer_relation_app.relations[0]
             self.peer_relation_app.get_secret(
@@ -149,7 +140,7 @@ class DatabaseCharm(CharmBase):
         """Set requested relation field."""
         component = event.params["component"]
 
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         if component == "app":
             relation = self.peer_relation_app.relations[0]
             self.peer_relation_app.set_secret(
@@ -172,7 +163,7 @@ class DatabaseCharm(CharmBase):
         """Delete requested relation field."""
         component = event.params["component"]
 
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         secret = None
         group_str = "" if not event.params["group"] else f".{event.params['group']}"
         if component == "app":
