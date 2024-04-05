@@ -331,7 +331,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 32
+LIBPATCH = 33
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -690,7 +690,7 @@ class SecretCache:
 # Base Data
 
 
-class DataDict(UserDict[str, str]):
+class DataDict(UserDict):
     """Python Standard Library 'dict' - like representation of Relation Data."""
 
     def __init__(self, relation_data: "Data", relation_id: int):
@@ -1105,7 +1105,7 @@ class Data(ABC):
     # Public interface methods
     # Handling Relation Fields seamlessly, regardless if in databag or a Juju Secret
 
-    def as_dict(self, relation_id: int) -> UserDict[str, str]:
+    def as_dict(self, relation_id: int) -> UserDict:
         """Dict behavior representation of the Abstract Data."""
         return DataDict(self, relation_id)
 
