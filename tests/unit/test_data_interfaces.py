@@ -31,6 +31,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DataPeerOtherUnit,
     DataPeerUnit,
     Diff,
+    IllegalOperationError,
     IndexRequestedEvent,
     KafkaProvides,
     KafkaRequires,
@@ -252,8 +253,12 @@ class DatabaseCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.peer_relation_app = DataPeer(self, PEER_RELATION_NAME)
-        self.peer_relation_unit = DataPeerUnit(self, PEER_RELATION_NAME)
+        self.peer_relation_app = DataPeer(
+            self, PEER_RELATION_NAME, additional_secret_fields=["secret-field-app"]
+        )
+        self.peer_relation_unit = DataPeerUnit(
+            self, PEER_RELATION_NAME, additional_secret_fields=["secret-field-unit"]
+        )
         self.provider = DatabaseProvides(
             self,
             DATABASE_RELATION_NAME,
@@ -281,6 +286,20 @@ class DatabaseCharm(CharmBase):
 
     def _on_database_requested(self, _) -> None:
         pass
+
+
+class DatabaseCharmDynamicSecrets(CharmBase):
+    """Mock database charm to use in units tests."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.peer_relation_app = DataPeer(self, PEER_RELATION_NAME)
+        self.peer_relation_unit = DataPeerUnit(self, PEER_RELATION_NAME)
+
+    @property
+    def peer_relation(self) -> Relation | None:
+        """The cluster peer relation."""
+        return self.model.get_relation(PEER_RELATION_NAME)
 
 
 class KafkaCharm(CharmBase):
@@ -466,15 +485,33 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
     # Peer Data tests
     #
 
-    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
-    def test_peer_relation_disabled_functions(self, interface_attr):
+    @parameterized.expand([("app",), ("unit",)])
+    def test_peer_relation_disabled_functions(self, scope):
         """Verify that fetch_relation_data/field() functions are disabled for Peer Relations."""
-        interface = getattr(self.harness.charm, interface_attr)
+        interface = getattr(self.harness.charm, f"peer_relation_{scope}")
         with pytest.raises(NotImplementedError):
             interface.fetch_relation_data(0, ["key"])
 
         with pytest.raises(NotImplementedError):
             interface.fetch_relation_field(0, "key")
+
+    @parameterized.expand([("app",), ("unit",)])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation_disabled_functions_secrets(self, scope):
+        """Verify that fetch_relation_data/field() functions are disabled for Peer Relations."""
+        interface = getattr(self.harness.charm, f"peer_relation_{scope}")
+        with pytest.raises(IllegalOperationError):
+            interface.set_secret(0, "something", "illegal")
+
+        with pytest.raises(IllegalOperationError):
+            interface.delete_secret(0, "something", "illegal")
+
+        # Now we fake an illegal situation, pretending that a dynamic secret was added
+        scope_component = getattr(self.harness.charm, scope)
+        scope_component.add_secret({"dynamic-secret": "added"}, label=f"database.{scope}")
+
+        with pytest.raises(IllegalOperationError):
+            interface.update_relation_data(0, {"something": "illegal"})
 
     def test_other_peer_relation_disabled_functions(self):
         """Verify that fetch_relation_data/field() functions are disabled for Peer Relations."""
@@ -531,7 +568,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
             with pytest.raises(KeyError):
                 assert rel_data["non-existent-field"]
-            assert rel_data.get(relation_id) is None
+            assert rel_data.get("non-existent-field") is None
 
     #
     # Relation Data tests
@@ -913,6 +950,72 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         with capture(self.harness.charm, DatabaseRequestedEvent) as captured:
             self.harness.update_relation_data(self.rel_id, "application/0", {"database": DATABASE})
         assert captured.event.unit.name == "application/0"
+
+
+class TestDatabaseProvidesDynamicSecrets(ABC, unittest.TestCase):
+    metadata = DATABASE_METADATA
+    relation_name = DATABASE_RELATION_NAME
+    app_name = "database"
+    charm = DatabaseCharmDynamicSecrets
+
+    def get_harness(self) -> Tuple[Harness, int]:
+        harness = Harness(self.charm, meta=self.metadata)
+        # Set up the initial relation and hooks.
+        peer_rel_id = harness.add_relation(PEER_RELATION_NAME, self.app_name)
+        harness.add_relation_unit(peer_rel_id, f"{self.app_name}/1")
+        harness.add_relation_unit(peer_rel_id, f"{self.app_name}/2")
+        harness.set_leader(True)
+        harness.begin_with_initial_hooks()
+        return harness
+
+    def setUp(self):
+        self.harness = self.get_harness()
+
+    def tearDown(self) -> None:
+        self.harness.cleanup()
+
+    #
+    # Peer Data tests
+    #
+    @parameterized.expand([("peer_relation_app", ""), ("peer_relation_unit", "/0")])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation_disabled_functions(self, interface_attr, unit_id):
+        """Verify that fetch_relation_data/field() functions are disabled for Peer Relations.
+
+        This test is redundant with TestDatabaseProvides.test_peer_relation_disabled_functions
+        but it may worth to show the behavior "from the other side" as well.
+        """
+        interface = getattr(self.harness.charm, interface_attr)
+        relation_id = self.harness.charm.peer_relation.id
+
+        # Here we're artificialy constructing the illegal situation
+        # We "hack in" a statically pre-requiested secret into the data structure
+        # (since the test charm doesn't have one)
+        interface._secret_fields.append("some-secret")
+
+        with pytest.raises(IllegalOperationError):
+            interface.set_secret(relation_id, "something", "else")
+
+    @parameterized.expand([("app",), ("unit",)])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation_interfce(self, scope):
+        """Check the functionality of each public interface function."""
+        interface = getattr(self.harness.charm, f"peer_relation_{scope}")
+        relation_id = self.harness.charm.peer_relation.id
+
+        # set_secret()
+        interface.set_secret(relation_id, "something", "else")
+
+        secret = self.harness.charm.model.get_secret(label=f"database.{scope}")
+        assert "something" in secret.get_content()
+
+        # get_secret()
+        assert interface.get_secret(relation_id, "something") == "else"
+
+        # delete_secret()
+        interface.delete_secret(relation_id, "something")
+
+        assert interface.get_secret(relation_id, "something") is None
 
 
 class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):

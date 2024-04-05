@@ -36,6 +36,8 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     library_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"
     install_path = "tests/integration/database-charm/" + library_path
     shutil.copyfile(library_path, install_path)
+    install_path = "tests/integration/dummy-database-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
     install_path = "tests/integration/kafka-charm/" + library_path
     shutil.copyfile(library_path, install_path)
     install_path = "tests/integration/application-charm/" + library_path
@@ -54,14 +56,6 @@ def copy_s3_library_into_charm(ops_test: OpsTest):
     shutil.copyfile(library_path, install_path_requirer)
 
 
-@pytest.fixture(scope="module", autouse=True)
-def copy_data_secrets_library_into_charm(ops_test: OpsTest):
-    """Copy the data_interfaces library to the different charm folder."""
-    library_path = "lib/charms/data_platform_libs/v0/data_secrets.py"
-    install_path = "tests/integration/secrets-charm/" + library_path
-    shutil.copyfile(library_path, install_path)
-
-
 @pytest.fixture(scope="module")
 async def application_charm(ops_test: OpsTest):
     """Build the application charm."""
@@ -74,6 +68,14 @@ async def application_charm(ops_test: OpsTest):
 async def database_charm(ops_test: OpsTest):
     """Build the database charm."""
     charm_path = "tests/integration/database-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def dummy_database_charm(ops_test: OpsTest):
+    """Build the database charm."""
+    charm_path = "tests/integration/dummy-database-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
