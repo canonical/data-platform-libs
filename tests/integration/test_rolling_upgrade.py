@@ -163,7 +163,7 @@ async def test_peer_relation(component, ops_test: OpsTest):
         )
     )
 
-    secret = await get_secret_by_label(ops_test, f"database.{component}")
+    secret = await get_secret_by_label(ops_test, f"database-peers.database.{component}")
     assert secret.get("monitor-password") == "blablabla_new"
 
     action = await ops_test.model.units.get(unit_name).run_action(

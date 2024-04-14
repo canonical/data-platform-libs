@@ -415,9 +415,9 @@ class DatabaseCharm(CharmBase):
         secret = None
         group_str = "" if not event.params["group"] else f".{event.params['group']}"
         if component == "app":
-            secret = self.model.get_secret(label=f"database.app{group_str}")
+            secret = self.model.get_secret(label=f"{PEER}.database.app{group_str}")
         else:
-            secret = self.model.get_secret(label=f"database.unit{group_str}")
+            secret = self.model.get_secret(label=f"{PEER}.database.unit{group_str}")
 
         if secret:
             secret.remove_all_revisions()
