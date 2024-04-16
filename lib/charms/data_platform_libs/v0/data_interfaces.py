@@ -493,6 +493,7 @@ def leader_only(f):
             return
         return f(self, *args, **kwargs)
 
+    wrapper.leader_only = True
     return wrapper
 
 
@@ -728,11 +729,21 @@ class DataDict(UserDict):
     def __getitem__(self, key: str) -> str:
         """Get an item of the Abstract Relation Data dictionary."""
         result = None
-        if not (result := self.relation_data.fetch_my_relation_field(self.relation_id, key)):
+
+        # Avoiding "leader_only" error when cross-charm non-leader unit, not to report useless error
+        if (
+            not hasattr(self.relation_data.fetch_my_relation_field, "leader_only")
+            or self.relation_data.component != self.relation_data.local_app
+            or self.relation_data.local_unit.is_leader()
+        ):
+            result = self.relation_data.fetch_my_relation_field(self.relation_id, key)
+
+        if not result:
             try:
                 result = self.relation_data.fetch_relation_field(self.relation_id, key)
             except NotImplementedError:
                 pass
+
         if not result:
             raise KeyError
         return result
