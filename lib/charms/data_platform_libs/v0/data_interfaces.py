@@ -1917,6 +1917,25 @@ class DataPeerData(RequirerData, ProviderData):
             if self._fetch_relation_data_without_secrets(self.component, relation, [field]):
                 self._delete_relation_data_without_secrets(self.component, relation, [field])
 
+    def _remove_secret_field_name_from_databag(self, relation) -> None:
+        """Making sure that the old databag URI is gone.
+
+        This action should not be executed more than once.
+        """
+        # Nothing to do if 'internal-secret' is not in the databag
+        if not (relation.data[self.component].get(self._generate_secret_field_name())):
+            return
+
+        # Making sure that the secret receives its label
+        # (This should have happened by the time we get here, rather an extra security measure.)
+        secret = self._get_relation_secret(relation.id)
+
+        # Either app scope secret with leader executing, or unit scope secret
+        leader_or_unit_scope = self.component != self.local_app or self.local_unit.is_leader()
+        if secret and leader_or_unit_scope:
+            # Databag reference to the secret URI can be removed, now that it's labelled
+            relation.data[self.component].pop(self._generate_secret_field_name(), None)
+
     def _previous_labels(self) -> List[str]:
         """Generator for legacy secret label names, for backwards compatibility."""
         result = []
@@ -1988,14 +2007,7 @@ class DataPeerData(RequirerData, ProviderData):
 
         # Fetching the secret with fallback to URI (in case label is not yet known)
         # Label would we "stuck" on the secret in case it is found
-        secret = self.secrets.get(label, secret_uri, legacy_labels=self._previous_labels())
-
-        # Either app scope secret with leader executing, or unit scope secret
-        leader_or_unit_scope = self.component != self.local_app or self.local_unit.is_leader()
-        if secret_uri and secret and leader_or_unit_scope:
-            # Databag reference to the secret URI can be removed, now that it's labelled
-            relation.data[self.component].pop(self._generate_secret_field_name(), None)
-        return secret
+        return self.secrets.get(label, secret_uri, legacy_labels=self._previous_labels())
 
     def _get_group_secret_contents(
         self,
@@ -2033,6 +2045,7 @@ class DataPeerData(RequirerData, ProviderData):
             data=data,
             uri_to_databag=False,
         )
+        self._remove_secret_field_name_from_databag(relation)
 
         normal_content = {k: v for k, v in data.items() if k in normal_fields}
         self._update_relation_data_without_secrets(self.component, relation, normal_content)
