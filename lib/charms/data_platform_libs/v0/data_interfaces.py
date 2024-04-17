@@ -569,16 +569,24 @@ class CachedSecret:
         self._model = model
         self.component = component
         self.legacy_labels = legacy_labels
+        self.current_label = None
 
-    def add_secret(self, content: Dict[str, str], relation: Relation) -> Secret:
+    def add_secret(
+        self,
+        content: Dict[str, str],
+        relation: Optional[Relation] = None,
+        label: Optional[str] = None,
+    ) -> Secret:
         """Create a new secret."""
         if self._secret_uri:
             raise SecretAlreadyExistsError(
                 "Secret is already defined with uri %s", self._secret_uri
             )
 
-        secret = self.component.add_secret(content, label=self.label)
-        if relation.app != self._model.app:
+        label = self.label if not label else label
+
+        secret = self.component.add_secret(content, label=label)
+        if relation and relation.app != self._model.app:
             # If it's not a peer relation, grant is to be applied
             secret.grant(relation)
         self._secret_uri = secret.id
@@ -594,10 +602,15 @@ class CachedSecret:
 
             for label in [self.label] + self.legacy_labels:
                 try:
-                    self._secret_meta = self._model.get_secret(label=self.label)
+                    self._secret_meta = self._model.get_secret(label=label)
                 except SecretNotFoundError:
                     pass
+                else:
+                    if label != self.label:
+                        self.current_label = label
+                    break
 
+            # If still not found, to be checked by URI, to be labelled with the proposed label
             if not self._secret_meta and self._secret_uri:
                 self._secret_meta = self._model.get_secret(id=self._secret_uri, label=self.label)
         return self._secret_meta
@@ -623,12 +636,30 @@ class CachedSecret:
                     self._secret_content = self.meta.get_content()
         return self._secret_content
 
+    def _move_to_new_label_if_needed(self):
+        """Helper function to re-create the secret with a different label."""
+        if not self.current_label or not (self.meta and self._secret_meta):
+            return
+
+        # Create a new secret with the new label
+        old_meta = self._secret_meta
+        content = self._secret_meta.get_content()
+
+        # I wish we could just check if we are the owners of the secret...
+        try:
+            self._secret_meta = self.add_secret(content, label=self.label)
+        except ModelError as err:
+            if "this unit is not the leader" not in str(err):
+                raise
+        old_meta.remove_all_revisions()
+
     def set_content(self, content: Dict[str, str]) -> None:
         """Setting cached secret content."""
         if not self.meta:
             return
 
         if content:
+            self._move_to_new_label_if_needed()
             self.meta.set_content(content)
             self._secret_content = content
         else:
@@ -1794,7 +1825,10 @@ class DataPeerData(RequirerData, ProviderData):
         relation = self._model.relations[self.relation_name][0]
         fields = []
 
+        ignores = [SECRET_GROUPS.get_group("user"), SECRET_GROUPS.get_group("tls")]
         for group in SECRET_GROUPS.groups():
+            if group in ignores:
+                continue
             if content := self._get_group_secret_contents(relation, group):
                 fields += list(content.keys())
         return list(set(fields) | set(self._new_secrets))
@@ -2013,12 +2047,13 @@ class DataPeerData(RequirerData, ProviderData):
 
         label = self._generate_secret_label(relation_name, relation_id, group_mapping)
         secret_uri = relation.data[self.component].get(self._generate_secret_field_name(), None)
-        if secret_uri and group_mapping != SECRET_GROUPS.EXTRA:
-            return
 
-        # Fetching the secret with fallback to URI (in case label is not yet known)
-        # Label would we "stuck" on the secret in case it is found
-        return self.secrets.get(label, secret_uri, legacy_labels=self._previous_labels())
+        # URI or legacy label is only to applied when moving single legacy secret to a (new) label
+        if group_mapping == SECRET_GROUPS.EXTRA:
+            # Fetching the secret with fallback to URI (in case label is not yet known)
+            # Label would we "stuck" on the secret in case it is found
+            return self.secrets.get(label, secret_uri, legacy_labels=self._previous_labels())
+        return self.secrets.get(label)
 
     def _get_group_secret_contents(
         self,
