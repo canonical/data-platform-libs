@@ -2834,7 +2834,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
 # Kafka Events
 
 
-class KafkaProviderEvent(RelationEvent):
+class KafkaProvidesEvent(RelationEvent):
     """Base class for Kafka events."""
 
     @property
@@ -2854,7 +2854,7 @@ class KafkaProviderEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("consumer-group-prefix")
 
 
-class TopicRequestedEvent(KafkaProviderEvent, ExtraRoleEvent):
+class TopicRequestedEvent(KafkaProvidesEvent, ExtraRoleEvent):
     """Event emitted when a new topic is requested for use on this relation."""
 
 
@@ -3123,7 +3123,7 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
 # Opensearch related events
 
 
-class OpenSearchProviderEvent(RelationEvent):
+class OpenSearchProvidesEvent(RelationEvent):
     """Base class for OpenSearch events."""
 
     @property
@@ -3135,7 +3135,7 @@ class OpenSearchProviderEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("index")
 
 
-class IndexRequestedEvent(OpenSearchProviderEvent, ExtraRoleEvent):
+class IndexRequestedEvent(OpenSearchProvidesEvent, ExtraRoleEvent):
     """Event emitted when a new index is requested for use on this relation."""
 
 
