@@ -3002,7 +3002,7 @@ class KafkaProvides(KafkaProviderData, KafkaProviderEventHandlers):
         KafkaProviderEventHandlers.__init__(self, charm, self)
 
 
-class KafkaRequiresData(RequirerData):
+class KafkaRequirerData(RequirerData):
     """Requirer-side of the Kafka relation."""
 
     def __init__(
@@ -3037,7 +3037,7 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
 
     on = KafkaRequiresEvents()  # pyright: ignore [reportAssignmentType]
 
-    def __init__(self, charm: CharmBase, relation_data: KafkaRequiresData) -> None:
+    def __init__(self, charm: CharmBase, relation_data: KafkaRequirerData) -> None:
         super().__init__(charm, relation_data)
         # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
@@ -3096,7 +3096,7 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
             return
 
 
-class KafkaRequires(KafkaRequiresData, KafkaRequirerEventHandlers):
+class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
     """Provider-side of the Kafka relation."""
 
     def __init__(
@@ -3108,7 +3108,7 @@ class KafkaRequires(KafkaRequiresData, KafkaRequirerEventHandlers):
         consumer_group_prefix: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
-        KafkaRequiresData.__init__(
+        KafkaRequirerData.__init__(
             self,
             charm.model,
             relation_name,
@@ -3240,7 +3240,7 @@ class OpenSearchProvides(OpenSearchProviderData, OpenSearchProviderEventHandlers
         OpenSearchProviderEventHandlers.__init__(self, charm, self)
 
 
-class OpenSearchRequiresData(RequirerData):
+class OpenSearchRequirerData(RequirerData):
     """Requires data side of the OpenSearch relation."""
 
     def __init__(
@@ -3261,7 +3261,7 @@ class OpenSearchRequirerEventHandlers(RequirerEventHandlers):
 
     on = OpenSearchRequiresEvents()  # pyright: ignore[reportAssignmentType]
 
-    def __init__(self, charm: CharmBase, relation_data: OpenSearchRequiresData) -> None:
+    def __init__(self, charm: CharmBase, relation_data: OpenSearchRequirerData) -> None:
         super().__init__(charm, relation_data)
         # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
@@ -3351,7 +3351,7 @@ class OpenSearchRequirerEventHandlers(RequirerEventHandlers):
             return
 
 
-class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequirerEventHandlers):
+class OpenSearchRequires(OpenSearchRequirerData, OpenSearchRequirerEventHandlers):
     """Requires-side of the OpenSearch relation."""
 
     def __init__(
@@ -3362,7 +3362,7 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequirerEventHandlers
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
-        OpenSearchRequiresData.__init__(
+        OpenSearchRequirerData.__init__(
             self,
             charm.model,
             relation_name,
