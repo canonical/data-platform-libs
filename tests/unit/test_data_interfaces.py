@@ -92,20 +92,20 @@ def verify_relation_interface_functions(interface, relation_id):
     """This function is used to verify that the 3 main interface functions work correctly."""
     # Interface function: update_relation_data()
     for field in ["something", "secret-field"]:
-        interface.update_relation_data(relation_id, {"something": "else"})
+        interface.update_relation_data(relation_id, {field: "else"})
 
         # Interface function: fetch_relation_field()
-        assert interface.fetch_my_relation_field(relation_id, "something") == "else"
+        assert interface.fetch_my_relation_field(relation_id, field) == "else"
 
         # Interface function: fetch_relation_data()
-        rel_data = interface.fetch_my_relation_data([relation_id], ["something"])
-        assert rel_data[relation_id]["something"] == "else"
+        rel_data = interface.fetch_my_relation_data([relation_id], [field])
+        assert rel_data[relation_id][field] == "else"
 
         # Interface function: delete_relation_data()
-        interface.delete_relation_data(relation_id, ["something"])
+        interface.delete_relation_data(relation_id, [field])
 
-        assert interface.fetch_my_relation_field(relation_id, "something") is None
-        rel_data = interface.fetch_my_relation_data([relation_id], ["something"])
+        assert interface.fetch_my_relation_field(relation_id, field) is None
+        rel_data = interface.fetch_my_relation_data([relation_id], [field])
         assert rel_data[relation_id] == {}
 
 

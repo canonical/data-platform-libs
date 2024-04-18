@@ -1991,7 +1991,7 @@ class DataPeerData(RequirerData, ProviderData):
         return result
 
     def _no_group_with_databag(self, field: str, full_field: str) -> bool:
-        """Check that no secret group is attemtpet to be used together with databag."""
+        """Check that no secret group is attempted to be used together with databag."""
         if not self.secrets_enabled and full_field != field:
             logger.error(
                 f"Can't access {full_field}: no secrets available (i.e. no secret groups either)."
