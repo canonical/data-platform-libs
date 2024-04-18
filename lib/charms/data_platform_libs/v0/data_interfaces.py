@@ -2834,7 +2834,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
 # Kafka Events
 
 
-class KafkaProvidesEvent(RelationEvent):
+class KafkaProviderEvent(RelationEvent):
     """Base class for Kafka events."""
 
     @property
@@ -2854,7 +2854,7 @@ class KafkaProvidesEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("consumer-group-prefix")
 
 
-class TopicRequestedEvent(KafkaProvidesEvent, ExtraRoleEvent):
+class TopicRequestedEvent(KafkaProviderEvent, ExtraRoleEvent):
     """Event emitted when a new topic is requested for use on this relation."""
 
 
@@ -2924,7 +2924,7 @@ class KafkaRequiresEvents(CharmEvents):
 # Kafka Provides and Requires
 
 
-class KafkaProvidesData(ProviderData):
+class KafkaProviderData(ProviderData):
     """Provider-side of the Kafka relation."""
 
     def __init__(self, model: Model, relation_name: str) -> None:
@@ -2967,12 +2967,12 @@ class KafkaProvidesData(ProviderData):
         self.update_relation_data(relation_id, {"zookeeper-uris": zookeeper_uris})
 
 
-class KafkaProvidesEventHandlers(EventHandlers):
+class KafkaProviderEventHandlers(EventHandlers):
     """Provider-side of the Kafka relation."""
 
     on = KafkaProvidesEvents()  # pyright: ignore [reportAssignmentType]
 
-    def __init__(self, charm: CharmBase, relation_data: KafkaProvidesData) -> None:
+    def __init__(self, charm: CharmBase, relation_data: KafkaProviderData) -> None:
         super().__init__(charm, relation_data)
         # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
@@ -2994,12 +2994,12 @@ class KafkaProvidesEventHandlers(EventHandlers):
             )
 
 
-class KafkaProvides(KafkaProvidesData, KafkaProvidesEventHandlers):
+class KafkaProvides(KafkaProviderData, KafkaProviderEventHandlers):
     """Provider-side of the Kafka relation."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        KafkaProvidesData.__init__(self, charm.model, relation_name)
-        KafkaProvidesEventHandlers.__init__(self, charm, self)
+        KafkaProviderData.__init__(self, charm.model, relation_name)
+        KafkaProviderEventHandlers.__init__(self, charm, self)
 
 
 class KafkaRequiresData(RequirerData):
@@ -3032,7 +3032,7 @@ class KafkaRequiresData(RequirerData):
         self._topic = value
 
 
-class KafkaRequiresEventHandlers(RequirerEventHandlers):
+class KafkaRequirerEventHandlers(RequirerEventHandlers):
     """Requires-side of the Kafka relation."""
 
     on = KafkaRequiresEvents()  # pyright: ignore [reportAssignmentType]
@@ -3096,7 +3096,7 @@ class KafkaRequiresEventHandlers(RequirerEventHandlers):
             return
 
 
-class KafkaRequires(KafkaRequiresData, KafkaRequiresEventHandlers):
+class KafkaRequires(KafkaRequiresData, KafkaRequirerEventHandlers):
     """Provider-side of the Kafka relation."""
 
     def __init__(
@@ -3117,13 +3117,13 @@ class KafkaRequires(KafkaRequiresData, KafkaRequiresEventHandlers):
             consumer_group_prefix,
             additional_secret_fields,
         )
-        KafkaRequiresEventHandlers.__init__(self, charm, self)
+        KafkaRequirerEventHandlers.__init__(self, charm, self)
 
 
 # Opensearch related events
 
 
-class OpenSearchProvidesEvent(RelationEvent):
+class OpenSearchProviderEvent(RelationEvent):
     """Base class for OpenSearch events."""
 
     @property
@@ -3135,7 +3135,7 @@ class OpenSearchProvidesEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("index")
 
 
-class IndexRequestedEvent(OpenSearchProvidesEvent, ExtraRoleEvent):
+class IndexRequestedEvent(OpenSearchProviderEvent, ExtraRoleEvent):
     """Event emitted when a new index is requested for use on this relation."""
 
 
@@ -3170,7 +3170,7 @@ class OpenSearchRequiresEvents(CharmEvents):
 # OpenSearch Provides and Requires Objects
 
 
-class OpenSearchProvidesData(ProviderData):
+class OpenSearchProviderData(ProviderData):
     """Provider-side of the OpenSearch relation."""
 
     def __init__(self, model: Model, relation_name: str) -> None:
@@ -3206,12 +3206,12 @@ class OpenSearchProvidesData(ProviderData):
         self.update_relation_data(relation_id, {"version": version})
 
 
-class OpenSearchProvidesEventHandlers(EventHandlers):
+class OpenSearchProviderEventHandlers(EventHandlers):
     """Provider-side of the OpenSearch relation."""
 
     on = OpenSearchProvidesEvents()  # pyright: ignore[reportAssignmentType]
 
-    def __init__(self, charm: CharmBase, relation_data: OpenSearchProvidesData) -> None:
+    def __init__(self, charm: CharmBase, relation_data: OpenSearchProviderData) -> None:
         super().__init__(charm, relation_data)
         # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
@@ -3232,12 +3232,12 @@ class OpenSearchProvidesEventHandlers(EventHandlers):
             )
 
 
-class OpenSearchProvides(OpenSearchProvidesData, OpenSearchProvidesEventHandlers):
+class OpenSearchProvides(OpenSearchProviderData, OpenSearchProviderEventHandlers):
     """Provider-side of the OpenSearch relation."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        OpenSearchProvidesData.__init__(self, charm.model, relation_name)
-        OpenSearchProvidesEventHandlers.__init__(self, charm, self)
+        OpenSearchProviderData.__init__(self, charm.model, relation_name)
+        OpenSearchProviderEventHandlers.__init__(self, charm, self)
 
 
 class OpenSearchRequiresData(RequirerData):
@@ -3256,7 +3256,7 @@ class OpenSearchRequiresData(RequirerData):
         self.index = index
 
 
-class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
+class OpenSearchRequirerEventHandlers(RequirerEventHandlers):
     """Requires events side of the OpenSearch relation."""
 
     on = OpenSearchRequiresEvents()  # pyright: ignore[reportAssignmentType]
@@ -3351,7 +3351,7 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
             return
 
 
-class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers):
+class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequirerEventHandlers):
     """Requires-side of the OpenSearch relation."""
 
     def __init__(
@@ -3370,4 +3370,4 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
             extra_user_roles,
             additional_secret_fields,
         )
-        OpenSearchRequiresEventHandlers.__init__(self, charm, self)
+        OpenSearchRequirerEventHandlers.__init__(self, charm, self)
