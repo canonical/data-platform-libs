@@ -3170,7 +3170,7 @@ class OpenSearchRequiresEvents(CharmEvents):
 # OpenSearch Provides and Requires Objects
 
 
-class OpenSearchProviderData(ProviderData):
+class OpenSearchProvidesData(ProviderData):
     """Provider-side of the OpenSearch relation."""
 
     def __init__(self, model: Model, relation_name: str) -> None:
@@ -3206,12 +3206,12 @@ class OpenSearchProviderData(ProviderData):
         self.update_relation_data(relation_id, {"version": version})
 
 
-class OpenSearchProviderEventHandlers(EventHandlers):
+class OpenSearchProvidesEventHandlers(EventHandlers):
     """Provider-side of the OpenSearch relation."""
 
     on = OpenSearchProvidesEvents()  # pyright: ignore[reportAssignmentType]
 
-    def __init__(self, charm: CharmBase, relation_data: OpenSearchProviderData) -> None:
+    def __init__(self, charm: CharmBase, relation_data: OpenSearchProvidesData) -> None:
         super().__init__(charm, relation_data)
         # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
@@ -3232,15 +3232,15 @@ class OpenSearchProviderEventHandlers(EventHandlers):
             )
 
 
-class OpenSearchProvides(OpenSearchProviderData, OpenSearchProviderEventHandlers):
+class OpenSearchProvides(OpenSearchProvidesData, OpenSearchProvidesEventHandlers):
     """Provider-side of the OpenSearch relation."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        OpenSearchProviderData.__init__(self, charm.model, relation_name)
-        OpenSearchProviderEventHandlers.__init__(self, charm, self)
+        OpenSearchProvidesData.__init__(self, charm.model, relation_name)
+        OpenSearchProvidesEventHandlers.__init__(self, charm, self)
 
 
-class OpenSearchRequirerData(RequirerData):
+class OpenSearchRequiresData(RequirerData):
     """Requires data side of the OpenSearch relation."""
 
     def __init__(
@@ -3256,12 +3256,12 @@ class OpenSearchRequirerData(RequirerData):
         self.index = index
 
 
-class OpenSearchRequirerEventHandlers(RequirerEventHandlers):
+class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
     """Requires events side of the OpenSearch relation."""
 
     on = OpenSearchRequiresEvents()  # pyright: ignore[reportAssignmentType]
 
-    def __init__(self, charm: CharmBase, relation_data: OpenSearchRequirerData) -> None:
+    def __init__(self, charm: CharmBase, relation_data: OpenSearchRequiresData) -> None:
         super().__init__(charm, relation_data)
         # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
@@ -3351,7 +3351,7 @@ class OpenSearchRequirerEventHandlers(RequirerEventHandlers):
             return
 
 
-class OpenSearchRequires(OpenSearchRequirerData, OpenSearchRequirerEventHandlers):
+class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers):
     """Requires-side of the OpenSearch relation."""
 
     def __init__(
@@ -3362,7 +3362,7 @@ class OpenSearchRequires(OpenSearchRequirerData, OpenSearchRequirerEventHandlers
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
-        OpenSearchRequirerData.__init__(
+        OpenSearchRequiresData.__init__(
             self,
             charm.model,
             relation_name,
@@ -3370,4 +3370,4 @@ class OpenSearchRequires(OpenSearchRequirerData, OpenSearchRequirerEventHandlers
             extra_user_roles,
             additional_secret_fields,
         )
-        OpenSearchRequirerEventHandlers.__init__(self, charm, self)
+        OpenSearchRequiresEventHandlers.__init__(self, charm, self)
