@@ -44,6 +44,11 @@ DATABASE_DUMMY_RELATION_NAME = "dummy-database"
 
 SECRET_REF_PREFIX = "secret-"
 
+NUM_DB = 3
+NUM_DUMMY_DB = 2
+NUM_OTHER_DB = 1
+NUM_APP = 2
+
 
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(
@@ -54,7 +59,10 @@ async def test_deploy_charms(
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm, application_name=APPLICATION_APP_NAME, num_units=2, series="jammy"
+            application_charm,
+            application_name=APPLICATION_APP_NAME,
+            num_units=NUM_APP,
+            series="jammy",
         ),
         ops_test.model.deploy(
             database_charm,
@@ -64,7 +72,7 @@ async def test_deploy_charms(
                 ]
             },
             application_name=DATABASE_APP_NAME,
-            num_units=3,
+            num_units=NUM_DB,
             series="jammy",
         ),
         ops_test.model.deploy(
@@ -75,7 +83,7 @@ async def test_deploy_charms(
                 ]
             },
             application_name=DATABASE_DUMMY_APP_NAME,
-            num_units=2,
+            num_units=NUM_DUMMY_DB,
             series="jammy",
         ),
         ops_test.model.deploy(
@@ -92,16 +100,16 @@ async def test_deploy_charms(
 
     await asyncio.gather(
         ops_test.model.wait_for_idle(
-            apps=[APPLICATION_APP_NAME], status="active", wait_for_exact_units=2
+            apps=[APPLICATION_APP_NAME], status="active", wait_for_exact_units=NUM_APP
         ),
         ops_test.model.wait_for_idle(
-            apps=[DATABASE_APP_NAME], status="active", wait_for_exact_units=3
+            apps=[DATABASE_APP_NAME], status="active", wait_for_exact_units=NUM_DB
         ),
         ops_test.model.wait_for_idle(
-            apps=[DATABASE_DUMMY_APP_NAME], status="active", wait_for_exact_units=2
+            apps=[DATABASE_DUMMY_APP_NAME], status="active", wait_for_exact_units=NUM_DUMMY_DB
         ),
         ops_test.model.wait_for_idle(
-            apps=[ANOTHER_DATABASE_APP_NAME], status="active", wait_for_exact_units=1
+            apps=[ANOTHER_DATABASE_APP_NAME], status="active", wait_for_exact_units=NUM_OTHER_DB
         ),
     )
 
@@ -206,7 +214,7 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
     )
     await action.wait()
 
-    secret = await get_secret_by_label(ops_test, f"database.{component}", owner)
+    secret = await get_secret_by_label(ops_test, f"database-peers.database.{component}", owner)
     assert secret.get("monitor-password") == "blablabla"
     assert secret.get("secret-field") == "blablabla2"
 
@@ -229,7 +237,7 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
     )
     await action.wait()
 
-    secret = await get_secret_by_label(ops_test, f"database.{component}", owner)
+    secret = await get_secret_by_label(ops_test, f"database-peers.database.{component}", owner)
     assert not secret.get("not-a-secret")
 
     action = await ops_test.model.units.get(unit_name).run_action(
@@ -244,7 +252,7 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
     )
     await action.wait()
 
-    secret = await get_secret_by_label(ops_test, f"database.{component}", owner)
+    secret = await get_secret_by_label(ops_test, f"database-peers.database.{component}", owner)
     assert secret.get("secret-field") == "blablabla2"
     assert secret.get("monitor-password") == "#DELETED#"
 
@@ -305,7 +313,9 @@ async def test_peer_relation_set_secret(component, ops_test: OpsTest):
     )
     await action.wait()
 
-    secret = await get_secret_by_label(ops_test, f"dummy-database.{component}", owner)
+    secret = await get_secret_by_label(
+        ops_test, f"database-peers.dummy-database.{component}", owner
+    )
     assert secret.get("new-field") == "blablabla"
 
     # Setting a new secret field dynamically in a new, dedicated secret
@@ -330,7 +340,9 @@ async def test_peer_relation_set_secret(component, ops_test: OpsTest):
     )
     await action.wait()
 
-    secret = await get_secret_by_label(ops_test, f"dummy-database.{component}.mygroup", owner)
+    secret = await get_secret_by_label(
+        ops_test, f"database-peers.dummy-database.{component}.mygroup", owner
+    )
     assert secret.get("mygroup-field1") == "blablabla3"
     assert secret.get("mygroup-field2") == "blablabla4"
 
@@ -384,7 +396,7 @@ async def test_peer_relation_non_leader_unit_secrets(ops_test: OpsTest):
     )
     await action.wait()
 
-    secret = await get_secret_by_label(ops_test, "database.unit", unit_name)
+    secret = await get_secret_by_label(ops_test, "database-peers.database.unit", unit_name)
     assert secret.get("monitor-password") == "blablabla"
     assert secret.get("secret-field") == "blablabla2"
 
@@ -407,7 +419,7 @@ async def test_peer_relation_non_leader_unit_secrets(ops_test: OpsTest):
     )
     await action.wait()
 
-    secret = await get_secret_by_label(ops_test, "database.unit", unit_name)
+    secret = await get_secret_by_label(ops_test, "database-peers.database.unit", unit_name)
     assert not secret.get("not-a-secret")
 
     action = await ops_test.model.units.get(unit_name).run_action(
@@ -422,7 +434,7 @@ async def test_peer_relation_non_leader_unit_secrets(ops_test: OpsTest):
     )
     await action.wait()
 
-    secret = await get_secret_by_label(ops_test, "database.unit", unit_name)
+    secret = await get_secret_by_label(ops_test, "database-peers.database.unit", unit_name)
     assert secret.get("secret-field") == "blablabla2"
     assert secret.get("monitor-password") == "#DELETED#"
 
@@ -895,9 +907,6 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
     assert topsecret1 != topsecret2
 
 
-@pytest.mark.log_errors_allowed(
-    "Non-existing field 'doesnt_exist' was attempted to be removed from the databag"
-)
 @pytest.mark.parametrize("field,value", [("new_field", "blah"), ("tls", "True")])
 @pytest.mark.usefixtures("only_without_juju_secrets")
 async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
@@ -968,6 +977,10 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     await action.wait()
     # Juju2 syntax
     assert int(action.results["Code"]) == 0
+    assert await check_logs(
+        ops_test,
+        strings=["Non-existing field 'doesnt_exist' was attempted to be removed from the databag"],
+    )
 
 
 @pytest.mark.log_errors_allowed(
@@ -1059,9 +1072,6 @@ async def test_provider_get_set_delete_fields_secrets(
     assert action.results["return-code"] == 0
 
 
-@pytest.mark.log_errors_allowed(
-    "Non-existing field 'tls' was attempted to be removed from the databag"
-)
 @pytest.mark.log_errors_allowed("Can't delete secret for relation")
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
@@ -1095,6 +1105,12 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
+    assert not (
+        await check_logs(
+            ops_test,
+            strings=["Non-existing field 'tls' was attempted to be removed from the databag"],
+        )
+    )
     assert not (await check_logs(ops_test, strings=["Can't delete secret for relation"]))
 
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -1102,6 +1118,9 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
+    assert await check_logs(
+        ops_test, strings=["Non-existing field 'tls' was attempted to be removed from the databag"]
+    )
     assert await check_logs(ops_test, strings=["Can't delete secret for relation"])
 
     assert (

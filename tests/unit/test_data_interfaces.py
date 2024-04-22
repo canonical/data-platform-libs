@@ -91,21 +91,22 @@ provides:
 def verify_relation_interface_functions(interface, relation_id):
     """This function is used to verify that the 3 main interface functions work correctly."""
     # Interface function: update_relation_data()
-    interface.update_relation_data(relation_id, {"something": "else"})
+    for field in ["something", "secret-field"]:
+        interface.update_relation_data(relation_id, {field: "else"})
 
-    # Interface function: fetch_relation_field()
-    assert interface.fetch_my_relation_field(relation_id, "something") == "else"
+        # Interface function: fetch_relation_field()
+        assert interface.fetch_my_relation_field(relation_id, field) == "else"
 
-    # Interface function: fetch_relation_data()
-    rel_data = interface.fetch_my_relation_data([relation_id], ["something"])
-    assert rel_data[relation_id]["something"] == "else"
+        # Interface function: fetch_relation_data()
+        rel_data = interface.fetch_my_relation_data([relation_id], [field])
+        assert rel_data[relation_id][field] == "else"
 
-    # Interface function: delete_relation_data()
-    interface.delete_relation_data(relation_id, ["something"])
+        # Interface function: delete_relation_data()
+        interface.delete_relation_data(relation_id, [field])
 
-    assert interface.fetch_my_relation_field(relation_id, "something") is None
-    rel_data = interface.fetch_my_relation_data([relation_id], ["something"])
-    assert rel_data[relation_id] == {}
+        assert interface.fetch_my_relation_field(relation_id, field) is None
+        rel_data = interface.fetch_my_relation_data([relation_id], [field])
+        assert rel_data[relation_id] == {}
 
 
 def verify_relation_interface_dict(interface, relation_id):
@@ -254,10 +255,16 @@ class DatabaseCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.peer_relation_app = DataPeer(
-            self, PEER_RELATION_NAME, additional_secret_fields=["secret-field-app"]
+            self,
+            PEER_RELATION_NAME,
+            additional_secret_fields=["secret-field-app", "secret-field"],
+            additional_secret_group_mapping={"mygroup": ["mysecret1", "mysecret2"]},
         )
         self.peer_relation_unit = DataPeerUnit(
-            self, PEER_RELATION_NAME, additional_secret_fields=["secret-field-unit"]
+            self,
+            PEER_RELATION_NAME,
+            additional_secret_fields=["secret-field-unit", "secret-field"],
+            additional_secret_group_mapping={"mygroup": ["mysecret1", "mysecret2"]},
         )
         self.provider = DatabaseProvides(
             self,
@@ -392,12 +399,12 @@ class DataProvidesBaseTests(ABC):
         result = self.harness.charm.provider._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
 
-    def test_relation_interfce(self):
+    def test_relation_interface(self):
         """Check the functionality of each public interface function."""
         interface = self.harness.charm.provider
         verify_relation_interface_functions(interface, self.rel_id)
 
-    def test_relation_interfce_dict(self):
+    def test_relation_interface_dict(self):
         """Check the functionality of each public interface function."""
         interface = self.harness.charm.provider
         verify_relation_interface_dict(interface, self.rel_id)
@@ -508,7 +515,9 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Now we fake an illegal situation, pretending that a dynamic secret was added
         scope_component = getattr(self.harness.charm, scope)
-        scope_component.add_secret({"dynamic-secret": "added"}, label=f"database.{scope}")
+        scope_component.add_secret(
+            {"dynamic-secret": "added"}, label=f"{PEER_RELATION_NAME}.database.{scope}"
+        )
 
         with pytest.raises(IllegalOperationError):
             interface.update_relation_data(0, {"something": "illegal"})
@@ -523,10 +532,112 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                 interface.delete_relation_data(0, ["key"])
 
     @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
-    def test_peer_relation_interfce(self, interface_attr):
+    def test_peer_relation_interface(self, interface_attr):
         """Check the functionality of each public interface function."""
         interface = getattr(self.harness.charm, interface_attr)
         verify_relation_interface_functions(interface, self.harness.charm.peer_relation.id)
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation_interface_secret_fields(self, interface_attr):
+        """Check the functionality of each public interface function."""
+        relation_id = self.harness.charm.peer_relation.id
+        interface = getattr(self.harness.charm, interface_attr)
+
+        scope = interface_attr.split("_")[2]
+        interface.update_relation_data(relation_id, {"secret-field": "bla"})
+        interface.update_relation_data(relation_id, {"mysecret1@mygroup": "bla"})
+
+        assert set(interface.secret_fields) == {
+            f"secret-field-{scope}",
+            "secret-field",
+            "mysecret1@mygroup",
+            "mysecret2@mygroup",
+        }
+        assert set(interface.current_secret_fields) == {"secret-field", "mysecret1@mygroup"}
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation_interface_backwards_compatible_databag(self, interface_attr):
+        """Check the functionality of each public interface function."""
+        relation_id = self.harness.charm.peer_relation.id
+        interface = getattr(self.harness.charm, interface_attr)
+
+        scope = interface_attr.split("_")[2]
+        scope_opj = getattr(self.harness.charm, scope)
+        self.harness.update_relation_data(relation_id, scope_opj.name, {"secret-field": "bla"})
+
+        assert interface.fetch_my_relation_field(relation_id, "secret-field") == "bla"
+        assert interface.fetch_my_relation_data([relation_id])
+
+        interface.update_relation_data(relation_id, {"secret-field": "blabla"})
+        assert interface.fetch_my_relation_field(relation_id, "secret-field") == "blabla"
+
+        # ...that now is labelled as expected
+        secret = self.harness.model.get_secret(label=f"{PEER_RELATION_NAME}.database.{scope}")
+        assert secret.peek_content()["secret-field"] == "blabla"
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation_interface_backwards_compatible_databag_uri(self, interface_attr):
+        """Check the functionality of each public interface function."""
+        relation_id = self.harness.charm.peer_relation.id
+        interface = getattr(self.harness.charm, interface_attr)
+
+        scope = interface_attr.split("_")[2]
+        scope_opj = getattr(self.harness.charm, scope)
+        secret = scope_opj.add_secret({"secret-field": "bla"})
+        secret_id = secret.id
+        self.harness.update_relation_data(
+            relation_id, scope_opj.name, {"internal_secret": secret_id}
+        )
+
+        assert interface.fetch_my_relation_field(relation_id, "secret-field") == "bla"
+        assert interface.fetch_my_relation_data([relation_id])
+
+        # Get operation leaves legacy databag field (indicating secret URI) intact
+        assert interface.fetch_my_relation_field(relation_id, "internal_secret") == secret_id
+
+        interface.update_relation_data(relation_id, {"secret-field": "blabla"})
+        assert interface.fetch_my_relation_field(relation_id, "internal_secret") is None
+        assert interface.fetch_my_relation_field(relation_id, "secret-field") == "blabla"
+
+        # We're re-using the previous secret
+        secret = self.harness.model.get_secret(id=secret_id)
+        assert secret.peek_content()["secret-field"] == "blabla"
+
+        # ...that now is labelled as expected
+        secret = self.harness.model.get_secret(label=f"{PEER_RELATION_NAME}.database.{scope}")
+        assert secret.peek_content()["secret-field"] == "blabla"
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation_interface_backwards_compatible_legacy_label(self, interface_attr):
+        """Check the functionality of each public interface function."""
+        relation_id = self.harness.charm.peer_relation.id
+        interface = getattr(self.harness.charm, interface_attr)
+
+        scope = interface_attr.split("_")[2]
+        scope_opj = getattr(self.harness.charm, scope)
+        secret = scope_opj.add_secret({"secret-field": "bla"}, label=f"database.{scope}")
+        secret_id = secret.id
+
+        assert interface.fetch_my_relation_field(relation_id, "secret-field") == "bla"
+        assert interface.fetch_my_relation_data([relation_id])
+
+        assert self.harness.model.get_secret(label=f"database.{scope}")
+
+        # Moving to new secret after write
+        interface.update_relation_data(relation_id, {"secret-field": "blabla"})
+        secret2 = self.harness.model.get_secret(label=f"{PEER_RELATION_NAME}.database.{scope}")
+        assert secret2.id != secret_id
+        assert interface.fetch_my_relation_field(relation_id, "secret-field") == "blabla"
+        with pytest.raises(SecretNotFoundError):
+            secret = self.harness.model.get_secret(label=f"database.{scope}")
+
+        # After update the old label is gone. But sadly unittests don't allow us for verifying that :-/
+
+        assert secret2.peek_content()["secret-field"] == "blabla"
 
     def test_peer_relation_other_unit(self):
         """Check the functionality of each public interface function on each "other" unit."""
@@ -547,7 +658,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             assert rel_data[relation_id] == {}
 
     @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
-    def test_peer_relation_interfce_dict(self, interface_attr):
+    def test_peer_relation_interface_dict(self, interface_attr):
         """Check the functionality of each public interface function."""
         interface = getattr(self.harness.charm, interface_attr)
         verify_relation_interface_dict(interface, self.harness.charm.peer_relation.id)
@@ -612,18 +723,32 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         assert interface.as_dict(self.rel_id) == {"data": json.dumps({})}
 
+    @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_provider_interface_dict_secrets(self):
         """Check the functionality of each public interface function."""
         interface = self.harness.charm.provider
         verify_relation_interface_dict(interface, self.rel_id)
 
-        assert interface.as_dict(self.rel_id) == {
+        datadict = interface.as_dict(self.rel_id)
+        assert datadict == {
             "data": json.dumps(
                 {"requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]'}
             ),
             "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
         }
+
+        # Non-leader can fetch the data
+        self.harness.set_leader(False)
+        with self._caplog.at_level(logging.ERROR):
+            assert (
+                datadict["requested-secrets"]
+                == '["username", "password", "tls", "tls-ca", "uris"]'
+            )
+            assert (
+                "This operation (fetch_my_relation_field()) can only be performed by the leader unit"
+                not in self._caplog.text
+            )
 
     @patch.object(DatabaseCharm, "_on_database_requested")
     def test_on_database_requested(self, _on_database_requested):
@@ -998,7 +1123,7 @@ class TestDatabaseProvidesDynamicSecrets(ABC, unittest.TestCase):
 
     @parameterized.expand([("app",), ("unit",)])
     @pytest.mark.usefixtures("only_with_juju_secrets")
-    def test_peer_relation_interfce(self, scope):
+    def test_peer_relation_interface(self, scope):
         """Check the functionality of each public interface function."""
         interface = getattr(self.harness.charm, f"peer_relation_{scope}")
         relation_id = self.harness.charm.peer_relation.id
@@ -1006,7 +1131,9 @@ class TestDatabaseProvidesDynamicSecrets(ABC, unittest.TestCase):
         # set_secret()
         interface.set_secret(relation_id, "something", "else")
 
-        secret = self.harness.charm.model.get_secret(label=f"database.{scope}")
+        secret = self.harness.charm.model.get_secret(
+            label=f"{PEER_RELATION_NAME}.database.{scope}"
+        )
         assert "something" in secret.get_content()
 
         # get_secret()
@@ -1478,12 +1605,12 @@ class DataRequirerBaseTests(ABC):
         result = self.harness.charm.requirer._diff(mock_event)
         assert result == Diff(set(), set(), {"username", "password"})
 
-    def test_relation_interfce(self):
+    def test_relation_interface(self):
         """Check the functionality of each public interface function."""
         interface = self.harness.charm.requirer
         verify_relation_interface_functions(interface, self.rel_id)
 
-    def test_relation_interfce_dict(self):
+    def test_relation_interface_dict(self):
         """Check the functionality of each public interface function."""
         interface = self.harness.charm.requirer
         verify_relation_interface_dict(interface, self.rel_id)
@@ -1509,11 +1636,11 @@ class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
         self.assertRaises(IndexError, lambda: self.harness.charm.requirer.is_resource_created(0))
         self.assertRaises(IndexError, lambda: self.harness.charm.requirer.is_resource_created(1))
 
-    def test_relation_interfce(self):
+    def test_relation_interface(self):
         """Disabling irrelevant inherited test."""
         pass
 
-    def test_relation_interfce_dict(self):
+    def test_relation_interface_dict(self):
         """Disabling irrelevant inherited test."""
         pass
 
@@ -1602,18 +1729,31 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "extra-user-roles": "CREATEDB,CREATEROLE",
         }
 
+    @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_requires_interface_dict_secrets(self):
         """Check the functionality of each public interface function."""
         interface = self.harness.charm.requirer
         verify_relation_interface_dict(interface, self.rel_id)
 
-        assert interface.as_dict(self.rel_id) == {
+        datadict = interface.as_dict(self.rel_id)
+        assert datadict == {
             "alias": "cluster1",
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
             "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
         }
+
+        # Non-leader can try to fetch data (won't have anything thought, as only app data is there...
+        # Which isn't available for units on cross-charm relations self-side)
+        self.harness.set_leader(False)
+        with self._caplog.at_level(logging.ERROR):
+            with pytest.raises(KeyError):
+                datadict["database"]
+            assert (
+                "This operation (fetch_my_relation_field()) can only be performed by the leader unit"
+                not in self._caplog.text
+            )
 
     @patch.object(charm, "_on_database_created")
     @pytest.mark.usefixtures("only_without_juju_secrets")

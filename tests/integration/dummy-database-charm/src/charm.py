@@ -40,7 +40,11 @@ class DatabaseCharm(CharmBase):
             relation_name=PEER,
             additional_secret_group_mapping={"mygroup": []},
         )
-        self.peer_relation_unit = DataPeerUnit(self, relation_name=PEER)
+        self.peer_relation_unit = DataPeerUnit(
+            self,
+            relation_name=PEER,
+            additional_secret_group_mapping={"mygroup": []},
+        )
 
         # Default charm events.
         self.framework.observe(self.on.start, self._on_start)
@@ -167,9 +171,9 @@ class DatabaseCharm(CharmBase):
         secret = None
         group_str = "" if not event.params["group"] else f".{event.params['group']}"
         if component == "app":
-            secret = self.model.get_secret(label=f"{self.app.name}.app{group_str}")
+            secret = self.model.get_secret(label=f"{PEER}.{self.app.name}.app{group_str}")
         else:
-            secret = self.model.get_secret(label=f"{self.app.name}.unit{group_str}")
+            secret = self.model.get_secret(label=f"{PEER}.{self.app.name}.unit{group_str}")
 
         if secret:
             secret.remove_all_revisions()

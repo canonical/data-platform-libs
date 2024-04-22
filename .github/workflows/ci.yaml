@@ -121,6 +121,7 @@ jobs:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
       - name: Print debug-log
+        if: failure()
         run: juju switch testing; juju debug-log --replay --no-tail
       - name: Dump logs
         uses: canonical/charm-logdump-action@main
