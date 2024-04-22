@@ -18,8 +18,6 @@ from ops.model import ActiveStatus
 
 from charms.data_platform_libs.v0.data_interfaces import (
     LIBPATCH as DATA_INTERFACES_VERSION,
-    KafkaRequiresData,
-    KafkaRequiresEventHandlers,
 )
 from charms.data_platform_libs.v0.data_interfaces import (
     BootstrapServerChangedEvent,
@@ -28,6 +26,8 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseRequires,
     IndexCreatedEvent,
     KafkaRequires,
+    KafkaRequiresData,
+    KafkaRequiresEventHandlers,
     OpenSearchRequires,
     TopicCreatedEvent,
 )
