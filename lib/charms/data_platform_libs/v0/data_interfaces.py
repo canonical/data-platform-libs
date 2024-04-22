@@ -723,7 +723,7 @@ class SecretCache:
                 pass
             else:
                 return
-        logging.warning("Non-existing Juju Secret was attempted to be removed %s", label)
+        logging.debug("Non-existing Juju Secret was attempted to be removed %s", label)
 
 
 ################################################################################
@@ -1149,7 +1149,7 @@ class Data(ABC):
             try:
                 relation.data[component].pop(field)
             except KeyError:
-                logger.warning(
+                logger.debug(
                     "Non-existing field '%s' was attempted to be removed from the databag (relation ID: %s)",
                     str(field),
                     str(relation.id),
@@ -1405,7 +1405,7 @@ class ProviderData(Data):
             try:
                 new_content.pop(field)
             except KeyError:
-                logging.warning(
+                logging.debug(
                     "Non-existing secret was attempted to be removed %s, %s",
                     str(relation.id),
                     str(field),
@@ -1943,7 +1943,7 @@ class DataPeerData(RequirerData, ProviderData):
             if non_existent := (set(fields) & set(self.secret_fields)) - set(
                 current_data.get(relation.id, [])
             ):
-                logger.warning(
+                logger.debug(
                     "Non-existing secret %s was attempted to be removed.",
                     ", ".join(non_existent),
                 )
