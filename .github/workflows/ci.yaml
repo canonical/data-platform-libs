@@ -59,9 +59,9 @@ jobs:
       fail-fast: false
       matrix:
         tox-environments:
-          # - integration-database
-          # - integration-s3
-          # - integration-opensearch
+          - integration-database
+          - integration-s3
+          - integration-opensearch
           - integration-kafka
         juju-version:
           - juju-bootstrap-option: "2.9.44"
