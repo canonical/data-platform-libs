@@ -25,9 +25,9 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseEndpointsChangedEvent,
     DatabaseRequires,
     IndexCreatedEvent,
-    KafkaRequires,
     KafkaRequirerData,
     KafkaRequirerEventHandlers,
+    KafkaRequires,
     OpenSearchRequires,
     TopicCreatedEvent,
 )
