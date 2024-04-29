@@ -26,8 +26,8 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseRequires,
     IndexCreatedEvent,
     KafkaRequires,
-    KafkaRequiresData,
-    KafkaRequiresEventHandlers,
+    KafkaRequirerData,
+    KafkaRequirerEventHandlers,
     OpenSearchRequires,
     TopicCreatedEvent,
 )
@@ -142,14 +142,14 @@ class ApplicationCharm(CharmBase):
             self, "kafka-client", "test-topic", EXTRA_USER_ROLES_KAFKA, CONSUMER_GROUP_PREFIX
         )
 
-        self.kafka_requirer_interface = KafkaRequiresData(
+        self.kafka_requirer_interface = KafkaRequirerData(
             model=self.model,
             relation_name="kafka-split-pattern-client",
             topic="test-topic-split-pattern",
             extra_user_roles=EXTRA_USER_ROLES,
             consumer_group_prefix=CONSUMER_GROUP_PREFIX,
         )
-        self.kafka_split_pattern = KafkaRequiresEventHandlers(
+        self.kafka_split_pattern = KafkaRequirerEventHandlers(
             self, relation_data=self.kafka_requirer_interface
         )
 
