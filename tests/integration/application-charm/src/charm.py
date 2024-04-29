@@ -161,9 +161,9 @@ class ApplicationCharm(CharmBase):
                 self.kafka_split_pattern.on.bootstrap_server_changed,
                 self._on_kafka_bootstrap_server_changed,
             )
-        self.framework.observe(
-            self.kafka_split_pattern.on.topic_created, self._on_kafka_topic_created
-        )
+            self.framework.observe(
+                self.kafka_split_pattern.on.topic_created, self._on_kafka_topic_created
+            )
 
         self.framework.observe(
             self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
