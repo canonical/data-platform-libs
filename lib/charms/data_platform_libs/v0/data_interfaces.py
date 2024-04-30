@@ -331,7 +331,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 34
+LIBPATCH = 35
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -3142,10 +3142,13 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
             return
 
         # Sets topic, extra user roles, and "consumer-group-prefix" in the relation
-        relation_data = {
-            f: getattr(self, f.replace("-", "_"), "")
-            for f in ["consumer-group-prefix", "extra-user-roles", "topic"]
-        }
+        relation_data = {"topic": self.relation_data.topic}
+
+        if self.relation_data.extra_user_roles:
+            relation_data["extra-user-roles"] = self.relation_data.extra_user_roles
+
+        if self.relation_data.consumer_group_prefix:
+            relation_data["consumer-group-prefix"] = self.relation_data.consumer_group_prefix
 
         self.relation_data.update_relation_data(event.relation.id, relation_data)
 

@@ -30,6 +30,12 @@ from charms.data_platform_libs.v0.data_interfaces import (
     TopicCreatedEvent,
 )
 
+if DATA_INTERFACES_VERSION > 34:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        KafkaRequirerData,
+        KafkaRequirerEventHandlers,
+    )
+
 logger = logging.getLogger(__name__)
 
 # Extra roles that this application needs when interacting with the database.
@@ -139,6 +145,25 @@ class ApplicationCharm(CharmBase):
         self.kafka = KafkaRequires(
             self, "kafka-client", "test-topic", EXTRA_USER_ROLES_KAFKA, CONSUMER_GROUP_PREFIX
         )
+
+        if DATA_INTERFACES_VERSION > 34:
+            self.kafka_requirer_interface = KafkaRequirerData(
+                model=self.model,
+                relation_name="kafka-split-pattern-client",
+                topic="test-topic-split-pattern",
+                extra_user_roles=EXTRA_USER_ROLES,
+                consumer_group_prefix=CONSUMER_GROUP_PREFIX,
+            )
+            self.kafka_split_pattern = KafkaRequirerEventHandlers(
+                self, relation_data=self.kafka_requirer_interface
+            )
+            self.framework.observe(
+                self.kafka_split_pattern.on.bootstrap_server_changed,
+                self._on_kafka_bootstrap_server_changed,
+            )
+            self.framework.observe(
+                self.kafka_split_pattern.on.topic_created, self._on_kafka_topic_created
+            )
 
         self.framework.observe(
             self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed

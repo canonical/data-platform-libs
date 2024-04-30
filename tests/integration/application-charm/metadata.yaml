@@ -19,5 +19,7 @@ requires:
     limit: 2
   kafka-client:
     interface: kafka_client
+  kafka-split-pattern-client:
+    interface: kafka_client
   opensearch-client:
     interface: opensearch_client
