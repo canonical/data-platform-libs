@@ -209,6 +209,10 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
     )
     await action.wait()
 
+    original_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"database-peers.database.{component}", owner
+    )
+
     action = await ops_test.model.units.get(unit_name).run_action(
         "set-peer-relation-field",
         **{"component": component, "field": "secret-field", "value": "blablabla2"},
@@ -219,19 +223,21 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
     assert secret.get("monitor-password") == "blablabla"
     assert secret.get("secret-field") == "blablabla2"
 
-    secret_revision = await get_secret_revision_by_label(
+    changed_secret_revision = await get_secret_revision_by_label(
         ops_test, f"database-peers.database.{component}", owner
     )
+    assert original_secret_revision + 1 == changed_secret_revision
+
     action = await ops_test.model.units.get(unit_name).run_action(
         "set-peer-relation-field",
         **{"component": component, "field": "secret-field", "value": "blablabla2"},
     )
     await action.wait()
 
-    new_revision = await get_secret_revision_by_label(
+    unchanged_secret_revision = await get_secret_revision_by_label(
         ops_test, f"database-peers.database.{component}", owner
     )
-    assert secret_revision == new_revision
+    assert changed_secret_revision == unchanged_secret_revision
 
     action = await ops_test.model.units.get(unit_name).run_action(
         "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
