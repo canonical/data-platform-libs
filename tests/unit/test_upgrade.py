@@ -261,7 +261,7 @@ def test_dependency_model_raises_for_bad_dependency(value):
 def test_dependency_model_raises_for_bad_nested_dependency(value):
     deps = {
         "gandalf_the_white": {
-            "dependencies": {"gandalf_the_grey": "~1.0", "durin": value},
+            "dependencies": {"gandalf_the_grey": "~1.0", "bilbo": value},
             "name": "gandalf",
             "upgrade_supported": ">6",
             "version": "7",
@@ -294,7 +294,7 @@ def test_dependency_model_succeeds():
 def test_dependency_model_succeeds_nested():
     deps = {
         "gandalf_the_white": {
-            "dependencies": {"gandalf_the_grey": "~1.0", "durin": "^1.2.5"},
+            "dependencies": {"gandalf_the_grey": "~1.0", "bilbo": "^1.2.5"},
             "name": "gandalf",
             "upgrade_supported": ">1.2",
             "version": "7",
