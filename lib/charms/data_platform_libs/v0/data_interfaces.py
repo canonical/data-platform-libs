@@ -331,7 +331,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 35
+LIBPATCH = 36
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -642,8 +642,8 @@ class CachedSecret:
             return
 
         # Create a new secret with the new label
-        old_meta = self._secret_meta
         content = self._secret_meta.get_content()
+        self._secret_uri = None
 
         # I wish we could just check if we are the owners of the secret...
         try:
@@ -651,7 +651,7 @@ class CachedSecret:
         except ModelError as err:
             if "this unit is not the leader" not in str(err):
                 raise
-        old_meta.remove_all_revisions()
+        self.current_label = None
 
     def set_content(self, content: Dict[str, str]) -> None:
         """Setting cached secret content."""
