@@ -307,6 +307,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    TypedDict,
     Union,
     ValuesView,
 )
@@ -1306,6 +1307,8 @@ class EventHandlers(Object):
         raise NotImplementedError
 
 
+HostnameMapping = TypedDict("HostnameMapping", {"address": str, "names": List[str]})
+
 # Base ProviderData and RequiresData
 
 
@@ -2277,7 +2280,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
 
 
 ################################################################################
-# Cross-charm Relatoins Data Handling and Evenets
+# Cross-charm Relations Data Handling and Events
 ################################################################################
 
 # Generic events
@@ -2300,7 +2303,7 @@ class RelationEventWithSecret(RelationEvent):
 
     @property
     def _secrets(self) -> dict:
-        """Caching secrets to avoid fetching them each time a field is referrd.
+        """Caching secrets to avoid fetching them each time a field is referred.
 
         DON'T USE the encapsulated helper variable outside of this function
         """
@@ -2309,7 +2312,7 @@ class RelationEventWithSecret(RelationEvent):
         return self._cached_secrets
 
     def _get_secret(self, group) -> Optional[Dict[str, str]]:
-        """Retrieveing secrets."""
+        """Retrieving secrets."""
         if not self.app:
             return
         if not self._secrets.get(group):
@@ -2498,6 +2501,18 @@ class DatabaseRequiresEvent(RelationEventWithSecret):
 
         return self.relation.data[self.relation.app].get("version")
 
+    @property
+    def hostname_mapping(self) -> Optional[List[HostnameMapping]]:
+        """Returns the hostname mapping.
+
+        A list that maps the hostnames to IP address.
+        """
+        if not self.relation.app:
+            return None
+
+        if mapping := self.relation.data[self.relation.app].get("hostname-mapping"):
+            return json.loads(mapping)
+
 
 class DatabaseCreatedEvent(AuthenticationEvent, DatabaseRequiresEvent):
     """Event emitted when a new database is created for use on this relation."""
@@ -2601,6 +2616,17 @@ class DatabaseProviderData(ProviderData):
             version: database version.
         """
         self.update_relation_data(relation_id, {"version": version})
+
+    def set_hostname_mapping(
+        self, relation_id: int, hostname_mapping: List[HostnameMapping]
+    ) -> None:
+        """Set hostname mapping.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            hostname_mapping: list of hostname mapping.
+        """
+        self.update_relation_data(relation_id, {"hostname-mapping": json.dumps(hostname_mapping)})
 
 
 class DatabaseProviderEventHandlers(EventHandlers):
