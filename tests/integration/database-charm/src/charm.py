@@ -104,6 +104,10 @@ class DatabaseCharm(CharmBase):
         self.framework.observe(
             self.on.set_peer_relation_field_action, self._on_set_peer_relation_field
         )
+        self.framework.observe(
+            self.on.set_peer_relation_field_multiple_action,
+            self._on_set_peer_relation_field_multiple,
+        )
         self.framework.observe(self.on.set_peer_secret_action, self._on_set_peer_secret)
         self.framework.observe(
             self.on.delete_peer_relation_field_action, self._on_delete_peer_relation_field
@@ -340,6 +344,33 @@ class DatabaseCharm(CharmBase):
             self.peer_relation_unit.update_relation_data(
                 relation.id, {event.params["field"]: event.params["value"]}
             )
+
+    def _on_set_peer_relation_field_multiple(self, event: ActionEvent):
+        """Set requested relation field."""
+        component = event.params["component"]
+        count = event.params["count"]
+
+        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        for cnt in range(count):
+            value = event.params["value"] + f"{cnt}"
+            if DATA_INTERFACES_VERSION <= 17:
+                relation = self.model.get_relation(PEER)
+                if component == "app":
+                    relation.data[self.app][event.params["field"]] = value
+                else:
+                    relation.data[self.unit][event.params["field"]] = value
+                return
+
+            if component == "app":
+                relation = self.peer_relation_app.relations[0]
+                self.peer_relation_app.update_relation_data(
+                    relation.id, {event.params["field"]: value}
+                )
+            else:
+                relation = self.peer_relation_unit.relations[0]
+                self.peer_relation_unit.update_relation_data(
+                    relation.id, {event.params["field"]: value}
+                )
 
     def _on_set_peer_secret(self, event: ActionEvent):
         """Set requested relation field."""
