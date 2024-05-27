@@ -102,7 +102,6 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
 @pytest.mark.parametrize("component", ["app", "unit"])
 async def test_peer_relation(component, ops_test: OpsTest):
     """Peer relation safe across upgrades."""
-    await upgrade_to_new_version(ops_test, DATABASE_APP_NAME)
     await downgrade_to_old_version(ops_test, DATABASE_APP_NAME)
 
     # Setting and verifying two fields (one that should be a secret, one plain text)
@@ -211,9 +210,9 @@ async def test_unbalanced_versions_req_old_vs_prov_new(
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # Username
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
-    leader_name = f"{APPLICATION_APP_NAME}/{leader_id}"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    leader_app_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
+    leader_app_name = f"{APPLICATION_APP_NAME}/{leader_app_id}"
+    action = await ops_test.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "username"},
     )
@@ -223,9 +222,7 @@ async def test_unbalanced_versions_req_old_vs_prov_new(
     username = action.results.get("value")
 
     # Password
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
-    leader_name = f"{APPLICATION_APP_NAME}/{leader_id}"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = await ops_test.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "password"},
     )
@@ -245,8 +242,6 @@ async def test_unbalanced_versions_req_old_vs_prov_new(
     assert action.results.get("value") == username
 
     # Password is correct
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
-    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
     action = await ops_test.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "password"},
@@ -261,7 +256,7 @@ async def test_rolling_upgrade_requires_old_vs_provides_new(ops_test: OpsTest):
     await upgrade_to_new_version(ops_test, APPLICATION_APP_NAME)
 
     # Application charm leader
-    leader_app_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_app_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_app_name = f"{APPLICATION_APP_NAME}/{leader_app_id}"
 
     # DB leader
@@ -316,7 +311,7 @@ async def test_rolling_upgrade_requires_old_vs_provides_new_upgrade_new_secret(
 ):
     """After Requires upgrade new secrets are possible to define."""
     # Application charm leader
-    leader_app_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_app_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_app_name = f"{APPLICATION_APP_NAME}/{leader_app_id}"
 
     # DB leader
@@ -409,8 +404,6 @@ async def test_unbalanced_versions_req_new_vs_prov_old(
     assert action.results.get("value")
 
     # Password exists
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
-    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
     action = await ops_test.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "password"},
@@ -427,7 +420,7 @@ async def test_rolling_upgrade_requires_new_vs_provides_old(
     await upgrade_to_new_version(ops_test, DATABASE_APP_NAME)
 
     # Application charm leader
-    leader_app_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_app_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_app_name = f"{APPLICATION_APP_NAME}/{leader_app_id}"
 
     # DB leader
@@ -482,7 +475,7 @@ async def test_rolling_upgrade_requires_new_vs_provides_old_upgrade_new_secret(
 ):
     """After Provider upgrade, we can safely define new secrets."""
     # Application charm leader
-    leader_app_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_app_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_app_name = f"{APPLICATION_APP_NAME}/{leader_app_id}"
 
     # DB leader
