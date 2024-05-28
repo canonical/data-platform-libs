@@ -632,8 +632,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         secret2 = self.harness.model.get_secret(label=f"{PEER_RELATION_NAME}.database.{scope}")
         assert secret2.id != secret_id
         assert interface.fetch_my_relation_field(relation_id, "secret-field") == "blabla"
-        with pytest.raises(SecretNotFoundError):
-            secret = self.harness.model.get_secret(label=f"database.{scope}")
 
         # After update the old label is gone. But sadly unittests don't allow us for verifying that :-/
 

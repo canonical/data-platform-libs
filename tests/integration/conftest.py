@@ -7,6 +7,7 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
+from subprocess import check_call, check_output
 
 import pytest
 from pytest_operator.plugin import OpsTest
@@ -153,3 +154,39 @@ async def without_errors(ops_test: OpsTest, request):
             continue
         if logitems[2] == "ERROR":
             assert any(white in line for white in whitelist)
+
+
+@pytest.fixture(scope="session")
+def fetch_old_versions():
+    """Fetching the previous 4 versions of the lib for upgrade tests."""
+    cwd = os.getcwd()
+    src_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"
+    data_path = f"{cwd}/tests/integration/data/data_interfaces.py"
+    tmp_path = "./tmp_repo_checkout"
+
+    os.mkdir(tmp_path)
+    os.chdir(tmp_path)
+    check_call("git clone https://github.com/canonical/data-platform-libs.git", shell=True)
+    os.chdir("data-platform-libs")
+    last_commits = check_output(
+        "git show --pretty=format:'%h' --no-patch -15", shell=True, universal_newlines=True
+    ).split()
+
+    versions = []
+    for commit in last_commits:
+        check_call(f"git checkout {commit}", shell=True)
+        version = check_output(
+            "grep LIBPATCH lib/charms/data_platform_libs/v0/data_interfaces.py | cut -d ' ' -f 3",
+            shell=True,
+            universal_newlines=True,
+        )
+        version = version.strip()
+        if version not in versions:
+            shutil.copyfile(src_path, f"{data_path}.v{version}")
+            versions.append(version)
+
+        if len(versions) == 4:
+            break
+
+    os.chdir(cwd)
+    shutil.rmtree(tmp_path)

@@ -71,10 +71,30 @@ jobs:
             juju-snap-channel: "3.1/stable"
             libjuju-version: "3.2.2"
         include:
-          - {tox-environments: integration-upgrades,
+          - {tox-environments: integration-interfaces-upgrade-from-version-1-earlier,
               juju-version:
               {juju-snap-channel: "3.1/stable",
-                juju-bootstrap-option: "3.1.6",
+                juju-bootstrap-option: "3.1.7",
+                libjuju-version: "3.2.2"}}
+          - {tox-environments: integration-interfaces-upgrade-from-version-2-earlier,
+              juju-version:
+              {juju-snap-channel: "3.1/stable",
+                juju-bootstrap-option: "3.1.7",
+                libjuju-version: "3.2.2"}}
+          - {tox-environments: integration-interfaces-upgrade-from-version-3-earlier,
+              juju-version:
+              {juju-snap-channel: "3.1/stable",
+                juju-bootstrap-option: "3.1.7",
+                libjuju-version: "3.2.2"}}
+          - {tox-environments: integration-interfaces-upgrade-from-version-4-earlier,
+              juju-version:
+              {juju-snap-channel: "3.1/stable",
+                juju-bootstrap-option: "3.1.7",
+                libjuju-version: "3.2.2"}}
+          - {tox-environments: integration-upgrades-databag-to-secrets,
+              juju-version:
+              {juju-snap-channel: "3.1/stable",
+                juju-bootstrap-option: "3.1.7",
                 libjuju-version: "3.2.2"}}
           - {tox-environments: integration-secrets,
               juju-version:
