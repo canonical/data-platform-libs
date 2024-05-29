@@ -658,6 +658,10 @@ class CachedSecret:
         if not self.meta:
             return
 
+        # DPE-4182: do not create new revision if the content stay the same
+        if content == self.get_content():
+            return
+
         if content:
             self._move_to_new_label_if_needed()
             self.meta.set_content(content)
@@ -1369,10 +1373,7 @@ class ProviderData(Data):
         old_content = secret.get_content()
         full_content = copy.deepcopy(old_content)
         full_content.update(content)
-
-        # DPE-4182: do not create new revision if the content stay the same
-        if old_content != full_content:
-            secret.set_content(full_content)
+        secret.set_content(full_content)
 
         # Return True on success
         return True
