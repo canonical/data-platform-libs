@@ -954,6 +954,60 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
     assert topsecret1 != topsecret2
 
 
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_relation_secret_revisions(ops_test: OpsTest):
+    """Check that only a content change triggers the emission of a new revision."""
+    # Given
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
+    owner = "database"
+    rel_id = pytest.second_database_relation.id
+    group_mapping = "extra"
+
+    # When
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "set-secret", **{"relation_id": rel_id, "field": "topsecret", "value": "initialvalue"}
+    )
+    await action.wait()
+
+    original_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"{SECOND_DATABASE_RELATION_NAME}.{rel_id}.{group_mapping}.secret", owner
+    )
+
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "topsecret",
+            "value": "changedvalue",
+        },
+    )
+    await action.wait()
+
+    changed_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"{SECOND_DATABASE_RELATION_NAME}.{rel_id}.{group_mapping}.secret", owner
+    )
+
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "topsecret",
+            "value": "changedvalue",
+        },
+    )
+    await action.wait()
+
+    unchanged_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"{SECOND_DATABASE_RELATION_NAME}.{rel_id}.{group_mapping}.secret", owner
+    )
+
+    # Then
+    assert original_secret_revision + 1 == changed_secret_revision
+    assert changed_secret_revision == unchanged_secret_revision
+
+
 @pytest.mark.parametrize("field,value", [("new_field", "blah"), ("tls", "True")])
 @pytest.mark.usefixtures("only_without_juju_secrets")
 async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
