@@ -972,7 +972,7 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     await action.wait()
 
     original_secret_revision = await get_secret_revision_by_label(
-        ops_test, f"{SECOND_DATABASE_RELATION_NAME}.{rel_id}.{group_mapping}.secret", owner
+        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{group_mapping}.secret", owner
     )
 
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -986,7 +986,7 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     await action.wait()
 
     changed_secret_revision = await get_secret_revision_by_label(
-        ops_test, f"{SECOND_DATABASE_RELATION_NAME}.{rel_id}.{group_mapping}.secret", owner
+        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{group_mapping}.secret", owner
     )
 
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -1000,7 +1000,7 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     await action.wait()
 
     unchanged_secret_revision = await get_secret_revision_by_label(
-        ops_test, f"{SECOND_DATABASE_RELATION_NAME}.{rel_id}.{group_mapping}.secret", owner
+        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{group_mapping}.secret", owner
     )
 
     # Then
@@ -1173,6 +1173,7 @@ async def test_provider_get_set_delete_fields_secrets(
     assert action.results["return-code"] == 0
 
 
+@pytest.mark.abort_on_fail
 @pytest.mark.log_errors_allowed("Can't delete secret for relation")
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
