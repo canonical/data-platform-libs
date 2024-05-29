@@ -209,10 +209,6 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
     )
     await action.wait()
 
-    original_secret_revision = await get_secret_revision_by_label(
-        ops_test, f"database-peers.database.{component}", owner
-    )
-
     action = await ops_test.model.units.get(unit_name).run_action(
         "set-peer-relation-field",
         **{"component": component, "field": "secret-field", "value": "blablabla2"},
@@ -222,22 +218,6 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
     secret = await get_secret_by_label(ops_test, f"database-peers.database.{component}", owner)
     assert secret.get("monitor-password") == "blablabla"
     assert secret.get("secret-field") == "blablabla2"
-
-    changed_secret_revision = await get_secret_revision_by_label(
-        ops_test, f"database-peers.database.{component}", owner
-    )
-    assert original_secret_revision + 1 == changed_secret_revision
-
-    action = await ops_test.model.units.get(unit_name).run_action(
-        "set-peer-relation-field",
-        **{"component": component, "field": "secret-field", "value": "blablabla2"},
-    )
-    await action.wait()
-
-    unchanged_secret_revision = await get_secret_revision_by_label(
-        ops_test, f"database-peers.database.{component}", owner
-    )
-    assert changed_secret_revision == unchanged_secret_revision
 
     action = await ops_test.model.units.get(unit_name).run_action(
         "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
@@ -312,6 +292,52 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
         "delete-peer-secret", **{"component": component}
     )
     await action.wait()
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+@pytest.mark.parametrize("component", ["app", "unit"])
+async def test_peer_relation_secret_revisions(component, ops_test: OpsTest):
+    """Check that only a content change triggers the emission of a new revision."""
+    # Given
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
+    owner = "database" if component == "app" else unit_name
+
+    # When
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "secret-field", "value": "blablabla"},
+    )
+    await action.wait()
+
+    original_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"database-peers.database.{component}", owner
+    )
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "secret-field", "value": "blablabla2"},
+    )
+    await action.wait()
+
+    changed_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"database-peers.database.{component}", owner
+    )
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "secret-field", "value": "blablabla2"},
+    )
+    await action.wait()
+
+    unchanged_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"database-peers.database.{component}", owner
+    )
+
+    # Then
+    assert original_secret_revision + 1 == changed_secret_revision
+    assert changed_secret_revision == unchanged_secret_revision
 
 
 @pytest.mark.abort_on_fail
