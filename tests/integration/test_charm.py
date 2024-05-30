@@ -20,6 +20,7 @@ from .helpers import (
     get_leader_id,
     get_non_leader_id,
     get_secret_by_label,
+    get_secret_revision_by_label,
     list_juju_secrets,
 )
 
@@ -291,6 +292,52 @@ async def test_peer_relation_secrets(component, ops_test: OpsTest):
         "delete-peer-secret", **{"component": component}
     )
     await action.wait()
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+@pytest.mark.parametrize("component", ["app", "unit"])
+async def test_peer_relation_secret_revisions(component, ops_test: OpsTest):
+    """Check that only a content change triggers the emission of a new revision."""
+    # Given
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
+    owner = "database" if component == "app" else unit_name
+
+    # When
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "secret-field", "value": "blablabla"},
+    )
+    await action.wait()
+
+    original_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"database-peers.database.{component}", owner
+    )
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "secret-field", "value": "blablabla2"},
+    )
+    await action.wait()
+
+    changed_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"database-peers.database.{component}", owner
+    )
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-peer-relation-field",
+        **{"component": component, "field": "secret-field", "value": "blablabla2"},
+    )
+    await action.wait()
+
+    unchanged_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"database-peers.database.{component}", owner
+    )
+
+    # Then
+    assert original_secret_revision + 1 == changed_secret_revision
+    assert changed_secret_revision == unchanged_secret_revision
 
 
 @pytest.mark.abort_on_fail
@@ -907,6 +954,60 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
     assert topsecret1 != topsecret2
 
 
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_relation_secret_revisions(ops_test: OpsTest):
+    """Check that only a content change triggers the emission of a new revision."""
+    # Given
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
+    owner = "database"
+    rel_id = pytest.second_database_relation.id
+    group_mapping = "extra"
+
+    # When
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "set-secret", **{"relation_id": rel_id, "field": "topsecret", "value": "initialvalue"}
+    )
+    await action.wait()
+
+    original_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{group_mapping}.secret", owner
+    )
+
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "topsecret",
+            "value": "changedvalue",
+        },
+    )
+    await action.wait()
+
+    changed_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{group_mapping}.secret", owner
+    )
+
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "set-relation-field",
+        **{
+            "relation_id": pytest.second_database_relation.id,
+            "field": "topsecret",
+            "value": "changedvalue",
+        },
+    )
+    await action.wait()
+
+    unchanged_secret_revision = await get_secret_revision_by_label(
+        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{group_mapping}.secret", owner
+    )
+
+    # Then
+    assert original_secret_revision + 1 == changed_secret_revision
+    assert changed_secret_revision == unchanged_secret_revision
+
+
 @pytest.mark.parametrize("field,value", [("new_field", "blah"), ("tls", "True")])
 @pytest.mark.usefixtures("only_without_juju_secrets")
 async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
@@ -1072,6 +1173,7 @@ async def test_provider_get_set_delete_fields_secrets(
     assert action.results["return-code"] == 0
 
 
+@pytest.mark.abort_on_fail
 @pytest.mark.log_errors_allowed("Can't delete secret for relation")
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):

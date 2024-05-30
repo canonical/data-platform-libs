@@ -303,3 +303,20 @@ async def get_secret_by_label(ops_test, label: str, owner: str = "") -> Dict[str
         if label == secret_data[secret_id].get("label"):
             if not owner or owner == secret_data[secret_id].get("owner"):
                 return secret_data[secret_id]["content"]["Data"]
+
+
+async def get_secret_revision_by_label(ops_test, label: str, owner: str = "") -> int:
+    secrets_raw = await ops_test.juju("list-secrets")
+    secret_ids = [
+        secret_line.split()[0] for secret_line in secrets_raw[1].split("\n")[1:] if secret_line
+    ]
+
+    for secret_id in secret_ids:
+        secret_data_raw = await ops_test.juju(
+            "show-secret", "--format", "json", "--reveal", secret_id
+        )
+        secret_data = json.loads(secret_data_raw[1])
+
+        if label == secret_data[secret_id].get("label"):
+            if not owner or owner == secret_data[secret_id].get("owner"):
+                return int(secret_data[secret_id]["revision"])

@@ -151,7 +151,7 @@ class DatabaseCharm(CharmBase):
     def _on_set_secret_action(self, event: ActionEvent):
         """Change the admin password."""
         secret_field = event.params.get("field")
-        password = self._new_password()
+        password = event.params.get("value", self._new_password())
         for relation in self.database.relations:
             self.database.update_relation_data(relation.id, {secret_field: password})
 
