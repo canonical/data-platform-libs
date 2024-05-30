@@ -1,4 +1,5 @@
 """Component level tests."""
+
 from unittest.mock import Mock
 
 import pytest
