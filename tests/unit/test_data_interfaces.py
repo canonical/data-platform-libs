@@ -20,7 +20,6 @@ from parameterized import parameterized
 from charms.data_platform_libs.v0.data_interfaces import (
     PROV_SECRET_PREFIX,
     REQ_SECRET_FIELDS,
-    CachedSecret,
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseProvides,
@@ -29,6 +28,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseRequires,
     DatabaseRequiresEvents,
     DataPeer,
+    DataPeerData,
     DataPeerOtherUnit,
     DataPeerUnit,
     Diff,
@@ -637,6 +637,47 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         # After update the old label is gone. But sadly unittests don't allow us for verifying that :-/
 
         assert secret2.peek_content()["secret-field"] == "blabla"
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation_secret_secret_revision(self, interface_attr):
+        """Check the functionality of each public interface function."""
+        # Given
+        relation_id = self.harness.charm.peer_relation.id
+        interface: DataPeerData = getattr(self.harness.charm, interface_attr)
+
+        scope = interface_attr.split("_")[2]
+        scope_opj = getattr(self.harness.charm, scope)
+        secret = scope_opj.add_secret(
+            {"secret-field": "initialvalue"}, label=f"{PEER_RELATION_NAME}.database.{scope}"
+        )
+        cached_secret = interface.secrets.get(label=f"{PEER_RELATION_NAME}.database.{scope}")
+
+        initial_secret_revision = secret.get_info().revision
+        initial_cached_secret_revision = cached_secret.meta.get_info().revision
+
+        # When
+        interface.update_relation_data(relation_id, {"secret-field": "initialvalue"})
+        secret.get_content(refresh=True)
+
+        unchanged_secret_revision = secret.get_info().revision
+        unchanged_cached_secret_revision = cached_secret.meta.get_info().revision
+
+        interface.update_relation_data(relation_id, {"secret-field": "newvalue"})
+        secret.get_content(refresh=True)
+
+        changed_secret_revision = secret.get_info().revision
+        changed_cached_secret_revision = cached_secret.meta.get_info().revision
+
+        # Then
+        assert (
+            initial_secret_revision
+            == initial_cached_secret_revision
+            == unchanged_secret_revision
+            == unchanged_cached_secret_revision
+        )
+        assert changed_secret_revision == unchanged_secret_revision + 1
+        assert changed_cached_secret_revision == unchanged_cached_secret_revision + 1
 
     def test_peer_relation_other_unit(self):
         """Check the functionality of each public interface function on each "other" unit."""
@@ -2778,38 +2819,3 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.password == "test-password"
         assert event.endpoints == "host1:port,host2:port"
         assert event.tls_ca == "Canonical"
-
-
-class EmptyCharm(CharmBase):
-    """Mock database charm to use in units tests."""
-
-    def __init__(self, *args):
-        super().__init__(*args)
-
-
-@pytest.fixture
-def harness() -> Harness:
-    harness = Harness(EmptyCharm)
-    harness.set_leader(True)
-    harness.begin_with_initial_hooks()
-    return harness
-
-
-@pytest.mark.usefixtures("only_with_juju_secrets")
-@pytest.mark.parametrize("scope", [("app"), ("unit")])
-def test_cached_secret_no_update(scope, harness: Harness[EmptyCharm], monkeypatch):
-    """Check that a cached secret do not trigger a revision if no update to content."""
-    # Given
-    content = {"value": "initialvalue"}
-    secret = CachedSecret(harness.model, getattr(harness.charm, scope), "my-label")
-    secret.add_secret(content)
-    patched = Mock()
-    # When
-    with monkeypatch.context() as m:
-        m.setattr(secret.meta, "set_content", patched)
-        secret.set_content(content)
-
-        secret.set_content({"value": "newvalue"})
-
-    # Then
-    patched.assert_called_once()
