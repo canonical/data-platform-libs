@@ -39,6 +39,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     OpenSearchProvides,
     OpenSearchRequires,
     TopicRequestedEvent,
+    backwards_compatibility_limit,
 )
 from charms.harness_extensions.v0.capture_events import capture, capture_events
 
@@ -720,6 +721,35 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             with pytest.raises(KeyError):
                 assert rel_data["non-existent-field"]
             assert rel_data.get("non-existent-field") is None
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_peer_relation_interface_legacy_functions_disable(self, interface_attr):
+        """Verify that legacy functions are possible to disable.
+
+        We are using test_peer_relation_interface_backwards_compatible_legacy_label()
+        from a bit above. Normal, expected functionality could be verified there.
+        """
+        relation_id = self.harness.charm.peer_relation.id
+        interface = getattr(self.harness.charm, interface_attr)
+
+        scope = interface_attr.split("_")[2]
+        scope_opj = getattr(self.harness.charm, scope)
+        legacy_label = f"database.{scope}"
+        scope_opj.add_secret({"secret-field": "bla"}, label=legacy_label)
+
+        # Normally we would find the secret with the legacy label
+        # However since that backwards compatibility function was added starting from v0.34
+        # having set compatibility >= v0.35, those hooks are now disabled and the secret
+        # with the legacy label is not found
+        backwards_compatibility_limit(35)
+        assert interface.fetch_my_relation_field(relation_id, "secret-field") is None
+
+        backwards_compatibility_limit(33)
+        assert interface.fetch_my_relation_field(relation_id, "secret-field") == "bla"
+
+        # Re-set to the original state
+        backwards_compatibility_limit(0)
 
     #
     # Relation Data tests
