@@ -47,13 +47,6 @@ jobs:
         env:
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
 
-  build:
-    name: Build charms
-    needs:
-      - lint
-      - unit-test
-    uses: canonical/data-platform-workflows/.github/workflows/build_charms_with_cache.yaml@v2
-
   integration-test:
     strategy:
       fail-fast: false
@@ -122,7 +115,7 @@ jobs:
     needs:
       - lint
       - unit-test
-      - build
+      # - build
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
