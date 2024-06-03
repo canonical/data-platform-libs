@@ -58,50 +58,67 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        ubuntu-versions:
+          # Update whenever charmcraft.yaml is changed
+          - series: jammy
+            bases-index: 0
+          - series: focal
+            bases-index: 1
         tox-environments:
-          - integration-database
+          - integration-db
+          - integration-upgrade-1
+          - integration-upgrade-2
+          - integration-upgrade-3
+          - integration-upgrade-4
+          # To be enabled after data_interfaces v040
+          # - integration-upgrade-5
+          # - integration-upgrade-6
+          # - integration-upgrade-7
+          - integration-upgrade-databag
           - integration-s3
           - integration-opensearch
           - integration-kafka
         juju-version:
           - juju-bootstrap-option: "2.9.44"
             juju-snap-channel: "2.9/stable"
-            libjuju-version: "2.9.42.4"
-          - juju-bootstrap-option: "3.1.6"
+            libjuju-version: "2.9.49.0"
+          - juju-bootstrap-option: "3.1.8"
             juju-snap-channel: "3.1/stable"
             libjuju-version: "3.2.2"
-        include:
-          - {tox-environments: integration-interfaces-upgrade-from-version-1-earlier,
-              juju-version:
-              {juju-snap-channel: "3.1/stable",
-                juju-bootstrap-option: "3.1.7",
-                libjuju-version: "3.2.2"}}
-          - {tox-environments: integration-interfaces-upgrade-from-version-2-earlier,
-              juju-version:
-              {juju-snap-channel: "3.1/stable",
-                juju-bootstrap-option: "3.1.7",
-                libjuju-version: "3.2.2"}}
-          - {tox-environments: integration-interfaces-upgrade-from-version-3-earlier,
-              juju-version:
-              {juju-snap-channel: "3.1/stable",
-                juju-bootstrap-option: "3.1.7",
-                libjuju-version: "3.2.2"}}
-          - {tox-environments: integration-interfaces-upgrade-from-version-4-earlier,
-              juju-version:
-              {juju-snap-channel: "3.1/stable",
-                juju-bootstrap-option: "3.1.7",
-                libjuju-version: "3.2.2"}}
-          - {tox-environments: integration-upgrades-databag-to-secrets,
-              juju-version:
-              {juju-snap-channel: "3.1/stable",
-                juju-bootstrap-option: "3.1.7",
-                libjuju-version: "3.2.2"}}
-          - {tox-environments: integration-secrets,
-              juju-version:
-              {juju-snap-channel: "3.1/stable",
-                juju-bootstrap-option: "3.1.6",
-                libjuju-version: "3.2.2"}}
-    name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- libjuju ${{ matrix.juju-version.libjuju-version }}
+          - juju-bootstrap-option: "3.2.4"
+            juju-snap-channel: "3.2/stable"
+            libjuju-version: "3.2.3.0"
+          - juju-bootstrap-option: "3.3.5"
+            juju-snap-channel: "3.3/stable"
+            libjuju-version: "3.3.1.1"
+          - juju-bootstrap-option: "3.4.3"
+            juju-snap-channel: "3.4/stable"
+            libjuju-version: "3.4.0.0"
+          - juju-bootstrap-option: "3.5.1"
+            juju-snap-channel: "3.5/stable"
+            libjuju-version: "3.5.0.0"
+        exclude:
+          - tox-environments: integration-upgrade-1
+            juju-version: {juju-snap-channel: "2.9/stable"}
+          - tox-environments: integration-upgrade-2
+            juju-version: {juju-snap-channel: "2.9/stable"}
+          - tox-environments: integration-upgrade-3
+            juju-version: {juju-snap-channel: "2.9/stable"}
+          - tox-environments: integration-upgrade-4
+            juju-version: {juju-snap-channel: "2.9/stable"}
+          - tox-environments: integration-upgrade-5
+            juju-version: {juju-snap-channel: "2.9/stable"}
+          - tox-environments: integration-upgrade-6
+            juju-version: {juju-snap-channel: "2.9/stable"}
+          - tox-environments: integration-upgrade-7
+            juju-version: {juju-snap-channel: "2.9/stable"}
+          - tox-environments: integration-upgrade-databag
+            juju-version: {juju-snap-channel: "2.9/stable"}
+          - tox-environments: integration-opensearch
+            ubuntu-versions: {series: focal}
+          - tox-environments: integration-kafka
+            ubuntu-versions: {series: focal}
+    name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
     needs:
       - lint
       - unit-test
@@ -136,7 +153,7 @@ jobs:
           fi
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing
+        run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --dp-libs-series=${{ matrix.ubuntu-versions.series }} --dp-libs-bases-index=${{ matrix.ubuntu-versions.bases-index }}
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
