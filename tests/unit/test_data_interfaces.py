@@ -1184,6 +1184,67 @@ class TestDatabaseProvidesDynamicSecrets(ABC, unittest.TestCase):
 
         assert interface.get_secret(relation_id, "something") is None
 
+    @parameterized.expand([("app", True), ("unit", True), ("unit", False)])
+    @pytest.mark.xfail(reason="https://github.com/canonical/data-platform-libs/issues/174")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_migration_from_databag(self, scope, is_leader):
+        """Check if we're moving on to use secrets when live upgrade from databag to Secrets usage.
+
+        Since it checks for a migration from databag to juju secrets, it's specific to juju3.
+        """
+        rel_id = self.harness.model.get_relation(PEER_RELATION_NAME).id
+        # App has to be leader, unit can be either
+        self.harness.set_leader(is_leader)
+
+        # Getting current password
+        entity = getattr(self.harness.charm, scope)
+        interface = getattr(self.harness.charm, f"peer_relation_{scope}")
+
+        self.harness.update_relation_data(rel_id, entity.name, {"operator_password": "bla"})
+        assert interface.get_secret(rel_id, "operator_password") == "bla"
+
+        # Reset new secret
+        interface.set_secret(rel_id, "operator-password", "blablabla")
+        assert self.harness.charm.model.get_secret(label=f"{PEER_RELATION_NAME}.database.{scope}")
+        assert interface.get_secret(rel_id, "operator-password") == "blablabla"
+        assert "operator-password" not in self.harness.get_relation_data(
+            rel_id, getattr(self.harness.charm, scope).name
+        )
+
+    @parameterized.expand([("app", True), ("unit", True), ("unit", False)])
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_migration_from_single_secret(self, scope, is_leader):
+        """Check if we're moving on to use secrets when live upgrade from databag to Secrets usage.
+
+        Since it checks for a migration from databag to juju secrets, it's specific to juju3.
+        """
+        rel_id = self.harness.model.get_relation(PEER_RELATION_NAME).id
+
+        # App has to be leader, unit can be either
+        self.harness.set_leader(is_leader)
+
+        # Getting current password
+        entity = getattr(self.harness.charm, scope)
+        interface = getattr(self.harness.charm, f"peer_relation_{scope}")
+
+        secret = entity.add_secret({"operator-password": "bla"})
+        self.harness.update_relation_data(
+            rel_id, entity.name, {interface.SECRET_FIELD_NAME: secret.id}
+        )
+        assert interface.get_secret(rel_id, "operator-password") == "bla"
+
+        # Reset new secret
+        # Only the leader can set app secret content.
+        self.harness.set_leader(True)
+        interface.set_secret(rel_id, "operator-password", "blablabla")
+        self.harness.set_leader(is_leader)
+
+        assert self.harness.charm.model.get_secret(label=f"{PEER_RELATION_NAME}.database.{scope}")
+        assert interface.get_secret(rel_id, "operator-password") == "blablabla"
+        assert interface.SECRET_FIELD_NAME not in self.harness.get_relation_data(
+            rel_id, getattr(self.harness.charm, scope).name
+        )
+
 
 class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
     metadata = KAFKA_METADATA
