@@ -1028,6 +1028,17 @@ class Data(ABC):
         """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         raise NotImplementedError
 
+    # Optional overrides
+
+    def _legacy_apply_on_fetch(self) -> None:
+        pass
+
+    def _legacy_apply_on_update(self, fields: List[str]) -> None:
+        pass
+
+    def _legacy_apply_on_delete(self, fields: List[str]) -> None:
+        pass
+
     # Internal helper methods
 
     @staticmethod
@@ -1306,6 +1317,8 @@ class Data(ABC):
             a dict of the values stored in the relation data bag
                 for all relation instances (indexed by the relation ID).
         """
+        self._legacy_apply_on_fetch()
+
         if not relation_name:
             relation_name = self.relation_name
 
@@ -1344,6 +1357,8 @@ class Data(ABC):
         NOTE: Since only the leader can read the relation's 'this_app'-side
         Application databag, the functionality is limited to leaders
         """
+        self._legacy_apply_on_fetch()
+
         if not relation_name:
             relation_name = self.relation_name
 
@@ -1375,6 +1390,8 @@ class Data(ABC):
     @leader_only
     def update_relation_data(self, relation_id: int, data: dict) -> None:
         """Update the data within the relation."""
+        self._legacy_apply_on_update(list(data.keys()))
+
         relation_name = self.relation_name
         relation = self.get_relation(relation_name, relation_id)
         return self._update_relation_data(relation, data)
@@ -1382,6 +1399,8 @@ class Data(ABC):
     @leader_only
     def delete_relation_data(self, relation_id: int, fields: List[str]) -> None:
         """Remove field from the relation."""
+        self._legacy_apply_on_delete(fields)
+
         relation_name = self.relation_name
         relation = self.get_relation(relation_name, relation_id)
         return self._delete_relation_data(relation, fields)
@@ -1977,6 +1996,8 @@ class DataPeerData(RequirerData, ProviderData):
             value: The string value of the secret
             group_mapping: The name of the "secret group", in case the field is to be added to an existing secret
         """
+        self._legacy_apply_on_update([field])
+
         full_field = self._field_to_internal_name(field, group_mapping)
         if self.secrets_enabled and full_field not in self.current_secret_fields:
             self._new_secrets.append(full_field)
@@ -1993,6 +2014,8 @@ class DataPeerData(RequirerData, ProviderData):
         group_mapping: Optional[SecretGroup] = None,
     ) -> Optional[str]:
         """Public interface method to fetch secrets only."""
+        self._legacy_apply_on_fetch()
+
         full_field = self._field_to_internal_name(field, group_mapping)
         if (
             self.secrets_enabled
@@ -2011,6 +2034,8 @@ class DataPeerData(RequirerData, ProviderData):
         group_mapping: Optional[SecretGroup] = None,
     ) -> Optional[str]:
         """Public interface method to delete secrets only."""
+        self._legacy_apply_on_delete([field])
+
         full_field = self._field_to_internal_name(field, group_mapping)
         if self.secrets_enabled and full_field not in self.current_secret_fields:
             logger.warning(f"Secret {field} from group {group_mapping} was not found")
@@ -2089,6 +2114,29 @@ class DataPeerData(RequirerData, ProviderData):
     # Legacy functions must return None, and leave an equally consistent state whether
     # they are executed or skipped (as a high enough versioned execution environment may
     # not require so)
+
+    # Full legacy stack for each operation
+
+    def _legacy_apply_on_fetch(self) -> None:
+        """All legacy functions to be applied on fetch."""
+        relation = self._model.relations[self.relation_name][0]
+        self._legacy_compat_generate_prev_labels()
+        self._legacy_compat_secret_uri_from_databag(relation)
+
+    def _legacy_apply_on_update(self, fields) -> None:
+        """All legacy functions to be applied on update."""
+        relation = self._model.relations[self.relation_name][0]
+        self._legacy_compat_generate_prev_labels()
+        self._legacy_compat_secret_uri_from_databag(relation)
+        self._legacy_migration_remove_secret_from_databag(relation, fields)
+        self._legacy_migration_remove_secret_field_name_from_databag(relation)
+
+    def _legacy_apply_on_delete(self, fields) -> None:
+        """All legacy functions to be applied on delete."""
+        relation = self._model.relations[self.relation_name][0]
+        self._legacy_compat_generate_prev_labels()
+        self._legacy_compat_secret_uri_from_databag(relation)
+        self._legacy_compat_check_deleted_label(relation, fields)
 
     # Compatibility
 
@@ -2271,9 +2319,6 @@ class DataPeerData(RequirerData, ProviderData):
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
         """Fetch data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
-        self._legacy_compat_generate_prev_labels()
-        self._legacy_compat_secret_uri_from_databag(relation)
-
         return self._fetch_relation_data_with_secrets(
             self.component, self.secret_fields, relation, fields
         )
@@ -2281,11 +2326,6 @@ class DataPeerData(RequirerData, ProviderData):
     @either_static_or_dynamic_secrets
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Update data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
-        self._legacy_compat_generate_prev_labels()
-        self._legacy_compat_secret_uri_from_databag(relation)
-        self._legacy_migration_remove_secret_from_databag(relation, list(data.keys()))
-        self._legacy_migration_remove_secret_field_name_from_databag(relation)
-
         _, normal_fields = self._process_secret_fields(
             relation,
             self.secret_fields,
@@ -2301,10 +2341,6 @@ class DataPeerData(RequirerData, ProviderData):
     @either_static_or_dynamic_secrets
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
         """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
-        self._legacy_compat_generate_prev_labels()
-        self._legacy_compat_secret_uri_from_databag(relation)
-        self._legacy_compat_check_deleted_label(relation, fields)
-
         if self.secret_fields and self.deleted_label:
 
             _, normal_fields = self._process_secret_fields(
