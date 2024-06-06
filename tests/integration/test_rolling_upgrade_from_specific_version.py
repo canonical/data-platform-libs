@@ -4,6 +4,7 @@
 import asyncio
 import logging
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -45,12 +46,23 @@ async def downgrade_to_old_version(ops_test, app_name):
     logger.info(f"Downgrading {app_name} to version {version}")
     for unit in ops_test.model.applications[app_name].units:
         unit_name_with_dash = unit.name.replace("/", "-")
+        path = f"tests/integration/data/data_interfaces.py.v{version}"
+
+        result = subprocess.run(
+            f"grep 'LIBPATCH = {version}' {path}",
+            shell=True,
+        )
+
+        assert not result.returncode, "Incorrect version of data_interfaces fetched."
+
         complete_command = (
-            f"scp tests/integration/data/data_interfaces.py.v{version} "
+            f"scp {path} "
             f"{unit.name}:/var/lib/juju/agents/unit-{unit_name_with_dash}"
             "/charm/lib/charms/data_platform_libs/v0/data_interfaces.py"
         )
-        x, stdout, y = await ops_test.juju(*complete_command.split())
+        ret_code, stdout, y = await ops_test.juju(*complete_command.split())
+        # scp was successful
+        assert not ret_code, f"Couldn't perform copy to {unit.name}."
 
 
 async def upgrade_to_new_version(ops_test, app_name):
@@ -65,7 +77,9 @@ async def upgrade_to_new_version(ops_test, app_name):
             "scp lib/charms/data_platform_libs/v0/data_interfaces.py "
             f"{unit.name}:/var/lib/juju/agents/unit-{unit_name_with_dash}/charm/lib/charms/data_platform_libs/v0/"
         )
-        x, stdout, y = await ops_test.juju(*complete_command.split())
+        ret_code, stdout, y = await ops_test.juju(*complete_command.split())
+        # scp was successful
+        assert not ret_code, f"Couldn't perform copy to {unit.name}."
 
 
 @pytest.mark.usefixtures("fetch_old_versions")
