@@ -12,25 +12,25 @@ from pytest_mock import MockerFixture
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--dp-libs-series", help="Ubuntu series for dp libs charm (e.g. jammy)", default="jammy"
+        "--os-series", help="Ubuntu series for dp libs charm (e.g. jammy)", default="jammy"
     )
     parser.addoption(
-        "--dp-libs-bases-index",
+        "--build-bases-index",
         type=int,
-        help="Index of charmcraft.yaml base that matches --dp-libs-series",
+        help="Index of charmcraft.yaml base that matches --os-series",
         default=0,
     )
 
 
 def pytest_configure(config):
-    if (config.option.dp_libs_series is None) ^ (config.option.dp_libs_bases_index is None):
+    if (config.option.os_series is None) ^ (config.option.build_bases_index is None):
         raise argparse.ArgumentError(
             None,
-            "--dp-libs-series and --dp-libs-bases-index must be given together",
+            "--os-series and --build-bases-index must be given together",
         )
     # Note: Update defaults whenever charmcraft.yaml is changed
     valid_combinations = [(0, "jammy"), (1, "focal")]
-    if (config.option.dp_libs_bases_index, config.option.dp_libs_series) not in valid_combinations:
+    if (config.option.build_bases_index, config.option.os_series) not in valid_combinations:
         raise argparse.ArgumentError(
             None, f"Only base index combinations {valid_combinations} are accepted."
         )

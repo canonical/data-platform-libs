@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="session")
 def dp_libs_ubuntu_series(pytestconfig) -> str:
-    if pytestconfig.option.dp_libs_series:
-        return pytestconfig.option.dp_libs_series
+    if pytestconfig.option.os_series:
+        return pytestconfig.option.os_series
 
 
 @pytest.fixture(scope="module")
@@ -33,14 +33,14 @@ def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
     # Add bases_index option (indicating which OS version to use)
     # when building the charm within the scope of the test run
     async def build_charm(charm_path, bases_index: int = None) -> Path:
-        if not bases_index and pytestconfig.option.dp_libs_bases_index:
-            bases_index = pytestconfig.option.dp_libs_bases_index
+        if not bases_index and pytestconfig.option.build_bases_index:
+            bases_index = pytestconfig.option.build_bases_index
 
         logger.info(f"Building charm {charm_path} with base index {bases_index}")
 
         return await _build_charm(
             charm_path,
-            bases_index=pytestconfig.option.dp_libs_bases_index,
+            bases_index=pytestconfig.option.build_bases_index,
         )
 
     ops_test.build_charm = build_charm

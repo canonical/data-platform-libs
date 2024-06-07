@@ -45,21 +45,21 @@ tox                      # runs 'lint' and 'unit' environments
 
 In case your tests are re-using existing test charms with no modifications, feel free to ignore this section.
 
-For test charms that may support multiple OS versions (typically for libraries that are expected to work across
+For test charms that may support multiple Ubuntu versions (typically for libraries that are expected to work across
 legacy versions) the following mechanism is available.
 
-By default, with no parameters the first OS version is taken, that's specified in the helper charm's `charmcraft.yaml`.
+By default, with no parameters the first Ubuntu version is taken, that's specified in the helper charm's `charmcraft.yaml`.
 The current default is `jammy` with `base_index: 0` (i.e. being specified as the first `build-on/run-on` environment).
 Ordering goes in a way that newest version comes first, older ones decreasingly after.
-(This allows for meaningful defaults for helper charms for libs that only support newer/latest OS series.)
+(This allows for meaningful defaults for helper charms for libs that only support newer/latest Ubuntu series.)
 
-In case any further OS versions are to be used when executing the tests, the following `pytest` parameters are to be added
+In case any further Ubuntu versions are to be used when executing the tests, the following `pytest` parameters are to be added
 at execution time
- - `dp_libs_series`: The name of the Ubuntu series to be used for build/deploy (default: `jammy`)
- - `do_libs_base_index`: The number of item in order (counting from `0`) referring to the `db_libs_series` specified in the
+ - `os_series`: The name of the Ubuntu series to be used for build/deploy (default: `jammy`)
+ - `build_bases_index`: The number of item in order (counting from `0`) referring to the `db_libs_series` specified in the
     helper charm's `charmcraft.yaml`
 
-NOTE: In case using the mechanism above, make sure that the `dp_libs_ubuntu_series` fixture's value is passed for the
+NOTE: In case using the mechanism above, make sure that the `os_series` fixture's value is passed for the
 `series` option to your charm when deploying it in the test pipeline execution (typically: the `build_and_deploy` test function).
 
 
