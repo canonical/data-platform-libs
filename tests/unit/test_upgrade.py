@@ -753,6 +753,62 @@ def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
     harness.charm.upgrade._upgrade_supported_check.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    "substrate,leader,call_count,state",
+    [
+        ("vm", True, 1, "ready"),
+        ("vm", False, 0, "ready"),
+        ("k8s", True, 0, "upgrading"),
+        ("k8s", False, 0, "upgrading"),
+    ],
+)
+def test_upgrade_charm_runs_upgrade_changed_on_leader_first_to_rollback(
+    harness, mocker, substrate, leader, call_count, state
+):
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate=substrate
+    )
+    harness.add_relation("upgrade", "gandalf")
+    harness.set_leader(leader)
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "recovery"})
+    harness.charm.upgrade.upgrade_stack = [2, 1, 0]
+
+    mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
+    mocker.patch.object(harness.charm.upgrade, "on_upgrade_changed")
+    harness.charm.on.upgrade_charm.emit()
+
+    assert harness.charm.upgrade.on_upgrade_changed.call_count == call_count
+    assert harness.charm.upgrade.state == state
+
+
+@pytest.mark.parametrize(
+    "substrate,initial_state,upgrade_stack,final_state",
+    [
+        ("vm", "idle", [2, 1, 0], "ready"),
+        ("vm", "recovery", [2, 0, 1], "ready"),
+        ("vm", "recovery", [0, 2, 1], "ready"),
+        ("k8s", "recovery", [2, 1, 0], "upgrading"),
+    ],
+)
+def test_upgrade_charm_doesnt_run_upgrade_changed_on_leader_not_first_to_rollback(
+    harness, mocker, substrate, initial_state, upgrade_stack, final_state
+):
+    harness.charm.upgrade = GandalfUpgrade(
+        charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate=substrate
+    )
+    harness.add_relation("upgrade", "gandalf")
+    harness.set_leader(True)
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": initial_state})
+    harness.charm.upgrade.upgrade_stack = upgrade_stack
+
+    mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
+    mocker.patch.object(harness.charm.upgrade, "on_upgrade_changed")
+    harness.charm.on.upgrade_charm.emit()
+
+    harness.charm.upgrade.on_upgrade_changed.assert_not_called()
+    assert harness.charm.upgrade.state == final_state
+
+
 @pytest.mark.parametrize("substrate,state", [("vm", "ready"), ("k8s", "upgrading")])
 def test_upgrade_charm_sets_right_state(harness, mocker, substrate, state):
     harness.charm.upgrade = GandalfUpgrade(
