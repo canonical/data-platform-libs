@@ -11,6 +11,7 @@ of the libraries in this repository.
 import logging
 import secrets
 import string
+from typing import Optional
 
 from ops import Relation
 from ops.charm import ActionEvent, CharmBase
@@ -66,7 +67,7 @@ class DatabaseCharm(CharmBase):
         self.framework.observe(self.on.delete_peer_secret_action, self._on_delete_peer_secret)
 
     @property
-    def peer_relation(self) -> Relation | None:
+    def peer_relation(self) -> Optional[Relation]:
         """The cluster peer relation."""
         return self.model.get_relation(PEER)
 

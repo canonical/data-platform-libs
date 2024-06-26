@@ -4,6 +4,7 @@
 import asyncio
 import logging
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ SECRET_REF_PREFIX = "secret-"
 def old_version_to_upgrade_from():
     """Determine how many versions to go back from tox environment (default: previous version)."""
     try:
-        go_backwards = int(os.environ["TOX_ENV"].split("-")[5])
+        go_backwards = int(os.environ["TOX_ENV"].split("-")[-1])
     except TypeError:
         go_backwards = 1
     return LIBPATCH - go_backwards
@@ -41,15 +42,27 @@ async def downgrade_to_old_version(ops_test, app_name):
 
     The data_interfaces module is replaced "on-the-fly" by an older version.
     """
+    version = old_version_to_upgrade_from()
+    logger.info(f"Downgrading {app_name} to version {version}")
     for unit in ops_test.model.applications[app_name].units:
         unit_name_with_dash = unit.name.replace("/", "-")
-        version = old_version_to_upgrade_from()
+        path = f"tests/integration/data/data_interfaces.py.v{version}"
+
+        result = subprocess.run(
+            f"grep 'LIBPATCH = {version}' {path}",
+            shell=True,
+        )
+
+        assert not result.returncode, "Incorrect version of data_interfaces fetched."
+
         complete_command = (
-            f"scp tests/integration/data/data_interfaces.py.v{version} "
+            f"scp {path} "
             f"{unit.name}:/var/lib/juju/agents/unit-{unit_name_with_dash}"
             "/charm/lib/charms/data_platform_libs/v0/data_interfaces.py"
         )
-        x, stdout, y = await ops_test.juju(*complete_command.split())
+        ret_code, stdout, _ = await ops_test.juju(*complete_command.split())
+        # scp was successful
+        assert not ret_code, f"Couldn't perform copy to {unit.name}."
 
 
 async def upgrade_to_new_version(ops_test, app_name):
@@ -57,22 +70,30 @@ async def upgrade_to_new_version(ops_test, app_name):
 
     The data_interfaces module is replaced "on-the-fly" by the latest version.
     """
+    logger.info(f"Upgrading {app_name} to latest version")
     for unit in ops_test.model.applications[app_name].units:
         unit_name_with_dash = unit.name.replace("/", "-")
         complete_command = (
             "scp lib/charms/data_platform_libs/v0/data_interfaces.py "
             f"{unit.name}:/var/lib/juju/agents/unit-{unit_name_with_dash}/charm/lib/charms/data_platform_libs/v0/"
         )
-        x, stdout, y = await ops_test.juju(*complete_command.split())
+        ret_code, stdout, _ = await ops_test.juju(*complete_command.split())
+        # scp was successful
+        assert not ret_code, f"Couldn't perform copy to {unit.name}."
 
 
 @pytest.mark.usefixtures("fetch_old_versions")
 @pytest.mark.abort_on_fail
-async def test_deploy_charms(ops_test: OpsTest, application_charm, database_charm):
+async def test_deploy_charms(
+    ops_test: OpsTest, application_charm, database_charm, dp_libs_ubuntu_series
+):
     """Deploy both charms (application and database) to use in the tests."""
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm, application_name=APPLICATION_APP_NAME, num_units=1, series="jammy"
+            application_charm,
+            application_name=APPLICATION_APP_NAME,
+            num_units=1,
+            series=dp_libs_ubuntu_series,
         ),
         ops_test.model.deploy(
             database_charm,
@@ -83,7 +104,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, database_char
             },
             application_name=DATABASE_APP_NAME,
             num_units=1,
-            series="jammy",
+            series=dp_libs_ubuntu_series,
         ),
     )
     await ops_test.model.wait_for_idle(

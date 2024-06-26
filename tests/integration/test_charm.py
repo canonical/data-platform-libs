@@ -53,7 +53,11 @@ NUM_APP = 2
 
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(
-    ops_test: OpsTest, application_charm, database_charm, dummy_database_charm
+    ops_test: OpsTest,
+    application_charm,
+    database_charm,
+    dummy_database_charm,
+    dp_libs_ubuntu_series,
 ):
     """Deploy both charms (application and database) to use in the tests."""
     # Deploy both charms (2 units for each application to test that later they correctly
@@ -63,7 +67,7 @@ async def test_deploy_charms(
             application_charm,
             application_name=APPLICATION_APP_NAME,
             num_units=NUM_APP,
-            series="jammy",
+            series=dp_libs_ubuntu_series,
         ),
         ops_test.model.deploy(
             database_charm,
@@ -74,7 +78,7 @@ async def test_deploy_charms(
             },
             application_name=DATABASE_APP_NAME,
             num_units=NUM_DB,
-            series="jammy",
+            series=dp_libs_ubuntu_series,
         ),
         ops_test.model.deploy(
             dummy_database_charm,
@@ -85,7 +89,7 @@ async def test_deploy_charms(
             },
             application_name=DATABASE_DUMMY_APP_NAME,
             num_units=NUM_DUMMY_DB,
-            series="jammy",
+            series=dp_libs_ubuntu_series,
         ),
         ops_test.model.deploy(
             database_charm,
@@ -95,7 +99,7 @@ async def test_deploy_charms(
                 ]
             },
             application_name=ANOTHER_DATABASE_APP_NAME,
-            series="jammy",
+            series=dp_libs_ubuntu_series,
         ),
     )
 

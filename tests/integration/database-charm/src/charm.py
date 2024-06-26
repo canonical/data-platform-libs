@@ -13,6 +13,7 @@ import secrets
 import string
 from random import randrange
 from time import sleep
+from typing import Optional
 
 import psycopg2
 from ops import Relation
@@ -119,7 +120,7 @@ class DatabaseCharm(CharmBase):
         )
 
     @property
-    def peer_relation(self) -> Relation | None:
+    def peer_relation(self) -> Optional[Relation]:
         """The cluster peer relation."""
         return self.model.get_relation(PEER)
 

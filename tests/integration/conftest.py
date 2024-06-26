@@ -2,7 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import json
+import logging
 import os
 import shutil
 from datetime import datetime
@@ -12,22 +12,38 @@ from subprocess import check_call, check_output
 import pytest
 from pytest_operator.plugin import OpsTest
 
+logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="session")
+def dp_libs_ubuntu_series(pytestconfig) -> str:
+    if pytestconfig.option.os_series:
+        return pytestconfig.option.os_series
+
 
 @pytest.fixture(scope="module")
-def ops_test(ops_test: OpsTest) -> OpsTest:
-    if os.environ.get("CI") == "true":
-        # Running in GitHub Actions; skip build step
-        # (GitHub Actions uses a separate, cached build step. See .github/workflows/ci.yaml)
-        packed_charms = json.loads(os.environ["CI_PACKED_CHARMS"])
+def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
+    """Re-defining OpsTest.build_charm in a way that it takes CI caching and build parameters into account.
 
-        async def build_charm(charm_path, bases_index: int = None) -> Path:
-            for charm in packed_charms:
-                if Path(charm_path) == Path(charm["directory_path"]):
-                    if bases_index is None or bases_index == charm["bases_index"]:
-                        return charm["file_path"]
-            raise ValueError(f"Unable to find .charm file for {bases_index=} at {charm_path=}")
+    Build parameters (for charms available for multiple OS versions) are considered both when building the
+    charm, or when fetching pre-built, CI cached version of it.
+    """
+    _build_charm = ops_test.build_charm
 
-        ops_test.build_charm = build_charm
+    # Add bases_index option (indicating which OS version to use)
+    # when building the charm within the scope of the test run
+    async def build_charm(charm_path, bases_index: int = None) -> Path:
+        if not bases_index and pytestconfig.option.build_bases_index:
+            bases_index = pytestconfig.option.build_bases_index
+
+        logger.info(f"Building charm {charm_path} with base index {bases_index}")
+
+        return await _build_charm(
+            charm_path,
+            bases_index=pytestconfig.option.build_bases_index,
+        )
+
+    ops_test.build_charm = build_charm
     return ops_test
 
 
@@ -169,7 +185,7 @@ def fetch_old_versions():
     check_call("git clone https://github.com/canonical/data-platform-libs.git", shell=True)
     os.chdir("data-platform-libs")
     last_commits = check_output(
-        "git show --pretty=format:'%h' --no-patch -15", shell=True, universal_newlines=True
+        "git show --pretty=format:'%h' --no-patch -25", shell=True, universal_newlines=True
     ).split()
 
     versions = []
@@ -185,7 +201,7 @@ def fetch_old_versions():
             shutil.copyfile(src_path, f"{data_path}.v{version}")
             versions.append(version)
 
-        if len(versions) == 4:
+        if len(versions) == 7:
             break
 
     os.chdir(cwd)

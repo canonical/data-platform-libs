@@ -19,7 +19,9 @@ SECOND_S3_RELATION_NAME = "second-s3-credentials"
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_charms(ops_test: OpsTest, application_s3_charm, s3_charm):
+async def test_deploy_charms(
+    ops_test: OpsTest, application_s3_charm, s3_charm, dp_libs_ubuntu_series
+):
     """Deploy both charms (application and s3 provider app) to use in the tests."""
     # Deploy both charms (2 units for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
@@ -28,7 +30,7 @@ async def test_deploy_charms(ops_test: OpsTest, application_s3_charm, s3_charm):
             application_s3_charm,
             application_name=APPLICATION_APP_NAME,
             num_units=2,
-            series="jammy",
+            series=dp_libs_ubuntu_series,
         ),
         ops_test.model.deploy(s3_charm, application_name=S3_APP_NAME, num_units=2, series="jammy"),
     )
