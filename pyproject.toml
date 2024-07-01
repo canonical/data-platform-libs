@@ -42,6 +42,11 @@ copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
 
 [tool.ruff]
 line-length = 99
+extend-exclude = ["__pycache__", "*.egg_info"]
+target-version="py310"
+src = ["src", "tests", "lib"]
+
+[tool.ruff.lint]
 select = ["E", "W", "F", "C", "N", "D", "I001"]
 extend-ignore = [
     "D203",
@@ -58,12 +63,9 @@ extend-ignore = [
     "D413",
 ]
 ignore = ["E501", "D107"]
-extend-exclude = ["__pycache__", "*.egg_info"]
 per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104", "E999"]}
-target-version="py310"
-src = ["src", "tests", "lib"]
 
-[tool.ruff.mccabe]
+[tool.ruff.lint.mccabe]
 max-complexity = 12
 
 [tool.pyright]
