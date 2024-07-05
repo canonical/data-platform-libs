@@ -2852,20 +2852,21 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
-        if self.fetch_relation_field(event.relation.id, "subordinated") == "true":
-            remote_units = [
-                key
-                for key in event.relation.data.keys()
-                if isinstance(key, Unit) and key.name.startswith(event.relation.app.name)
-            ]
+        is_subordinate = False
+        remote_unit_data = None
+        for key in event.relation.data.keys():
+            if isinstance(key, Unit) and key.name.startswith(self.charm.app.name):
+                remote_unit_data = event.relation.data[key]
+            elif isinstance(key, Application) and key.name != self.charm.app.name:
+                is_subordinate = event.relation.data[key].get("subordinated") == "true"
+
+        if is_subordinate:
             # Check that provider units have joined.
-            if len(remote_units) == 0:
+            if not remote_unit_data:
                 logger.debug("No provider units are available.")
                 return
-            elif (
-                len(remote_units) == 1
-                and event.relation.data[remote_units[0]].get("state") != "ready"
-            ):
+
+            if remote_unit_data.get("state") != "ready":
                 logger.debug("Subordinate provider unit not ready.")
                 return
 
