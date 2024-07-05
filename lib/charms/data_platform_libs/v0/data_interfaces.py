@@ -2855,7 +2855,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
         is_subordinate = False
         remote_unit_data = None
         for key in event.relation.data.keys():
-            if isinstance(key, Unit) and key.name.startswith(self.charm.app.name):
+            if isinstance(key, Unit) and not key.name.startswith(self.charm.app.name):
                 remote_unit_data = event.relation.data[key]
             elif isinstance(key, Application) and key.name != self.charm.app.name:
                 is_subordinate = event.relation.data[key].get("subordinated") == "true"
