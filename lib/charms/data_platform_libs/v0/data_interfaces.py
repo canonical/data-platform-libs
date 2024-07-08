@@ -2609,8 +2609,6 @@ class DatabaseProviderData(ProviderData):
     def set_subordinated(self, relation_id: int) -> None:
         """Raises the subordinated flag in the application relation databag.
 
-        The flag will be used to evaluate additional checks before emitting provider events.
-
         Args:
             relation_id: the identifier for a particular relation.
         """
@@ -2861,13 +2859,10 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
                 is_subordinate = event.relation.data[key].get("subordinated") == "true"
 
         if is_subordinate:
-            # Check that provider units have joined.
             if not remote_unit_data:
-                logger.debug("No provider units are available.")
                 return
 
             if remote_unit_data.get("state") != "ready":
-                logger.debug("Subordinate provider unit not ready.")
                 return
 
         # Check which data has changed to emit customs events.
