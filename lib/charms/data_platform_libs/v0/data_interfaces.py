@@ -292,6 +292,7 @@ exchanged in the relation databag.
 """
 
 import copy
+import functools
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -331,7 +332,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 39
+LIBPATCH = 40
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -492,12 +493,13 @@ def leader_only(f):
         return f(self, *args, **kwargs)
 
     wrapper.leader_only = True
-    return wrapper
+    return functools.wraps(f)(wrapper)
 
 
 def juju_secrets_only(f):
     """Decorator to ensure that certain operations would be only executed on Juju3."""
 
+    @functools.wraps(f)
     def wrapper(self, *args, **kwargs):
         if not self.secrets_enabled:
             raise SecretsUnavailableError("Secrets unavailable on current Juju version")
@@ -509,6 +511,7 @@ def juju_secrets_only(f):
 def dynamic_secrets_only(f):
     """Decorator to ensure that certain operations would be only executed when NO static secrets are defined."""
 
+    @functools.wraps(f)
     def wrapper(self, *args, **kwargs):
         if self.static_secret_fields:
             raise IllegalOperationError(
@@ -522,6 +525,7 @@ def dynamic_secrets_only(f):
 def either_static_or_dynamic_secrets(f):
     """Decorator to ensure that static and dynamic secrets won't be used in parallel."""
 
+    @functools.wraps(f)
     def wrapper(self, *args, **kwargs):
         if self.static_secret_fields and set(self.current_secret_fields) - set(
             self.static_secret_fields
