@@ -304,11 +304,13 @@ from typing import (
     ItemsView,
     KeysView,
     List,
+    Literal,
     Optional,
     Set,
     Tuple,
     Union,
     ValuesView,
+    get_args,
 )
 
 from ops import JujuVersion, Model, Secret, SecretInfo, SecretNotFoundError
@@ -337,7 +339,7 @@ PYDEPS = ["ops>=2.0.0"]
 
 # Starting from what LIBPATCH number to apply legacy solutions
 # v0.17 was the last version without secrets
-LEGACY_SUPPORT_FROM = 17
+LEGACY_SUPPORT_FROM = 0
 
 logger = logging.getLogger(__name__)
 
@@ -354,6 +356,7 @@ PROV_SECRET_PREFIX = "secret-"
 REQ_SECRET_FIELDS = "requested-secrets"
 GROUP_MAPPING_FIELD = "secret_group_mapping"
 GROUP_SEPARATOR = "@"
+LegacyActions = Literal["discover", "compat", "migrate"]
 
 MODEL_ERRORS = {
     "not_leader": "this unit is not the leader",
@@ -389,6 +392,10 @@ class SecretsIllegalUpdateError(SecretError):
 
 class IllegalOperationError(DataInterfacesError):
     """To be used when an operation is not allowed to be performed."""
+
+
+class LegacyError(DataInterfacesError):
+    """Base exception relating to legacy/upgrades."""
 
 
 ##############################################################################
@@ -564,12 +571,12 @@ def legacy_apply_from_version(version: int) -> Callable:
 
     def decorator(f: Callable[..., None]):
         """Signature is ensuring None return value."""
-        f.legacy_version = version
 
         def wrapper(self, *args, **kwargs) -> None:
             if version >= LEGACY_SUPPORT_FROM:
                 return f(self, *args, **kwargs)
 
+        wrapper.legacy_version = version
         return wrapper
 
     return decorator
@@ -976,6 +983,8 @@ class Data(ABC):
         "tls-ca": SECRET_GROUPS.TLS,
     }
 
+    LEGACY_EXEC_SEQUENCES = {kv: {} for kv in get_args(LegacyActions)}
+
     def __init__(
         self,
         model: Model,
@@ -1046,16 +1055,52 @@ class Data(ABC):
 
     # Optional overrides
 
+    # Upgrades/legacy
+
     def _legacy_apply_on_fetch(self) -> None:
-        pass
+        self._legacy_construct_sequences()
+        self._legacy_apply_sequence("compat")
 
     def _legacy_apply_on_update(self, fields: List[str]) -> None:
-        pass
+        self._legacy_construct_sequences()
+        for version, fcnt in sorted(
+            self.LEGACY_EXEC_SEQUENCES.get("migrate", {}).items(), reverse=True
+        ):
+            fcnt(self)
 
     def _legacy_apply_on_delete(self, fields: List[str]) -> None:
         pass
 
     # Internal helper methods
+
+    # Legacy / upgrades
+    def _legacy_apply_sequence(self, legacy_action: LegacyActions):
+        """Dynamically generate the discover / comply / migrate sequences."""
+        for version, fcnt in sorted(
+            self.LEGACY_EXEC_SEQUENCES.get(legacy_action, {}).items(), reverse=True
+        ):
+            fcnt(self)
+
+    def _legacy_construct_sequences(self):
+        """Dynamically generate the discover / comply / migrate sequences."""
+        for action in get_args(LegacyActions):
+            if not self.LEGACY_EXEC_SEQUENCES[action]:
+                self.LEGACY_EXEC_SEQUENCES[action] = Data._get_legacy_functions(action)
+
+    @classmethod
+    def _get_legacy_functions(cls, legacy_action: LegacyActions) -> Dict[int, Callable]:
+        result = {}
+        for func_name in dir(cls):
+            func = getattr(cls, func_name)
+            if callable(func) and func.__name__.startswith(f"_legacy_{legacy_action}"):
+                if not (version := getattr(func, "legacy_version")):
+                    raise LegacyError(
+                        "Inconsistent definition: {func_name} has no version attached."
+                    )
+                result[version] = func
+        return result
+
+    # Secrets handling
 
     @staticmethod
     def _is_relation_active(relation: Relation):
