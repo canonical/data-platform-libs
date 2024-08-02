@@ -33,15 +33,12 @@ def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
     # Add bases_index option (indicating which OS version to use)
     # when building the charm within the scope of the test run
     async def build_charm(charm_path, bases_index: int = None) -> Path:
-        if not bases_index and pytestconfig.option.build_bases_index:
+        if not bases_index and pytestconfig.option.build_bases_index is not None:
             bases_index = pytestconfig.option.build_bases_index
 
         logger.info(f"Building charm {charm_path} with base index {bases_index}")
 
-        return await _build_charm(
-            charm_path,
-            bases_index=pytestconfig.option.build_bases_index,
-        )
+        return await _build_charm(charm_path, bases_index=bases_index)
 
     ops_test.build_charm = build_charm
     return ops_test

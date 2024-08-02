@@ -704,7 +704,7 @@ class CachedSecret:
         content = self._secret_meta.get_content()
         self._secret_uri = None
 
-        # I wish we could just check if we are the owners of the secret...
+        # It will be nice to have the possibility to check if we are the owners of the secret...
         try:
             self._secret_meta = self.add_secret(content, label=self.label)
         except ModelError as err:
@@ -1031,12 +1031,18 @@ class Data(ABC):
     # Optional overrides
 
     def _legacy_apply_on_fetch(self) -> None:
+        """This function should provide a list of compatibility functions to be applied when fetching (legacy) data."""
         pass
 
     def _legacy_apply_on_update(self, fields: List[str]) -> None:
+        """This function should provide a list of compatibility functions to be applied when writing data.
+
+        Since data may be at a legacy version, migration may be mandatory.
+        """
         pass
 
     def _legacy_apply_on_delete(self, fields: List[str]) -> None:
+        """This function should provide a list of compatibility functions to be applied when deleting (legacy) data."""
         pass
 
     # Internal helper methods
