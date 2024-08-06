@@ -128,6 +128,7 @@ jobs:
           channel: "1.27-strict/stable"
           bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
+          charmcraft-channel: "2.x/stable"
       - name: Download packed charm(s)
         uses: actions/download-artifact@v3
         with:
