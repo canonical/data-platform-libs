@@ -59,6 +59,12 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     install_path = "tests/integration/opensearch-charm/" + library_path
     shutil.copyfile(library_path, install_path)
 
+    peer_library_path = "lib/charms/data_platform_libs/v0/data_peer.py"
+    install_path = "tests/integration/database-charm/" + peer_library_path
+    shutil.copyfile(peer_library_path, install_path)
+    install_path = "tests/integration/dummy-database-charm/" + peer_library_path
+    shutil.copyfile(peer_library_path, install_path)
+
 
 @pytest.fixture(scope="module", autouse=True)
 def copy_s3_library_into_charm(ops_test: OpsTest):

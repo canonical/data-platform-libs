@@ -31,7 +31,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
 )
 
 if DATA_INTERFACES_VERSION > 17:
-    from charms.data_platform_libs.v0.data_interfaces import (
+    from charms.data_platform_libs.v0.data_peer import (
         DataPeer,
         DataPeerOtherUnit,
         DataPeerUnit,
