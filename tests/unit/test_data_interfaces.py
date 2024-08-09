@@ -27,10 +27,6 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseRequestedEvent,
     DatabaseRequires,
     DatabaseRequiresEvents,
-    DataPeer,
-    DataPeerData,
-    DataPeerOtherUnit,
-    DataPeerUnit,
     Diff,
     IllegalOperationError,
     IndexRequestedEvent,
@@ -39,6 +35,12 @@ from charms.data_platform_libs.v0.data_interfaces import (
     OpenSearchProvides,
     OpenSearchRequires,
     TopicRequestedEvent,
+)
+from charms.data_platform_libs.v0.data_peer import (
+    DataPeer,
+    DataPeerData,
+    DataPeerOtherUnit,
+    DataPeerUnit,
 )
 from charms.harness_extensions.v0.capture_events import capture, capture_events
 
@@ -178,16 +180,25 @@ def verify_relation_interface_using_interface_functions(interface, relation_id):
     interface_dict = interface.as_dict(relation_id)
     interface_dict["something"] = "else"
 
-    with (
-        patch(
+    if "Peer" in myclass:
+        fetch_fcnt = f"charms.data_platform_libs.v0.data_peer.{myclass}.fetch_my_relation_data"
+        update_fcnt = f"charms.data_platform_libs.v0.data_peer.{myclass}.update_relation_data"
+        delete_fcnt = f"charms.data_platform_libs.v0.data_peer.{myclass}.delete_relation_data"
+    else:
+        fetch_fcnt = (
             f"charms.data_platform_libs.v0.data_interfaces.{myclass}.fetch_my_relation_data"
-        ) as patched_fetch_mine,
-        patch(
+        )
+        update_fcnt = (
             f"charms.data_platform_libs.v0.data_interfaces.{myclass}.update_relation_data"
-        ) as patched_update,
-        patch(
+        )
+        delete_fcnt = (
             f"charms.data_platform_libs.v0.data_interfaces.{myclass}.delete_relation_data"
-        ) as patched_delete,
+        )
+
+    with (
+        patch(fetch_fcnt) as patched_fetch_mine,
+        patch(update_fcnt) as patched_update,
+        patch(delete_fcnt) as patched_delete,
     ):
         # Read
         _ = interface_dict["something"]
