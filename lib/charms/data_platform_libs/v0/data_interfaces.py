@@ -335,10 +335,6 @@ LIBPATCH = 39
 
 PYDEPS = ["ops>=2.0.0"]
 
-# Starting from what LIBPATCH number to apply legacy solutions
-# v0.17 was the last version without secrets
-LEGACY_SUPPORT_FROM = 17
-
 logger = logging.getLogger(__name__)
 
 Diff = namedtuple("Diff", "added changed deleted")
@@ -519,31 +515,6 @@ def dynamic_secrets_only(f):
     return wrapper
 
 
-def legacy_apply_from_version(version: int) -> Callable:
-    """Decorator to decide whether to apply a legacy function or not.
-
-    Based on LEGACY_SUPPORT_FROM module variable value, the importer charm may only want
-    to apply legacy solutions starting from a specific LIBPATCH.
-
-    NOTE: All 'legacy' functions have to be defined and called in a way that they return `None`.
-    This results in cleaner and more secure execution flows in case the function may be disabled.
-    This requirement implicitly means that legacy functions change the internal state strictly,
-    don't return information.
-    """
-
-    def decorator(f: Callable[..., None]):
-        """Signature is ensuring None return value."""
-        f.legacy_version = version
-
-        def wrapper(self, *args, **kwargs) -> None:
-            if version >= LEGACY_SUPPORT_FROM:
-                return f(self, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
 ##############################################################################
 # Helper classes
 ##############################################################################
@@ -601,7 +572,6 @@ class CachedSecret:
         component: Union[Application, Unit],
         label: str,
         secret_uri: Optional[str] = None,
-        legacy_labels: List[str] = [],
     ):
         self._secret_meta = None
         self._secret_content = {}
@@ -609,7 +579,6 @@ class CachedSecret:
         self.label = label
         self._model = model
         self.component = component
-        self.legacy_labels = legacy_labels
         self.current_label = None
 
     @property
@@ -622,80 +591,12 @@ class CachedSecret:
             try:
                 self._secret_meta = self._model.get_secret(label=self.label)
             except SecretNotFoundError:
-                # Falling back to seeking for potential legacy labels
-                self._legacy_compat_find_secret_by_old_label()
+                pass
 
             # If still not found, to be checked by URI, to be labelled with the proposed label
             if not self._secret_meta and self._secret_uri:
                 self._secret_meta = self._model.get_secret(id=self._secret_uri, label=self.label)
         return self._secret_meta
-
-    ##########################################################################
-    # Backwards compatibility / Upgrades
-    ##########################################################################
-    # These functions are used to keep backwards compatibility on rolling upgrades
-    # Policy:
-    # All data is kept intact until the first write operation. (This allows a minimal
-    # grace period during which rollbacks are fully safe. For more info see the spec.)
-    # All data involves:
-    #   - databag contents
-    #   - secrets content
-    #   - secret labels (!!!)
-    # Legacy functions must return None, and leave an equally consistent state whether
-    # they are executed or skipped (as a high enough versioned execution environment may
-    # not require so)
-
-    # Compatibility
-
-    @legacy_apply_from_version(34)
-    def _legacy_compat_find_secret_by_old_label(self) -> None:
-        """Compatibility function, allowing to find a secret by a legacy label.
-
-        This functionality is typically needed when secret labels changed over an upgrade.
-        Until the first write operation, we need to maintain data as it was, including keeping
-        the old secret label. In order to keep track of the old label currently used to access
-        the secret, and additional 'current_label' field is being defined.
-        """
-        for label in self.legacy_labels:
-            try:
-                self._secret_meta = self._model.get_secret(label=label)
-            except SecretNotFoundError:
-                pass
-            else:
-                if label != self.label:
-                    self.current_label = label
-                return
-
-    # Migrations
-
-    @legacy_apply_from_version(34)
-    def _legacy_migration_to_new_label_if_needed(self) -> None:
-        """Helper function to re-create the secret with a different label.
-
-        Juju does not provide a way to change secret labels.
-        Thus whenever moving from secrets version that involves secret label changes,
-        we "re-create" the existing secret, and attach the new label to the new
-        secret, to be used from then on.
-
-        Note: we replace the old secret with a new one "in place", as we can't
-        easily switch the containing SecretCache structure to point to a new secret.
-        Instead we are changing the 'self' (CachedSecret) object to point to the
-        new instance.
-        """
-        if not self.current_label or not (self.meta and self._secret_meta):
-            return
-
-        # Create a new secret with the new label
-        content = self._secret_meta.get_content()
-        self._secret_uri = None
-
-        # It will be nice to have the possibility to check if we are the owners of the secret...
-        try:
-            self._secret_meta = self.add_secret(content, label=self.label)
-        except ModelError as err:
-            if MODEL_ERRORS["not_leader"] not in str(err):
-                raise
-        self.current_label = None
 
     ##########################################################################
     # Public functions
@@ -750,7 +651,6 @@ class CachedSecret:
             return
 
         if content:
-            self._legacy_migration_to_new_label_if_needed()
             self.meta.set_content(content)
             self._secret_content = content
         else:
@@ -787,9 +687,7 @@ class SecretCache:
     ) -> Optional[CachedSecret]:
         """Getting a secret from Juju Secret store or cache."""
         if not self._secrets.get(label):
-            secret = CachedSecret(
-                self._model, self.component, label, uri, legacy_labels=legacy_labels
-            )
+            secret = CachedSecret(self._model, self.component, label, uri)
             if secret.meta:
                 self._secrets[label] = secret
         return self._secrets.get(label)
