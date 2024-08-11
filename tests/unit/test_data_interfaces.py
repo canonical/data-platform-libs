@@ -38,6 +38,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     KafkaRequires,
     OpenSearchProvides,
     OpenSearchRequires,
+    SuborinateDatabaseRequires,
     TopicRequestedEvent,
 )
 from charms.harness_extensions.v0.capture_events import capture, capture_events
@@ -1508,7 +1509,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         assert captured.event.unit.name == "application/0"
 
 
-CLUSTER_ALIASES = ["cluster1", "cluster2"]
+CLUSTER_ALIASES = ["cluster1", "cluster2", "cluster3", "cluster4"]
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 DATABASE_RELATION_INTERFACE = "database_client"
@@ -1520,7 +1521,7 @@ name: application
 requires:
   {DATABASE_RELATION_NAME}:
     interface: {DATABASE_RELATION_INTERFACE}
-    limit: {len(CLUSTER_ALIASES)}
+    limit: 2
   {KAFKA_RELATION_NAME}:
     interface: {KAFKA_RELATION_INTERFACE}
   {OPENSEARCH_RELATION_NAME}:
@@ -1532,10 +1533,12 @@ TOPIC = "data_platform_topic"
 class ApplicationCharmDatabase(CharmBase):
     """Mock application charm to use in units tests."""
 
+    ALIASES = CLUSTER_ALIASES[:2]
+
     def __init__(self, *args):
         super().__init__(*args)
         self.requirer = DatabaseRequires(
-            self, DATABASE_RELATION_NAME, DATABASE, EXTRA_USER_ROLES, CLUSTER_ALIASES[:]
+            self, DATABASE_RELATION_NAME, DATABASE, EXTRA_USER_ROLES, self.ALIASES[:]
         )
         self.framework.observe(self.requirer.on.database_created, self._on_database_created)
         self.framework.observe(
@@ -1592,6 +1595,34 @@ class ApplicationCharmDatabase(CharmBase):
 
     def _on_cluster1_database_created(self, _) -> None:
         self.log_relation_size("on_cluster1_database_created")
+
+
+class ApplicationSubordinateCharmDatabase(ApplicationCharmDatabase):
+    """Mock application charm to use in units tests."""
+
+    ALIASES = CLUSTER_ALIASES[2:4]
+
+    def __init__(self, *args):
+        CharmBase.__init__(self, *args)
+        self.requirer = SuborinateDatabaseRequires(
+            self, DATABASE_RELATION_NAME, DATABASE, EXTRA_USER_ROLES, self.ALIASES[:]
+        )
+        self.framework.observe(self.requirer.on.database_created, self._on_database_created)
+        self.framework.observe(
+            self.on[DATABASE_RELATION_NAME].relation_broken, self._on_relation_broken
+        )
+        self.framework.observe(self.requirer.on.endpoints_changed, self._on_endpoints_changed)
+        self.framework.observe(
+            self.requirer.on.read_only_endpoints_changed,
+            self._on_read_only_endpoints_changed,
+        )
+        self.framework.observe(
+            self.requirer.on.cluster3_database_created,
+            self._on_cluster3_database_created,
+        )
+
+    def _on_cluster3_database_created(self, _) -> None:
+        self.log_relation_size("on_cluster3_database_created")
 
 
 class ApplicationCharmKafka(CharmBase):
@@ -1782,7 +1813,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.begin_with_initial_hooks()
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
-    def test_requires_interface_functions(self):
+    def test_requires_data(self):
         """Check the functionality of each public interface function."""
         interface = self.harness.charm.requirer
         verify_relation_interface_functions(interface, self.rel_id)
@@ -1791,32 +1822,38 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert rel_data == {0: {}}
 
         rel_data = interface.fetch_my_relation_data()
-        assert rel_data == {
-            0: {
-                "alias": "cluster1",
-                "database": "data_platform",
-                "extra-user-roles": "CREATEDB,CREATEROLE",
-            }
-        }
+        assert rel_data[0]["alias"] == self.harness.charm.ALIASES[0]
+        assert rel_data[0]["database"] == "data_platform"
+        assert rel_data[0]["extra-user-roles"] == "CREATEDB,CREATEROLE"
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_requires_data_secrets(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_functions(interface, self.rel_id)
+
+        rel_data = interface.fetch_relation_data()
+        assert rel_data == {0: {}}
+
+        rel_data = interface.fetch_my_relation_data()
+        assert rel_data[0]["alias"] == self.harness.charm.ALIASES[0]
+        assert rel_data[0]["database"] == "data_platform"
+        assert rel_data[0]["extra-user-roles"] == "CREATEDB,CREATEROLE"
+        assert (
+            rel_data[0]["requested-secrets"] == '["username", "password", "tls", "tls-ca", "uris"]'
+        )
+
     def test_requires_interface_functions_secrets(self):
         """Check the functionality of each public interface function."""
         interface = self.harness.charm.requirer
         verify_relation_interface_functions(interface, self.rel_id)
 
-        rel_data = interface.fetch_relation_data()
-        assert rel_data == {0: {}}
-
-        rel_data = interface.fetch_my_relation_data()
-        assert rel_data == {
-            0: {
-                "alias": "cluster1",
-                "database": "data_platform",
-                "extra-user-roles": "CREATEDB,CREATEROLE",
-                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
-            }
-        }
+        assert interface.fetch_relation_data()[0] == self.harness.get_relation_data(
+            self.rel_id, self.provider
+        )
+        assert interface.fetch_my_relation_data()[0] == self.harness.get_relation_data(
+            self.rel_id, self.app_name
+        )
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_requires_interface_dict(self):
@@ -1825,9 +1862,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         verify_relation_interface_dict(interface, self.rel_id)
 
         assert interface.as_dict(self.rel_id) == {
-            "alias": "cluster1",
-            "database": "data_platform",
-            "extra-user-roles": "CREATEDB,CREATEROLE",
+            **self.harness.get_relation_data(self.rel_id, self.app_name),
+            **self.harness.get_relation_data(self.rel_id, self.provider),
         }
 
     @pytest.mark.usefixtures("use_caplog")
@@ -1839,10 +1875,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
 
         datadict = interface.as_dict(self.rel_id)
         assert datadict == {
-            "alias": "cluster1",
-            "database": "data_platform",
-            "extra-user-roles": "CREATEDB,CREATEROLE",
-            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+            **self.harness.get_relation_data(self.rel_id, self.app_name),
+            **self.harness.get_relation_data(self.rel_id, self.provider),
         }
 
         # Non-leader can try to fetch data (won't have anything thought, as only app data is there...
@@ -1963,6 +1997,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         )
         self.harness.update_relation_data(self.rel_id, self.provider, {"somedata": "somevalue"})
 
+        base_data = self.harness.get_relation_data(self.rel_id, self.provider)
+
         # Check the data using the charm library function
         # (the diff/data key should not be present).
         data = self.harness.charm.requirer.fetch_relation_data()
@@ -1971,6 +2007,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "username": "test-username",
                 "password": "test-password",
                 "somedata": "somevalue",
+                **base_data,
             }
         }
 
@@ -2004,6 +2041,9 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Set some data in the relation.
         self.harness.update_relation_data(self.rel_id, self.provider, {"somedata": "somevalue"})
 
+        base_data = self.harness.get_relation_data(self.rel_id, self.provider)
+        del base_data["secret-user"]
+
         # Check the data using the charm library function
         # (the diff/data key should not be present).
         data = self.harness.charm.requirer.fetch_relation_data()
@@ -2012,6 +2052,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "username": "test-username",
                 "password": "test-password",
                 "somedata": "somevalue",
+                **base_data,
             }
         }
 
@@ -2047,7 +2088,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         data = self.harness.charm.requirer.fetch_my_relation_data()
         assert data == {
             self.rel_id: {
-                "alias": "cluster1",
+                "alias": self.harness.charm.ALIASES[0],
                 "somedata": "somevalue",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
@@ -2085,21 +2126,16 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_fetch_my_relation_data_and_fields_secrets(self):
+        base_data = self.harness.get_relation_data(self.rel_id, self.app_name)
+
         # Set some data in the relation.
-        self.harness.update_relation_data(self.rel_id, self.app_name, {"somedata": "somevalue"})
+        new_data = {"somedata": "somevalue"}
+        self.harness.update_relation_data(self.rel_id, self.app_name, new_data)
 
         # Check the data using the charm library function
         # (the diff/data key should not be present).
         data = self.harness.charm.requirer.fetch_my_relation_data()
-        assert data == {
-            self.rel_id: {
-                "alias": "cluster1",
-                "somedata": "somevalue",
-                "database": "data_platform",
-                "extra-user-roles": "CREATEDB,CREATEROLE",
-                REQ_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.secret_fields),
-            }
-        }
+        assert data == {self.rel_id: {**new_data, **base_data}}
 
         data = self.harness.charm.requirer.fetch_my_relation_data([self.rel_id], ["somedata"])
         assert data == {self.rel_id: {"somedata": "somevalue"}}
@@ -2355,21 +2391,24 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Call the function and check the alias.
         self.harness.charm.requirer._assign_relation_alias(self.rel_id)
         assert (
-            self.harness.get_relation_data(self.rel_id, unit_name)["alias"] == CLUSTER_ALIASES[0]
+            self.harness.get_relation_data(self.rel_id, unit_name)["alias"]
+            == self.harness.charm.ALIASES[0]
         )
 
         # Add another relation and check that the second cluster alias was assigned to it.
         second_rel_id = self.add_relation(self.harness, "another-database")
 
         assert (
-            self.harness.get_relation_data(second_rel_id, unit_name)["alias"] == CLUSTER_ALIASES[1]
+            self.harness.get_relation_data(second_rel_id, unit_name)["alias"]
+            == self.harness.charm.ALIASES[1]
         )
 
         # Reset the alias and test again using the function call.
         self.harness.update_relation_data(second_rel_id, unit_name, {"alias": ""})
         self.harness.charm.requirer._assign_relation_alias(second_rel_id)
         assert (
-            self.harness.get_relation_data(second_rel_id, unit_name)["alias"] == CLUSTER_ALIASES[1]
+            self.harness.get_relation_data(second_rel_id, unit_name)["alias"]
+            == self.harness.charm.ALIASES[1]
         )
 
     @patch.object(charm, "_on_cluster1_database_created")
@@ -2393,7 +2432,10 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
     def test_get_relation_alias(self):
         """Asserts the correct relation alias is returned."""
         # Assert the relation got the first cluster alias.
-        assert self.harness.charm.requirer._get_relation_alias(self.rel_id) == CLUSTER_ALIASES[0]
+        assert (
+            self.harness.charm.requirer._get_relation_alias(self.rel_id)
+            == self.harness.charm.ALIASES[0]
+        )
 
     @patch("psycopg.connect")
     def test_is_postgresql_plugin_enabled(self, _connect):
@@ -2505,6 +2547,97 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             # Test that the remote unit name is available in the event.
             for captured in captured_events:
                 assert captured.unit.name == f"{self.provider}/0"
+
+
+class SubordinateTestDatabaseRequires(TestDatabaseRequires):
+    metadata = METADATA
+    relation_name = DATABASE_RELATION_NAME
+    charm = ApplicationSubordinateCharmDatabase
+
+    app_name = "application"
+    provider = "database"
+
+    def setUp(self):
+        self.harness = self.get_harness()
+        self.rel_id = self.add_relation(self.harness, self.provider)
+        self.harness.update_relation_data(self.rel_id, self.provider, {"subordinated": "true"})
+        unit_name = f"{self.provider}/0"
+        self.harness.update_relation_data(self.rel_id, unit_name, {"state": "ready"})
+        self.harness.begin_with_initial_hooks()
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_requires_data(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_functions(interface, self.rel_id)
+
+        rel_data = interface.fetch_relation_data()
+        assert rel_data == {0: {"subordinated": "true"}}
+
+        rel_data = interface.fetch_my_relation_data()
+        assert rel_data[0]["alias"] == self.harness.charm.ALIASES[0]
+        assert rel_data[0]["database"] == "data_platform"
+        assert rel_data[0]["extra-user-roles"] == "CREATEDB,CREATEROLE"
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_requires_data_secrets(self):
+        """Check the functionality of each public interface function."""
+        interface = self.harness.charm.requirer
+        verify_relation_interface_functions(interface, self.rel_id)
+
+        rel_data = interface.fetch_relation_data()
+        assert rel_data == {0: {"subordinated": "true"}}
+
+        rel_data = interface.fetch_my_relation_data()
+        assert rel_data[0]["alias"] == self.harness.charm.ALIASES[0]
+        assert rel_data[0]["database"] == "data_platform"
+        assert rel_data[0]["extra-user-roles"] == "CREATEDB,CREATEROLE"
+        assert (
+            rel_data[0]["requested-secrets"] == '["username", "password", "tls", "tls-ca", "uris"]'
+        )
+
+    @patch.object(charm, "_on_cluster3_database_created")
+    def test_emit_aliased_event(self, _on_cluster3_database_created):
+        """Asserts the correct custom event is triggered."""
+        # Reset the diff/data key in the relation to correctly emit the event.
+        self.harness.update_relation_data(self.rel_id, self.app_name, {"data": "{}"})
+
+        # Check that the event wasn't triggered yet.
+        _on_cluster3_database_created.assert_not_called()
+
+        # Call the emit function and assert the desired event is triggered.
+        relation = self.harness.charm.model.get_relation(DATABASE_RELATION_NAME, self.rel_id)
+        mock_event = Mock()
+        mock_event.app = self.harness.charm.model.get_app(self.app_name)
+        mock_event.unit = self.harness.charm.model.get_unit(f"{self.app_name}/0")
+        mock_event.relation = relation
+        self.harness.charm.requirer._emit_aliased_event(mock_event, "database_created")
+        _on_cluster3_database_created.assert_called_once()
+
+    @patch.object(charm, "_on_endpoints_changed")
+    def test_subordinate_behavior(self, _on_endpoints_changed):
+        """Testing new subordinate behavior."""
+        unit_name = f"{self.provider}/0"
+        self.harness.update_relation_data(self.rel_id, unit_name, {"state": ""})
+
+        # Updating endpoints -- this should trigger 'endpoints-updated' if executed
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {"endpoints": "host1:port,host2:port"},
+        )
+        # Assert the hook was not called again.
+        _on_endpoints_changed.assert_not_called()
+        self.harness.update_relation_data(self.rel_id, unit_name, {"state": "ready"})
+
+        # Updating endpoints -- this should trigger 'endpoints-updated' if executed
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {"endpoints": "host1:port,host2:port"},
+        )
+        # Assert the hook was not called again.
+        _on_endpoints_changed.assert_called_once()
 
 
 class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
