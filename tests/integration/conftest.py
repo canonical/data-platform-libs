@@ -189,7 +189,7 @@ def fetch_old_versions():
     for commit in last_commits:
         check_call(f"git checkout {commit}", shell=True)
         version = check_output(
-            "grep LIBPATCH lib/charms/data_platform_libs/v0/data_interfaces.py | cut -d ' ' -f 3",
+            "grep ^LIBPATCH lib/charms/data_platform_libs/v0/data_interfaces.py | cut -d ' ' -f 3",
             shell=True,
             universal_newlines=True,
         )
