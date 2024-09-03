@@ -18,7 +18,7 @@ from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 
-from charms.data_platform_libs.v0.data_interfaces import (
+from charms.data_platform_libs.v0.data_peer import (
     DataPeer,
     DataPeerOtherUnit,
     DataPeerUnit,
