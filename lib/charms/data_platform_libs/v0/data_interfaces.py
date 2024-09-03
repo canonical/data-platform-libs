@@ -2965,6 +2965,12 @@ class DatabaseRequirerData(RequirerData):
             return False
 
 
+class DatabaseRequirerUnitData(DatabaseRequirerData):
+    """Requirer-side of the database relation."""
+
+    SCOPE = Scope.UNIT
+
+
 class DatabaseRequirerEventHandlers(RequirerEventHandlers):
     """Requires-side of the relation."""
 
@@ -3094,21 +3100,6 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
-        is_subordinate = False
-        remote_unit_data = None
-        for key in event.relation.data.keys():
-            if isinstance(key, Unit) and not key.name.startswith(self.charm.app.name):
-                remote_unit_data = event.relation.data[key]
-            elif isinstance(key, Application) and key.name != self.charm.app.name:
-                is_subordinate = event.relation.data[key].get("subordinated") == "true"
-
-        if is_subordinate:
-            if not remote_unit_data:
-                return
-
-            if remote_unit_data.get("state") != "ready":
-                return
-
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
@@ -3140,6 +3131,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("endpoints changed on %s", datetime.now())
+
             getattr(self.on, "endpoints_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
@@ -3188,6 +3180,66 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
             external_node_connectivity,
         )
         DatabaseRequirerEventHandlers.__init__(self, charm, self)
+
+
+class SubordinateDatabaseRequirerEventHandlers(DatabaseRequirerEventHandlers):
+    """Subordinated Requirer."""
+
+    def __init__(
+        self, charm: CharmBase, relation_data: DatabaseRequirerData, unique_key: str = ""
+    ):
+        """Manager of base client relations."""
+        super().__init__(charm, relation_data, unique_key)
+
+        self.relation_data_unit = DatabaseRequirerUnitData(
+            model=self.model,
+            relation_name=self.relation_name,  # type: ignore
+            database_name=self.database,  # type: ignore
+        )
+
+    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
+        """Event emitted when the database relation has changed."""
+        is_subordinate = False
+        remote_unit_data = None
+        for key in event.relation.data.keys():
+            if isinstance(key, Unit) and not key.name.startswith(self.charm.app.name):
+                remote_unit_data = event.relation.data[key]
+            elif isinstance(key, Application) and key.name != self.charm.app.name:
+                is_subordinate = event.relation.data[key].get("subordinated") == "true"
+
+        if is_subordinate:
+            if not remote_unit_data:
+                return
+
+            if remote_unit_data.get("state") != "ready":
+                return
+        return super()._on_relation_changed_event(event)
+
+
+class SuborinateDatabaseRequires(DatabaseRequirerData, SubordinateDatabaseRequirerEventHandlers):
+    """Subordinate requirer-side of the database relations."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        relation_name: str,
+        database_name: str,
+        extra_user_roles: Optional[str] = None,
+        relations_aliases: Optional[List[str]] = None,
+        additional_secret_fields: Optional[List[str]] = [],
+        external_node_connectivity: bool = False,
+    ):
+        DatabaseRequirerData.__init__(
+            self,
+            charm.model,
+            relation_name,
+            database_name,
+            extra_user_roles,
+            relations_aliases,
+            additional_secret_fields,
+            external_node_connectivity,
+        )
+        SubordinateDatabaseRequirerEventHandlers.__init__(self, charm, self)
 
 
 ################################################################################
