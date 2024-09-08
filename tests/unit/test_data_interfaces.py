@@ -38,6 +38,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     KafkaRequires,
     OpenSearchProvides,
     OpenSearchRequires,
+    PrematureDataAccessError,
     TopicRequestedEvent,
 )
 from charms.harness_extensions.v0.capture_events import capture, capture_events
@@ -347,6 +348,7 @@ class OpenSearchCharm(CharmBase):
 
 class DataProvidesBaseTests(ABC):
     SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
+    DATABASE_FIELD = "database"
 
     @pytest.fixture
     def use_caplog(self, caplog):
@@ -402,24 +404,53 @@ class DataProvidesBaseTests(ABC):
 
     def test_relation_interface(self):
         """Check the functionality of each public interface function."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         interface = self.harness.charm.provider
         verify_relation_interface_functions(interface, self.rel_id)
 
     def test_relation_interface_dict(self):
         """Check the functionality of each public interface function."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         interface = self.harness.charm.provider
         verify_relation_interface_dict(interface, self.rel_id)
         verify_relation_interface_dict_external_relation(interface, self.rel_id)
 
+    def test_relation_interface_premature_update(self):
+        """Check the functionality of each public interface function."""
+        # We pretend that the connection is initialized
+        interface = self.harness.charm.provider
+
+        with pytest.raises(PrematureDataAccessError):
+            interface.update_relation_data(self.rel_id, {"blah": "blabbla"})
+
+        # Interface function: fetch_relation_field()
+        interface.update_relation_data(self.rel_id, {"endpoints": "host1:port1"})
+        assert interface.fetch_my_relation_field(self.rel_id, "endpoints") == "host1:port1"
+
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_credentials(self):
         """Asserts that the database name is in the relation databag when it's requested."""
+        # Set some data in the relation.
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Set the credentials in the relation using the provides charm library.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
 
         # Check that the credentials are present in the relation.
         assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
-            "data": "{}",  # Data is the diff stored between multiple relation changed events.
+            "data": json.dumps(
+                {self.DATABASE_FIELD: DATABASE}
+            ),  # Data is the diff stored between multiple relation changed events.
             "username": "test-username",
             "password": "test-password",
         }
@@ -427,13 +458,19 @@ class DataProvidesBaseTests(ABC):
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_set_credentials_secrets(self):
         """Asserts that credentials are set up as secrets if possible."""
+        # Set some data in the relation.
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Set the credentials in the relation using the provides charm library.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
 
         # Check that the credentials are present in the relation.
         assert json.loads(self.harness.get_relation_data(self.rel_id, self.app_name)["data"]) == (
             {
-                REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)
+                REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS),
+                self.DATABASE_FIELD: DATABASE,
             }  # Data is the diff stored between multiple relation changed events.   # noqa
         )
         secret_id = self.harness.get_relation_data(self.rel_id, self.app_name)[
@@ -447,13 +484,20 @@ class DataProvidesBaseTests(ABC):
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_set_credentials_secrets_provides_juju3_requires_juju2(self):
         """Asserts that the databag is used if one side of the relation is on Juju2."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         self.harness.update_relation_data(self.rel_id, "application", {REQ_SECRET_FIELDS: ""})
         # Set the credentials in the relation using the provides charm library.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
 
         # Check that the credentials are present in the relation.
         assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
-            "data": "{}",  # Data is the diff stored between multiple relation changed events.
+            "data": json.dumps(
+                {self.DATABASE_FIELD: DATABASE}
+            ),  # Data is the diff stored between multiple relation changed events.
             "username": "test-username",
             "password": "test-password",
         }
@@ -728,29 +772,45 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_provider_interface_functions(self):
         """Check the functionality of each public interface function."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         interface = self.harness.charm.provider
         verify_relation_interface_functions(interface, self.rel_id)
 
         rel_data = interface.fetch_relation_data()
-        assert rel_data == {0: {}}
+        assert rel_data == {0: {self.DATABASE_FIELD: DATABASE}}
         rel_data = interface.fetch_my_relation_data()
-        assert rel_data == {0: {"data": json.dumps({})}}
+        assert rel_data == {0: {"data": json.dumps({self.DATABASE_FIELD: DATABASE})}}
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_provider_interface_functions_secrets(self):
         """Check the functionality of each public interface function."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         interface = self.harness.charm.provider
         verify_relation_interface_functions(interface, self.rel_id)
 
         rel_data = interface.fetch_relation_data()
         assert rel_data == {
-            0: {"requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]'}
+            0: {
+                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+                self.DATABASE_FIELD: DATABASE,
+            }
         }
         rel_data = interface.fetch_my_relation_data()
         assert rel_data == {
             0: {
                 "data": json.dumps(
-                    {"requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]'}
+                    {
+                        "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+                        self.DATABASE_FIELD: DATABASE,
+                    }
                 )
             }
         }
@@ -758,24 +818,41 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_provider_interface_dict(self):
         """Check the functionality of each public interface function."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         interface = self.harness.charm.provider
         verify_relation_interface_dict(interface, self.rel_id)
 
-        assert interface.as_dict(self.rel_id) == {"data": json.dumps({})}
+        assert interface.as_dict(self.rel_id) == {
+            self.DATABASE_FIELD: DATABASE,
+            "data": json.dumps({self.DATABASE_FIELD: DATABASE}),
+        }
 
     @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_provider_interface_dict_secrets(self):
         """Check the functionality of each public interface function."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         interface = self.harness.charm.provider
         verify_relation_interface_dict(interface, self.rel_id)
 
         datadict = interface.as_dict(self.rel_id)
         assert datadict == {
             "data": json.dumps(
-                {"requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]'}
+                {
+                    "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+                    self.DATABASE_FIELD: DATABASE,
+                }
             ),
             "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+            self.DATABASE_FIELD: DATABASE,
         }
 
         # Non-leader can fetch the data
@@ -797,7 +874,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         self.harness.update_relation_data(
             self.rel_id,
             "application",
-            {"database": DATABASE, "extra-user-roles": EXTRA_USER_ROLES},
+            {self.DATABASE_FIELD: DATABASE, "extra-user-roles": EXTRA_USER_ROLES},
         )
 
         # Assert the correct hook is called.
@@ -814,13 +891,18 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         self.harness.update_relation_data(
             self.rel_id,
             "application",
-            {"database": DATABASE, "external-node-connectivity": "true"},
+            {self.DATABASE_FIELD: DATABASE, "external-node-connectivity": "true"},
         )
         event = _on_database_requested.call_args[0][0]
         assert event.external_node_connectivity is True
 
     def test_set_endpoints(self):
         """Asserts that the endpoints are in the relation databag when they change."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Set the endpoints in the relation using the provides charm library.
         self.harness.charm.provider.set_endpoints(self.rel_id, "host1:port,host2:port")
 
@@ -832,6 +914,11 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
     def test_set_read_only_endpoints(self):
         """Asserts that the read only endpoints are in the relation databag when they change."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Set the endpoints in the relation using the provides charm library.
         self.harness.charm.provider.set_read_only_endpoints(self.rel_id, "host1:port,host2:port")
 
@@ -844,6 +931,11 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_additional_fields(self):
         """Asserts that the additional fields are in the relation databag when they are set."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Set the additional fields in the relation using the provides charm library.
         self.harness.charm.provider.set_replset(self.rel_id, "rs0")
         self.harness.charm.provider.set_tls(self.rel_id, "True")
@@ -853,7 +945,9 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         assert self.harness.get_relation_data(self.rel_id, "database") == {
-            "data": "{}",  # Data is the diff stored between multiple relation changed events.
+            "data": json.dumps(
+                {self.DATABASE_FIELD: DATABASE}
+            ),  # Data is the diff stored between multiple relation changed events.
             "replset": "rs0",
             "tls": "True",
             "tls-ca": "Canonical",
@@ -864,6 +958,11 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_set_additional_fields_secrets(self):
         """Asserts that the additional fields are in the relation databag when they are set."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Set the additional fields in the relation using the provides charm library.
         self.harness.charm.provider.set_replset(self.rel_id, "rs0")
         self.harness.charm.provider.set_tls(self.rel_id, "True")
@@ -877,9 +976,9 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         assert secret_id
 
         relation_data == {
-            "data": f'{REQ_SECRET_FIELDS}: "'
-            + f"{json.dumps(self.SECRET_FIELDS)}"
-            + '"}',  # Data is the diff stored between multiple relation changed events.   # noqa
+            "data": json.dumps(
+                {REQ_SECRET_FIELDS: self.SECRET_FIELDS, self.DATABASE_FIELD: DATABASE}
+            ),  # Data is the diff stored between multiple relation changed events.   # noqa
             "replset": "rs0",
             "version": "1.0",
             "uris": "host1:port,host2:port",
@@ -991,6 +1090,11 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_fetch_my_relation_data_and_field(self):
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Set some data in the relation.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
         self.harness.update_relation_data(self.rel_id, "database", {"somedata": "somevalue"})
@@ -1003,7 +1107,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                 "username": "test-username",
                 "password": "test-password",
                 "somedata": "somevalue",
-                "data": json.dumps({}),
+                "data": json.dumps({"database": DATABASE}),
             }
         }
 
@@ -1042,6 +1146,11 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("use_caplog")
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_fetch_my_relation_data_and_field_secrets(self):
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Set some data in the relation.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
         self.harness.update_relation_data(self.rel_id, "database", {"somedata": "somevalue"})
@@ -1054,7 +1163,12 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                 "username": "test-username",
                 "password": "test-password",
                 "somedata": "somevalue",
-                "data": json.dumps({REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS)}),
+                "data": json.dumps(
+                    {
+                        REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS),
+                        self.DATABASE_FIELD: DATABASE,
+                    }
+                ),
             }
         }
 
@@ -1092,6 +1206,11 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_delete_relation_data_and_field_secrets(self):
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Set some data in the relation.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
         secret_id = self.harness.get_relation_data(self.rel_id, self.app_name)["secret-user"]
@@ -1252,6 +1371,8 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
     app_name = "kafka"
     charm = KafkaCharm
 
+    DATABASE_FIELD = "topic"
+
     def get_harness(self) -> Tuple[Harness, int]:
         harness = Harness(self.charm, meta=self.metadata)
         # Set up the initial relation and hooks.
@@ -1294,6 +1415,9 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
 
     def test_set_bootstrap_server(self):
         """Asserts that the bootstrap-server are in the relation databag when they change."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(self.rel_id, "application", {self.DATABASE_FIELD: TOPIC})
+
         # Set the bootstrap-server in the relation using the provides charm library.
         self.harness.charm.provider.set_bootstrap_server(self.rel_id, "host1:port,host2:port")
 
@@ -1306,6 +1430,9 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_additional_fields(self):
         """Asserts that the additional fields are in the relation databag when they are set."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(self.rel_id, "application", {self.DATABASE_FIELD: TOPIC})
+
         # Set the additional fields in the relation using the provides charm library.
         self.harness.charm.provider.set_tls(self.rel_id, "True")
         self.harness.charm.provider.set_tls_ca(self.rel_id, "Canonical")
@@ -1314,7 +1441,9 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
-            "data": "{}",  # Data is the diff stored between multiple relation changed events.
+            "data": json.dumps(
+                {self.DATABASE_FIELD: TOPIC}
+            ),  # Data is the diff stored between multiple relation changed events.
             "tls": "True",
             "tls-ca": "Canonical",
             "zookeeper-uris": "host1:port,host2:port",
@@ -1324,6 +1453,9 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_set_additional_fields_secrets(self):
         """Asserts that the additional fields are in the relation databag when they are set."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(self.rel_id, "application", {self.DATABASE_FIELD: TOPIC})
+
         # Set the additional fields in the relation using the provides charm library.
         self.harness.charm.provider.set_tls(self.rel_id, "True")
         self.harness.charm.provider.set_tls_ca(self.rel_id, "Canonical")
@@ -1336,9 +1468,9 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         assert secret_id
 
         relation_data == {
-            "data": '{REQ_SECRET_FIELDS: "'
-            + f"{json.dumps(self.SECRET_FIELDS)}"
-            + '"}',  # Data is the diff stored between multiple relation changed events.   # noqa
+            "data": json.dumps(
+                {REQ_SECRET_FIELDS: self.SECRET_FIELDS}
+            ),  # Data is the diff stored between multiple relation changed events.   # noqa
             "zookeeper-uris": "host1:port,host2:port",
             "consumer-group-prefix": "pr1,pr2",
         }
@@ -1394,6 +1526,8 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
     app_name = "opensearch"
     charm = OpenSearchCharm
 
+    DATABASE_FIELD = "index"
+
     def get_harness(self) -> Tuple[Harness, int]:
         harness = Harness(self.charm, meta=self.metadata)
         # Set up the initial relation and hooks.
@@ -1437,18 +1571,26 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_additional_fields(self):
         """Asserts that the additional fields are in the relation databag when they are set."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(self.rel_id, "application", {self.DATABASE_FIELD: INDEX})
+
         # Set the additional fields in the relation using the provides charm library.
         self.harness.charm.provider.set_tls_ca(self.rel_id, "Canonical")
 
         # Check that the additional fields are present in the relation.
         assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
-            "data": "{}",  # Data is the diff stored between multiple relation changed events.
+            "data": json.dumps(
+                {self.DATABASE_FIELD: INDEX}
+            ),  # Data is the diff stored between multiple relation changed events.
             "tls-ca": "Canonical",
         }
 
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_set_additional_fields_secrets(self):
         """Asserts that the additional fields are in the relation databag when they are set."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(self.rel_id, "application", {self.DATABASE_FIELD: INDEX})
+
         # Set the additional fields in the relation using the provides charm library.
         self.harness.charm.provider.set_tls_ca(self.rel_id, "Canonical")
 
@@ -1458,9 +1600,9 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         assert secret_id
 
         relation_data == {
-            "data": '{REQ_SECRET_FIELDS: "'
-            + f"{json.dumps(self.SECRET_FIELDS)}"
-            + '"}',  # Data is the diff stored between multiple relation changed events.   # noqa
+            "data": json.dumps(
+                {REQ_SECRET_FIELDS: self.SECRET_FIELDS}
+            ),  # Data is the diff stored between multiple relation changed events.   # noqa
         }
 
         secret = self.harness.charm.model.get_secret(id=secret_id)
@@ -1775,6 +1917,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
 
     app_name = "application"
     provider = "database"
+
+    DATABASE_FIELD = "database"
 
     def setUp(self):
         self.harness = self.get_harness()
@@ -2128,6 +2272,11 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_on_database_created_requires_juju3_provides_juju2(self, _on_database_created):
         """Asserts that the databag is used if one side of the relation is on Juju2."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
         # Simulate sharing the credentials of a new created database.
         assert not self.harness.charm.requirer.is_resource_created()
 
@@ -2728,6 +2877,8 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
     metadata = METADATA
     relation_name = OPENSEARCH_RELATION_NAME
     charm = ApplicationCharmOpenSearch
+
+    DATABASE_FIELD = "index"
 
     app_name = "application"
     provider = "opensearch"
