@@ -433,7 +433,14 @@ class DataProvidesBaseTests(ABC):
 
         # Interface function: fetch_relation_field()
         interface.update_relation_data(self.rel_id, {"endpoints": "host1:port1"})
+        interface.update_relation_data(self.rel_id, {"read-only-endpoints": "host2:port2"})
+        interface.update_relation_data(self.rel_id, {"replset": "mongo-replset"})
+
         assert interface.fetch_my_relation_field(self.rel_id, "endpoints") == "host1:port1"
+        assert (
+            interface.fetch_my_relation_field(self.rel_id, "read-only-endpoints") == "host2:port2"
+        )
+        assert interface.fetch_my_relation_field(self.rel_id, "replset") == "mongo-replset"
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_credentials(self):
