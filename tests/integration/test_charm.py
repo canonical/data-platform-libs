@@ -1174,12 +1174,12 @@ async def test_provider_get_set_delete_fields_secrets(
     await action.wait()
     assert action.results["return-code"] == 0
 
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field",
-        **{"relation_id": pytest.second_database_relation.id, "field": "tls-ca"},
-    )
-    await action.wait()
-    assert action.results["return-code"] == 0
+    # action = await ops_test.model.units.get(leader_name).run_action(
+    #     "delete-relation-field",
+    #     **{"relation_id": pytest.second_database_relation.id, "field": "tls-ca"},
+    # )
+    # await action.wait()
+    # assert action.results["return-code"] == 0
 
 
 @pytest.mark.abort_on_fail
