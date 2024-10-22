@@ -52,6 +52,7 @@ NUM_APP = 2
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.skip_if_deployed
 async def test_deploy_charms(
     ops_test: OpsTest,
     application_charm,
@@ -1088,9 +1089,6 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     )
 
 
-@pytest.mark.log_errors_allowed(
-    "Non-existing field 'doesnt_exist' was attempted to be removed from the databag"
-)
 @pytest.mark.parametrize(
     "field,value,relation_field",
     [
@@ -1176,9 +1174,15 @@ async def test_provider_get_set_delete_fields_secrets(
     await action.wait()
     assert action.results["return-code"] == 0
 
+    action = await ops_test.model.units.get(leader_name).run_action(
+        "delete-relation-field",
+        **{"relation_id": pytest.second_database_relation.id, "field": "tls-ca"},
+    )
+    await action.wait()
+    assert action.results["return-code"] == 0
+
 
 @pytest.mark.abort_on_fail
-@pytest.mark.log_errors_allowed("Can't delete secret for relation")
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     """The 'tls' field, that was removed in the previous test has it's secret removed."""
@@ -1217,7 +1221,7 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
             strings=["Non-existing field 'tls' was attempted to be removed from the databag"],
         )
     )
-    assert not (await check_logs(ops_test, strings=["Can't delete secret for relation"]))
+    assert not (await check_logs(ops_test, strings=["Can't delete secret from group 'tls'"]))
 
     action = await ops_test.model.units.get(leader_name).run_action(
         "delete-relation-field",
@@ -1227,7 +1231,7 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     assert await check_logs(
         ops_test, strings=["Non-existing field 'tls' was attempted to be removed from the databag"]
     )
-    assert await check_logs(ops_test, strings=["Can't delete secret for relation"])
+    assert await check_logs(ops_test, strings=["Can't delete secret from group 'tls'"])
 
     assert (
         await get_application_relation_data(
