@@ -331,7 +331,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 40
+LIBPATCH = 41
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -1281,7 +1281,6 @@ class Data(ABC):
                     str(field),
                     str(relation.id),
                 )
-                pass
 
     # Public interface methods
     # Handling Relation Fields seamlessly, regardless if in databag or a Juju Secret
@@ -1542,21 +1541,26 @@ class ProviderData(Data):
         secret = self._get_relation_secret(relation.id, group)
 
         if not secret:
-            logging.error("Can't delete secret for relation %s", str(relation.id))
+            logging.debug(
+                "Can't delete secret from group '%s' (relation ID: %s)",
+                str(group),
+                str(relation.id),
+            )
             return False
 
         old_content = secret.get_content()
         new_content = copy.deepcopy(old_content)
-        for field in fields:
+        for field in set(fields) & set(secret_fields):
             try:
                 new_content.pop(field)
             except KeyError:
                 logging.debug(
-                    "Non-existing secret was attempted to be removed %s, %s",
-                    str(relation.id),
+                    "Non-existing secret '%s' was attempted to be removed (relation ID: %s)",
                     str(field),
+                    str(relation.id),
                 )
-                return False
+        if old_content == new_content:
+            return False
 
         # Remove secret from the relation if it's fully gone
         if not new_content:

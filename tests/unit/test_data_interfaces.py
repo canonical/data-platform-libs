@@ -1220,11 +1220,47 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Set some data in the relation.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
+
         secret_id = self.harness.get_relation_data(self.rel_id, self.app_name)["secret-user"]
 
         self.harness.charm.provider.delete_relation_data(self.rel_id, ["username", "password"])
         with pytest.raises(SecretNotFoundError):
             self.harness.charm.model.get_secret(id=secret_id)
+
+    @pytest.mark.usefixtures("use_caplog")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_delete_relation_data_skip_non_existent_secrets(self):
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
+        # Note: 'uris' and 'tls' are secret fields but not set
+        fields = ["username", "password", "text_field", "non_existent_normal_field", "uris", "tls"]
+        existing_fields = ["username", "password", "text_field"]
+
+        # Set some data in the relation, secret and non-secret
+        self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
+        self.harness.charm.provider.update_relation_data(self.rel_id, {"text_field": "bla"})
+
+        data = self.harness.charm.provider.fetch_my_relation_data(self.rel_id)[self.rel_id]
+        assert all(field in data for field in existing_fields)
+
+        with self._caplog.at_level(logging.DEBUG):
+            self.harness.charm.provider.delete_relation_data(self.rel_id, fields)
+            assert (
+                "Non-existing field 'non_existent_normal_field' was attempted "
+                "to be removed from the databag (relation ID: 0)" in self._caplog.text
+            )
+
+            assert (
+                "Non-existing secret 'uris' was attempted to be removed (relation ID: 0)"
+                in self._caplog.text
+            )
+            assert "Can't delete secret from group 'tls' (relation ID: 0)" in self._caplog.text
+
+        data = self.harness.charm.provider.fetch_my_relation_data(self.rel_id)[self.rel_id]
+        assert not any(field in data for field in fields)
 
     def test_database_requested_event(self):
         # Test custom event creation
