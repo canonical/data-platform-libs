@@ -3152,7 +3152,12 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
         # Emit an endpoints changed event if the database
         # added or changed this info in the relation databag.
-        if "endpoints" in diff.added or "endpoints" in diff.changed:
+        if (
+            "endpoints" in diff.added
+            or "endpoints" in diff.changed
+            or "tls" in diff.added
+            or "tls" in diff.changed
+        ):
             # Emit the default event (the one without an alias).
             logger.info("endpoints changed on %s", datetime.now())
             getattr(self.on, "endpoints_changed").emit(
