@@ -285,7 +285,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 18
+LIBPATCH = 19
 
 PYDEPS = ["pydantic>=1.10,<2", "poetry-core"]
 
@@ -688,6 +688,34 @@ class DataUpgrade(Object, ABC):
 
         raise NotImplementedError
 
+    def status_active(self) -> None:
+        """Sets the unit status to active."""
+        self.charm.unit.status = ActiveStatus()
+
+    def status_blocked(self, cause: Optional[str] = None) -> None:
+        """Sets the unit status to blocked.
+
+        Args:
+            cause: short description of cause of failure
+        """
+        self.charm.unit.status = BlockedStatus(cause or "")
+
+    def status_maintenance(self, message: str) -> None:
+        """Sets the unit status to maintenance.
+
+        Args:
+            message: short description of maintenance status
+        """
+        self.charm.unit.status = MaintenanceStatus(message)
+
+    def status_waiting(self, message: str) -> None:
+        """Sets the unit status to waiting.
+
+        Args:
+            message: short description of waiting status
+        """
+        self.charm.unit.status = WaitingStatus(message)
+
     @abstractmethod
     def log_rollback_instructions(self) -> None:
         """Sets charm state and logs out rollback instructions.
@@ -734,7 +762,7 @@ class DataUpgrade(Object, ABC):
         if self.charm.unit.is_leader():
             self._upgrade_stack = None
 
-        self.charm.unit.status = BlockedStatus(cause if cause else "")
+        self.status_blocked(cause)
         self.peer_relation.data[self.charm.unit].update({"state": "failed"})
         self.log_rollback_instructions()
 
@@ -748,7 +776,7 @@ class DataUpgrade(Object, ABC):
         if self.charm.unit.is_leader():
             self._upgrade_stack = None
 
-        self.charm.unit.status = MaintenanceStatus("upgrade completed")
+        self.status_maintenance("upgrade completed")
         self.peer_relation.data[self.charm.unit].update({"state": "completed"})
 
         # Emit upgrade_finished event to run unit's post upgrade operations.
@@ -786,7 +814,7 @@ class DataUpgrade(Object, ABC):
         if self.cluster_state == "failed":
             logger.info("Entering recovery state for rolling-back to previous version...")
             self._repair_upgrade_stack()
-            self.charm.unit.status = BlockedStatus("ready to rollback application")
+            self.status_blocked("ready to rollback application")
             self.peer_relation.data[self.charm.unit].update({"state": "recovery"})
             return
 
@@ -918,7 +946,7 @@ class DataUpgrade(Object, ABC):
                     self.peer_relation.data[self.charm.unit].update({"state": "ready"})
                     self.on_upgrade_changed(event)
                     return
-            self.charm.unit.status = WaitingStatus("other units upgrading first...")
+            self.status_waiting("other units upgrading first...")
             self.peer_relation.data[self.charm.unit].update({"state": "ready"})
 
             if len(self.app_units) == 1:
@@ -938,7 +966,7 @@ class DataUpgrade(Object, ABC):
                     self.set_unit_failed()
                     return
             # On K8s an unit that receives the upgrade-charm event is upgrading
-            self.charm.unit.status = MaintenanceStatus("upgrading unit")
+            self.status_maintenance("upgrading unit")
             self.peer_relation.data[self.charm.unit].update({"state": "upgrading"})
 
     def on_upgrade_changed(self, event: EventBase) -> None:
@@ -960,7 +988,7 @@ class DataUpgrade(Object, ABC):
         if not self.upgrade_stack:
             if self.state == "completed" and self.cluster_state in ["idle", "completed"]:
                 logger.info("All units completed upgrade, setting idle upgrade state...")
-                self.charm.unit.status = ActiveStatus()
+                self.status_active()
                 self.peer_relation.data[self.charm.unit].update({"state": "idle"})
 
                 if self.charm.unit.is_leader():
@@ -979,7 +1007,7 @@ class DataUpgrade(Object, ABC):
 
         # upgrade ongoing, set status for waiting units
         if "upgrading" in self.unit_states and self.state in ["idle", "ready"]:
-            self.charm.unit.status = WaitingStatus("other units upgrading first...")
+            self.status_waiting("other units upgrading first...")
 
         # pop mutates the `upgrade_stack` attr
         top_unit_id = self.upgrade_stack.pop()
@@ -1009,7 +1037,7 @@ class DataUpgrade(Object, ABC):
             logger.debug(
                 f"{top_unit.name} is next to upgrade, emitting `upgrade_granted` event and upgrading..."
             )
-            self.charm.unit.status = MaintenanceStatus("upgrading...")
+            self.status_maintenance("upgrading...")
             self.peer_relation.data[self.charm.unit].update({"state": "upgrading"})
 
             try:
