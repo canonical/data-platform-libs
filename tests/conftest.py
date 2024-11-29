@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 import argparse
 import os
+import subprocess
 from importlib.metadata import version
 from unittest.mock import PropertyMock
 
@@ -37,6 +38,16 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def architecture() -> str:
+    return subprocess.run(
+        ["dpkg", "--print-architecture"],
+        capture_output=True,
+        check=True,
+        encoding="utf-8",
+    ).stdout.strip()
+
+
+@pytest.fixture(autouse=True)
 def juju_has_secrets(mocker: MockerFixture):
     """This fixture will force the usage of secrets whenever run on Juju 3.x.
 
@@ -59,6 +70,20 @@ def juju_has_secrets(mocker: MockerFixture):
             True
         )
         return True
+
+
+@pytest.fixture
+def only_amd64(architecture):
+    """Pretty way to skip ARM tests."""
+    if architecture != "amd64":
+        pytest.skip("Requires amd64 architecture")
+
+
+@pytest.fixture
+def only_arm64(architecture):
+    """Pretty way to skip AMD tests."""
+    if architecture != "arm64":
+        pytest.skip("Requires arm64 architecture")
 
 
 @pytest.fixture
