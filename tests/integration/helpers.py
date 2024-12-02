@@ -2,8 +2,9 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 import json
+from pathlib import Path
 from time import sleep
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import yaml
 from ops import JujuVersion
@@ -320,3 +321,17 @@ async def get_secret_revision_by_label(ops_test, label: str, owner: str = "") ->
         if label == secret_data[secret_id].get("label"):
             if not owner or owner == secret_data[secret_id].get("owner"):
                 return int(secret_data[secret_id]["revision"])
+
+
+async def get_charm(charm_path: Union[str, Path], architecture: str, bases_index: int) -> Path:
+    """Fetches packed charm from CI runner without checking for architecture."""
+    charm_path = Path(charm_path)
+    charmcraft_yaml = yaml.safe_load((charm_path / "charmcraft.yaml").read_text())
+    assert charmcraft_yaml["type"] == "charm"
+
+    base = charmcraft_yaml["bases"][bases_index]
+    build_on = base.get("build-on", [base])[0]
+    version = build_on["channel"]
+    packed_charms = list(charm_path.glob(f"*{version}-{architecture}.charm"))
+
+    return packed_charms[0].resolve(strict=True)
