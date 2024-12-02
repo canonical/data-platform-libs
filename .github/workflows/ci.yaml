@@ -58,6 +58,7 @@ jobs:
           - series: focal
             bases-index: 1
         tox-environments:
+          - integration-arch
           - integration-db
           - integration-upgrade-1
           - integration-upgrade-2
