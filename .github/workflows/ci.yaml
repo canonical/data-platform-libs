@@ -18,6 +18,9 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      matrix:
+        libs-version: [0, 1]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +28,7 @@ jobs:
         # TODO: Consider replacing with custom image on self-hosted runner OR pinning version
         run: python3 -m pip install tox
       - name: Run linters
-        run: tox run -e lint
+        run: tox run -e lint-v${{ matrix.libs-version }}
 
   unit-test:
     name: Unit tests
@@ -33,6 +36,7 @@ jobs:
     timeout-minutes: 5
     strategy:
       matrix:
+        libs-version: [0, 1]
         juju-version:
           - libjuju-version: "2.9.49.1"
           - libjuju-version: "3.6.1.0"
@@ -43,7 +47,7 @@ jobs:
         # TODO: Consider replacing with custom image on self-hosted runner OR pinning version
         run: python3 -m pip install tox
       - name: Run tests
-        run: tox run -e unit
+        run: tox run -e unit-v${{ matrix.libs-version }}
         env:
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
 
@@ -58,19 +62,19 @@ jobs:
           - series: focal
             bases-index: 1
         tox-environments:
-          - integration-db
-          - integration-upgrade-1
-          - integration-upgrade-2
-          - integration-upgrade-3
-          - integration-upgrade-4
+          - integration-db-v0
+          - integration-upgrade-v0-1
+          - integration-upgrade-v0-2
+          - integration-upgrade-v0-3
+          - integration-upgrade-v0-4
           # To be enabled after data_interfaces v040
-          # - integration-upgrade-5
-          # - integration-upgrade-6
-          # - integration-upgrade-7
-          - integration-upgrade-databag
-          - integration-s3
-          - integration-opensearch
-          - integration-kafka
+          # - integration-upgrade-v0-5
+          # - integration-upgrade-v0-6
+          # - integration-upgrade-v0-7
+          - integration-upgrade-databag-v0
+          - integration-s3-v0
+          - integration-opensearch-v0
+          - integration-kafka-v0
         juju-version:
           - juju-bootstrap-option: "2.9.51"
             juju-snap-channel: "2.9/stable"
@@ -79,25 +83,25 @@ jobs:
             juju-snap-channel: "3.6/stable"
             libjuju-version: "3.6.1.0"
         exclude:
-          - tox-environments: integration-upgrade-1
+          - tox-environments: integration-upgrade-v0-1
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-2
+          - tox-environments: integration-upgrade-v0-2
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-3
+          - tox-environments: integration-upgrade-v0-3
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-4
+          - tox-environments: integration-upgrade-v0-4
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-5
+          - tox-environments: integration-upgrade-v0-5
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-6
+          - tox-environments: integration-upgrade-v0-6
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-7
+          - tox-environments: integration-upgrade-v0-7
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-databag
+          - tox-environments: integration-upgrade-databag-v0
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-opensearch
+          - tox-environments: integration-opensearch-v0
             ubuntu-versions: {series: focal}
-          - tox-environments: integration-kafka
+          - tox-environments: integration-kafka-v0
             ubuntu-versions: {series: focal}
     name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
     needs:
