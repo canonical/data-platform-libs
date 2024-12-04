@@ -1,4 +1,4 @@
-# Copyright 2022 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import logging
@@ -9,9 +9,9 @@ from unittest.mock import Mock
 from ops.charm import ActionEvent, RelationEvent
 from ops.testing import Harness
 from parameterized import parameterized
-from pydantic import BaseModel, ValidationError, validator
+from pydantic import BaseModel, ValidationError, field_validator
 
-from charms.data_platform_libs.v0.data_models import (
+from charms.data_platform_libs.v1.data_models import (
     BaseConfigModel,
     RelationDataModel,
     TypedCharmBase,
@@ -54,7 +54,7 @@ class CharmConfig(BaseConfigModel):
     float_config: float
     low_value_config: int
 
-    @validator("low_value_config")
+    @field_validator("low_value_config")
     @classmethod
     def less_than_100(cls, value: int):
         if value >= 100:
@@ -173,7 +173,7 @@ class TestCharm(unittest.TestCase):
         mock_event.params = {"host": "my-host"}
         with self.assertLogs(level="INFO") as logger:
             self.assertTrue(self.harness.charm._set_server_action(mock_event))
-        self.assertEqual(sorted(logger.output), ["INFO:tests.unit.test_data_models:my-host:80"])
+        self.assertEqual(sorted(logger.output), ["INFO:tests.v1.unit.test_data_models:my-host:80"])
 
     def test_action_params_parsing_ko(self):
         """Test that action parameters validation would raise an exception."""
@@ -182,7 +182,7 @@ class TestCharm(unittest.TestCase):
         with self.assertLogs(level="ERROR") as logger:
             self.assertFalse(self.harness.charm._set_server_action(mock_event))
         self.assertTrue("validation error" in logger.output[0])
-        self.assertTrue("field required" in logger.output[0])
+        self.assertTrue("Field required" in logger.output[0])
 
     def test_relation_databag_io(self):
         """Test that relation databag can be read and written into pydantic classes with nested structure."""
@@ -199,7 +199,7 @@ class TestCharm(unittest.TestCase):
         with self.assertLogs(level="INFO") as logger:
             self.harness.update_relation_data(relation_id, "mongodb", {"key": "1.0"})
         self.assertEqual(
-            logger.output, ["INFO:tests.unit.test_data_models:Field type: <class 'float'>"]
+            logger.output, ["INFO:tests.v1.unit.test_data_models:Field type: <class 'float'>"]
         )
 
     def test_relation_databag_merged(self):
