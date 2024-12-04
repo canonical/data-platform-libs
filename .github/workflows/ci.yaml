@@ -144,12 +144,16 @@ jobs:
             echo Skipping unstable tests
             echo "mark_expression=not unstable" >> $GITHUB_OUTPUT
           fi
+      - name: Set websockets env variable
+        if: ${{ matrix.juju-version.libjuju-version < '3.5.2.1' }}
+        run: echo "WEBSOCKETS_VERSION_SPECIFIER=<14" >> "$GITHUB_ENV"
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
+          WEBSOCKETS_VERSION_SPECIFIER: ${{ env.WEBSOCKETS_VERSION_SPECIFIER }}
       - name: Print debug-log
         if: failure()
         run: juju switch testing; juju debug-log --replay --no-tail
