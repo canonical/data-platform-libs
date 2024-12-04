@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import json
@@ -10,7 +10,7 @@ from ops.model import BlockedStatus
 from ops.testing import Harness
 from pydantic import ValidationError
 
-from charms.data_platform_libs.v0.upgrade import (
+from charms.data_platform_libs.v1.upgrade import (
     BaseModel,
     DataUpgrade,
     DependencyModel,
