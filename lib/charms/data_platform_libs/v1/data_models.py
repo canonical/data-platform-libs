@@ -39,7 +39,7 @@ also parsing and validation on standard dataclass implementation:
 
 ```python
 
-from charms.data_platform_libs.v0.data_models import BaseConfigModel
+from charms.data_platform_libs.v1.data_models import BaseConfigModel
 
 class MyConfig(BaseConfigModel):
 
