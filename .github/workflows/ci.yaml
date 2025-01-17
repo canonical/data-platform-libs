@@ -90,6 +90,9 @@ jobs:
           - juju-bootstrap-option: "3.5.1"
             juju-snap-channel: "3.5/stable"
             libjuju-version: "3.5.0.0"
+          - juju-bootstrap-option: "3.6.1"
+            juju-snap-channel: "3.6/stable"
+            libjuju-version: "3.6.1.0"
         exclude:
           - tox-environments: integration-upgrade-1
             juju-version: {juju-snap-channel: "2.9/stable"}

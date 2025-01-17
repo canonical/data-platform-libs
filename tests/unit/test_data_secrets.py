@@ -43,14 +43,14 @@ def test_cached_secret_is_cached(harness, mocker):
     secret = CachedSecret(harness.charm, "mylabel")
     secret.add_secret(content={"rumour": "Community Movie on the way"}, scope="app")
     patched_get = mocker.patch("ops.model.Model.get_secret")
-    patched_get_content = mocker.patch("ops.Secret.get_content")
+    patched_get_content = patched_get.return_value.get_content
 
     secret2 = CachedSecret(harness.charm, "mylabel")
     secret2.get_info()
     secret2.get_content()
     secret2.set_content({"teaser": "Arcane Season II."})
-    assert patched_get.called_once()
-    assert patched_get_content.called_once()
+    patched_get.assert_called_once()
+    patched_get_content.assert_called_once()
 
 
 @pytest.mark.usefixtures("only_with_juju_secrets")
