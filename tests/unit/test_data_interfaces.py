@@ -654,7 +654,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         assert interface.fetch_my_relation_field(relation_id, "internal_secret") is None
         assert interface.fetch_my_relation_field(relation_id, "secret-field") == "blabla"
 
-        # We're re-using the previous secret
+        # We're reusing the previous secret
         secret = self.harness.model.get_secret(id=secret_id)
         assert secret.peek_content()["secret-field"] == "blabla"
 
@@ -734,7 +734,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         """Check the functionality of each public interface function on each "other" unit."""
         relation_id = self.harness.charm.peer_relation.id
         for unit, interface in self.harness.charm.peer_units_data_interfaces.items():
-
             self.harness.update_relation_data(relation_id, unit.name, {"something": "else"})
 
             # fetch_relation_field()
@@ -758,7 +757,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         """Check the functionality of each public interface function on each "other" unit."""
         relation_id = self.harness.charm.peer_relation.id
         for unit, interface in self.harness.charm.peer_units_data_interfaces.items():
-
             self.harness.update_relation_data(relation_id, unit.name, {"something": "else"})
 
             # fetch_relation_field()
@@ -1279,7 +1277,7 @@ class TestDatabaseProvidesDynamicSecrets(ABC, unittest.TestCase):
         interface = getattr(self.harness.charm, interface_attr)
         relation_id = self.harness.charm.peer_relation.id
 
-        # Here we're artificialy constructing the illegal situation
+        # Here we're artificially constructing the illegal situation
         # We "hack in" a statically pre-requiested secret into the data structure
         # (since the test charm doesn't have one)
         interface._secret_fields.append("some-secret")
