@@ -34,8 +34,8 @@ jobs:
     strategy:
       matrix:
         juju-version:
-          - libjuju-version: "2.9.42.4"
-          - libjuju-version: "3.2.0.1"
+          - libjuju-version: "2.9.49.1"
+          - libjuju-version: "3.6.1.0"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,21 +75,6 @@ jobs:
           - juju-bootstrap-option: "2.9.44"
             juju-snap-channel: "2.9/stable"
             libjuju-version: "2.9.49.0"
-          - juju-bootstrap-option: "3.1.8"
-            juju-snap-channel: "3.1/stable"
-            libjuju-version: "3.2.2"
-          - juju-bootstrap-option: "3.2.4"
-            juju-snap-channel: "3.2/stable"
-            libjuju-version: "3.2.3.0"
-          - juju-bootstrap-option: "3.3.5"
-            juju-snap-channel: "3.3/stable"
-            libjuju-version: "3.3.1.1"
-          - juju-bootstrap-option: "3.4.3"
-            juju-snap-channel: "3.4/stable"
-            libjuju-version: "3.4.0.0"
-          - juju-bootstrap-option: "3.5.1"
-            juju-snap-channel: "3.5/stable"
-            libjuju-version: "3.5.0.0"
           - juju-bootstrap-option: "3.6.1"
             juju-snap-channel: "3.6/stable"
             libjuju-version: "3.6.1.0"
@@ -147,9 +132,6 @@ jobs:
             echo Skipping unstable tests
             echo "mark_expression=not unstable" >> $GITHUB_OUTPUT
           fi
-      - name: Set websockets env variable
-        if: ${{ matrix.juju-version.libjuju-version < '3.5.2.1' }}
-        run: echo "WEBSOCKETS_VERSION_SPECIFIER=<14" >> "$GITHUB_ENV"
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
