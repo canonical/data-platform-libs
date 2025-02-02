@@ -118,7 +118,7 @@ jobs:
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "2.x/stable"
       - name: Download packed charm(s)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.artifact-name }}
       - name: Select tests
