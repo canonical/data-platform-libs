@@ -50,4 +50,5 @@ jobs:
           credentials: "${{ secrets.CHARMHUB_TOKEN }}" # FIXME: current token will expire in 2025-04-16
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           channel: "${{ steps.channel.outputs.name }}"
+          destructive-mode: false
 
