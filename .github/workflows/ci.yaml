@@ -74,7 +74,7 @@ jobs:
         juju-version:
           - juju-bootstrap-option: "2.9.44"
             juju-snap-channel: "2.9/stable"
-            libjuju-version: "2.9.49.0"
+            libjuju-version: "2.9.49.1"
           - juju-bootstrap-option: "3.6.1"
             juju-snap-channel: "3.6/stable"
             libjuju-version: "3.6.1.0"
