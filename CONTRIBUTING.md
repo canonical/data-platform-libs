@@ -43,7 +43,7 @@ tox                      # runs 'lint' and 'unit' environments
 
 ### Adding new tests
 
-In case your tests are re-using existing test charms with no modifications, feel free to ignore this section.
+In case your tests are reusing existing test charms with no modifications, feel free to ignore this section.
 
 For test charms that may support multiple Ubuntu versions (typically for libraries that are expected to work across
 legacy versions) the following mechanism is available.
