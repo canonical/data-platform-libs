@@ -14,6 +14,7 @@ from typing import Optional, Tuple
 
 from ops import Relation
 from ops.charm import ActionEvent, CharmBase
+from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus
 
@@ -26,7 +27,10 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseEndpointsChangedEvent,
     DatabaseRequires,
     IndexCreatedEvent,
+<<<<<<< HEAD:tests/v0/integration/application-charm/src/charm.py
     KafkaConnectRequires,
+=======
+>>>>>>> 12bc2d7 (fix: breaking change in application-charm):tests/integration/application-charm/src/charm.py
     KafkaRequires,
     OpenSearchRequires,
     TopicCreatedEvent,
@@ -38,6 +42,7 @@ if DATA_INTERFACES_VERSION > 34:
         KafkaRequirerEventHandlers,
     )
 
+<<<<<<< HEAD:tests/v0/integration/application-charm/src/charm.py
 if DATA_INTERFACES_VERSION > 49:
     from charms.data_platform_libs.v0.data_interfaces import (
         ENTITY_USER,
@@ -53,6 +58,13 @@ if DATA_INTERFACES_VERSION > 52:
     )
 
 
+=======
+if DATA_INTERFACES_VERSION > 41:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        KafkaConnectRequires,
+    )
+
+>>>>>>> 12bc2d7 (fix: breaking change in application-charm):tests/integration/application-charm/src/charm.py
 logger = logging.getLogger(__name__)
 
 # Extra roles that this application needs when interacting with the database.
@@ -227,20 +239,22 @@ class ApplicationCharm(CharmBase):
 
         # Kafka Connect events
 
-        self.connect_source = KafkaConnectRequires(
-            self, "connect-source", "http://10.10.10.10:8080"
-        )
+        if DATA_INTERFACES_VERSION > 41:
 
-        self.connect_sink = KafkaConnectRequires(self, "connect-sink", BAD_URL)
+            self.connect_source = KafkaConnectRequires(
+                self, "connect-source", "http://10.10.10.10:8080"
+            )
 
-        self.framework.observe(
-            self.connect_source.on.integration_created, self._on_connect_integration_created
-        )
+            self.connect_sink = KafkaConnectRequires(self, "connect-sink", BAD_URL)
 
-        self.framework.observe(
-            self.connect_source.on.integration_endpoints_changed,
-            self._on_connect_endpoints_changed,
-        )
+            self.framework.observe(
+                self.connect_source.on.integration_created, self._on_connect_integration_created
+            )
+
+            self.framework.observe(
+                self.connect_source.on.integration_endpoints_changed,
+                self._on_connect_endpoints_changed,
+            )
 
         # Kafka Connect events
 
@@ -449,6 +463,7 @@ class ApplicationCharm(CharmBase):
         logger.info("On kafka topic created")
         self.unit.status = ActiveStatus("kafka_topic_created")
 
+<<<<<<< HEAD:tests/v0/integration/application-charm/src/charm.py
     if DATA_INTERFACES_VERSION > 49:
 
         def _on_kafka_entity_created(self, _: TopicEntityCreatedEvent) -> None:
@@ -465,6 +480,17 @@ class ApplicationCharm(CharmBase):
         def _on_connect_endpoints_changed(self, _: IntegrationEndpointsChangedEvent):
             """Event triggered when Kafka Connect REST endpoints change."""
             self.unit.status = ActiveStatus("connect_endpoints_changed")
+=======
+    def _on_connect_integration_created(self, _: EventBase):
+        # TODO: def _on_connect_integration_created(self, _: IntegrationCreatedEvent):
+        """Event triggered when Kafka Connect integration credentials are created for this application."""
+        self.unit.status = ActiveStatus("connect_integration_created")
+
+    def _on_connect_endpoints_changed(self, _: EventBase):
+        # TODO: def _on_connect_endpoints_changed(self, _: IntegrationEndpointsChangedEvent):
+        """Event triggered when Kafka Connect REST endpoints change."""
+        self.unit.status = ActiveStatus("connect_endpoints_changed")
+>>>>>>> 12bc2d7 (fix: breaking change in application-charm):tests/integration/application-charm/src/charm.py
 
     def _on_opensearch_index_created(self, _: IndexCreatedEvent):
         """Event triggered when an index was created for this application."""
