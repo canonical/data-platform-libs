@@ -1,0 +1,16 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: kafka-connect
+description: |
+  Toy charm used to emulate Kafka Connect in integration tests.
+summary: |
+  Charm used to mimic the Kafka Connect for test purpose only.
+
+
+peers:
+  worker:
+    interface: worker
+
+provides:
+  connect-client:
+    interface: connect_client
