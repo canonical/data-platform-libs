@@ -13,6 +13,7 @@ from typing import Optional, Tuple
 
 from ops import Relation
 from ops.charm import ActionEvent, CharmBase
+from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus
 
@@ -25,9 +26,6 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseEndpointsChangedEvent,
     DatabaseRequires,
     IndexCreatedEvent,
-    IntegrationCreatedEvent,
-    IntegrationEndpointsChangedEvent,
-    KafkaConnectRequires,
     KafkaRequires,
     OpenSearchRequires,
     TopicCreatedEvent,
@@ -37,6 +35,11 @@ if DATA_INTERFACES_VERSION > 34:
     from charms.data_platform_libs.v0.data_interfaces import (
         KafkaRequirerData,
         KafkaRequirerEventHandlers,
+    )
+
+if DATA_INTERFACES_VERSION > 41:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        KafkaConnectRequires,
     )
 
 logger = logging.getLogger(__name__)
@@ -176,20 +179,22 @@ class ApplicationCharm(CharmBase):
 
         # Kafka Connect events
 
-        self.connect_source = KafkaConnectRequires(
-            self, "connect-source", "http://10.10.10.10:8080"
-        )
+        if DATA_INTERFACES_VERSION > 41:
 
-        self.connect_sink = KafkaConnectRequires(self, "connect-sink", BAD_URL)
+            self.connect_source = KafkaConnectRequires(
+                self, "connect-source", "http://10.10.10.10:8080"
+            )
 
-        self.framework.observe(
-            self.connect_source.on.integration_created, self._on_connect_integration_created
-        )
+            self.connect_sink = KafkaConnectRequires(self, "connect-sink", BAD_URL)
 
-        self.framework.observe(
-            self.connect_source.on.integration_endpoints_changed,
-            self._on_connect_endpoints_changed,
-        )
+            self.framework.observe(
+                self.connect_source.on.integration_created, self._on_connect_integration_created
+            )
+
+            self.framework.observe(
+                self.connect_source.on.integration_endpoints_changed,
+                self._on_connect_endpoints_changed,
+            )
 
         # OpenSearch events
 
@@ -355,11 +360,13 @@ class ApplicationCharm(CharmBase):
         logger.info("On kafka topic created")
         self.unit.status = ActiveStatus("kafka_topic_created")
 
-    def _on_connect_integration_created(self, _: IntegrationCreatedEvent):
+    def _on_connect_integration_created(self, _: EventBase):
+        # TODO: def _on_connect_integration_created(self, _: IntegrationCreatedEvent):
         """Event triggered when Kafka Connect integration credentials are created for this application."""
         self.unit.status = ActiveStatus("connect_integration_created")
 
-    def _on_connect_endpoints_changed(self, _: IntegrationEndpointsChangedEvent):
+    def _on_connect_endpoints_changed(self, _: EventBase):
+        # TODO: def _on_connect_endpoints_changed(self, _: IntegrationEndpointsChangedEvent):
         """Event triggered when Kafka Connect REST endpoints change."""
         self.unit.status = ActiveStatus("connect_endpoints_changed")
 
