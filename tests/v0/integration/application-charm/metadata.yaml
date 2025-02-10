@@ -29,3 +29,7 @@ requires:
     interface: opensearch_client
   opensearch-client-roles:
     interface: opensearch_client
+  connect-source:
+    interface: connect_client
+  connect-sink:
+    interface: connect_client
