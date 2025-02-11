@@ -123,7 +123,7 @@ async def kafka_charm(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def kafka_connect_charm(ops_test: OpsTest):
     """Build the Kafka Connect dummy charm."""
-    charm_path = "tests/integration/kafka-connect-charm"
+    charm_path = "tests/v0/integration/kafka-connect-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
