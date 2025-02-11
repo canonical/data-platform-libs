@@ -21,5 +21,9 @@ requires:
     interface: kafka_client
   kafka-split-pattern-client:
     interface: kafka_client
+  connect-source:
+    interface: connect_client
+  connect-sink:
+    interface: connect_client
   opensearch-client:
     interface: opensearch_client
