@@ -347,7 +347,7 @@ class OpenSearchCharm(CharmBase):
 
 
 class DataProvidesBaseTests(ABC):
-    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
+    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]
     DATABASE_FIELD = "database"
 
     @pytest.fixture
@@ -804,7 +804,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         rel_data = interface.fetch_relation_data()
         assert rel_data == {
             0: {
-                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
                 self.DATABASE_FIELD: DATABASE,
             }
         }
@@ -813,7 +813,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             0: {
                 "data": json.dumps(
                     {
-                        "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+                        "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
                         self.DATABASE_FIELD: DATABASE,
                     }
                 )
@@ -852,11 +852,11 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         assert datadict == {
             "data": json.dumps(
                 {
-                    "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+                    "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
                     self.DATABASE_FIELD: DATABASE,
                 }
             ),
-            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
             self.DATABASE_FIELD: DATABASE,
         }
 
@@ -865,7 +865,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         with self._caplog.at_level(logging.ERROR):
             assert (
                 datadict["requested-secrets"]
-                == '["username", "password", "tls", "tls-ca", "uris"]'
+                == '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]'
             )
             assert (
                 "This operation (fetch_my_relation_field()) can only be performed by the leader unit"
@@ -946,6 +946,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         self.harness.charm.provider.set_tls(self.rel_id, "True")
         self.harness.charm.provider.set_tls_ca(self.rel_id, "Canonical")
         self.harness.charm.provider.set_uris(self.rel_id, "host1:port,host2:port")
+        self.harness.charm.provider.set_read_only_uris(self.rel_id, "host2:port")
         self.harness.charm.provider.set_version(self.rel_id, "1.0")
 
         # Check that the additional fields are present in the relation.
@@ -957,6 +958,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             "tls": "True",
             "tls-ca": "Canonical",
             "uris": "host1:port,host2:port",
+            "read-only-uris": "host2:port",
             "version": "1.0",
         }
 
@@ -1963,7 +1965,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "alias": "cluster1",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
             }
         }
 
@@ -1991,7 +1993,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "alias": "cluster1",
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
-            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
         }
 
         # Non-leader can try to fetch data (won't have anything thought, as only app data is there...
