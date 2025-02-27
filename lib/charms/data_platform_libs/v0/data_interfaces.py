@@ -1203,10 +1203,6 @@ class Data(ABC):
         """
         label = self._generate_secret_label(relation_name, relation_id, group)
 
-        logger.debug(
-            f"Registering secret {secret_id} with label {label} for relation {relation_id}"
-        )
-
         # Fetching the Secret's meta information ensuring that it's locally getting registered with
         CachedSecret(self._model, self.component, label, secret_id).meta
 
@@ -1220,15 +1216,9 @@ class Data(ABC):
 
         for group in SECRET_GROUPS.groups():
             secret_field = self._generate_secret_field_name(group)
-            logger.debug(f"Checking for secret {secret_field} in {params_name_list}")
-            logger.debug(f"Relation {relation.id} has data {relation.data}")
-            logger.debug(f"secret_uri: {self.get_secret_uri(relation, group)}")
             if secret_field in params_name_list and (
                 secret_uri := self.get_secret_uri(relation, group)
             ):
-                logger.debug(
-                    f"Registering secret {secret_uri} with label {secret_field} for relation {relation.id}"
-                )
                 self._register_secret_to_relation(relation.name, relation.id, secret_uri, group)
 
     # Optional overrides
