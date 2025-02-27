@@ -507,6 +507,7 @@ class DataProvidesBaseTests(ABC):
             ),  # Data is the diff stored between multiple relation changed events.
             "username": "test-username",
             "password": "test-password",
+            "requested-secrets": '["tls-ca"]',
         }
 
 
@@ -816,7 +817,8 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                         "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
                         self.DATABASE_FIELD: DATABASE,
                     }
-                )
+                ),
+                "requested-secrets": '["tls-ca"]',
             }
         }
 
@@ -856,7 +858,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                     self.DATABASE_FIELD: DATABASE,
                 }
             ),
-            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+            "requested-secrets": '["tls-ca"]',
             self.DATABASE_FIELD: DATABASE,
         }
 
@@ -1174,6 +1176,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                         self.DATABASE_FIELD: DATABASE,
                     }
                 ),
+                "requested-secrets": '["tls-ca"]',
             }
         }
 
