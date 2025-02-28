@@ -2822,6 +2822,10 @@ class DatabaseProviderEventHandlers(EventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
+    def _on_secret_changed_event(self, event: SecretChangedEvent) -> None:
+        """Event emitted when the secret has changed."""
+        pass
+
 
 class DatabaseProvides(DatabaseProviderData, DatabaseProviderEventHandlers):
     """Provider-side of the database relations."""
