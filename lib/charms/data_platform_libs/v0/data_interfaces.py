@@ -1741,13 +1741,6 @@ class RequirerData(Data):
     """Requirer-side of the relation."""
 
     SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
-    SECRET_LABEL_MAP = {
-        "username": SECRET_GROUPS.USER,
-        "password": SECRET_GROUPS.USER,
-        "uris": SECRET_GROUPS.USER,
-        "tls": SECRET_GROUPS.TLS,
-        "tls-ca": SECRET_GROUPS.MTLS,
-    }
 
     def __init__(
         self,
