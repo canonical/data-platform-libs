@@ -1060,7 +1060,7 @@ class Data(ABC):
         if relation.app:
             req_secret_fields = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
 
-        req_secret_fields = req_secret_fields or ["tls-ca"]
+        req_secret_fields = req_secret_fields
 
         _, normal_fields = self._process_secret_fields(
             relation,
