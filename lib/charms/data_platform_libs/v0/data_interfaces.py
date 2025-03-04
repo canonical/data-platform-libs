@@ -3860,8 +3860,6 @@ class EtcdProvidesEventHandlers(EventHandlers):
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
         """Event notifying about a new value of a secret."""
-        logger.info("secret changed evetn inside EtcdProvidesEventHandlers")
-        logger.info(f"label: {event.secret.label}")
         if not event.secret.label:
             return
 
