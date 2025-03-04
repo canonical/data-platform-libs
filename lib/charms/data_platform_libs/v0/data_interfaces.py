@@ -311,7 +311,7 @@ from typing import (
     ValuesView,
 )
 
-from ops import JujuVersion, Model, Secret, SecretInfo, SecretNotFoundError
+from ops import JujuVersion, Model, RelationJoinedEvent, Secret, SecretInfo, SecretNotFoundError
 from ops.charm import (
     CharmBase,
     CharmEvents,
@@ -963,6 +963,7 @@ class Data(ABC):
         "uris": SECRET_GROUPS.USER,
         "tls": SECRET_GROUPS.TLS,
         "tls-ca": SECRET_GROUPS.TLS,
+        "client-chain": SECRET_GROUPS.MTLS,
     }
 
     def __init__(
@@ -1626,6 +1627,12 @@ class EventHandlers(Object):
             self.charm.on[relation_data.relation_name].relation_created,
             self._on_relation_created_event,
         )
+
+        self.framework.observe(
+            self.charm.on[relation_data.relation_name].relation_joined,
+            self._on_relation_joined_event,
+        )
+
         self.framework.observe(
             charm.on.secret_changed,
             self._on_secret_changed_event,
@@ -1645,6 +1652,11 @@ class EventHandlers(Object):
                 REQ_SECRET_FIELDS,
                 self.relation_data.secret_fields,  # pyright: ignore [reportAttributeAccessIssue]
             )
+
+    def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
+        """Event emitted when the relation is joined."""
+        # This should be used if the requirer has secrets
+        pass
 
     @abstractmethod
     def _on_secret_changed_event(self, event: SecretChangedEvent) -> None:
@@ -1676,7 +1688,6 @@ class ProviderData(Data):
     """Base provides-side of the data products relation."""
 
     RESOURCE_FIELD = "database"
-    SECRET_FIELDS = ["tls-ca"]
 
     def __init__(
         self,
@@ -1685,7 +1696,7 @@ class ProviderData(Data):
     ) -> None:
         super().__init__(model, relation_name)
         self.data_component = self.local_app
-        self._secret_fields = list(self.SECRET_FIELDS)
+        self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
@@ -1740,8 +1751,6 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
-    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
-
     def __init__(
         self,
         model,
@@ -1752,7 +1761,7 @@ class RequirerData(Data):
         """Manage base client relations."""
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
-        self._secret_fields = list(self.SECRET_FIELDS)
+        self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
         if additional_secret_fields:
             self._secret_fields += additional_secret_fields
         self.data_component = self.local_unit
@@ -3690,8 +3699,8 @@ class EtcdProvidesEvent(RelationEventWithSecret):
         return self.relation.data[self.relation.app].get("prefix")
 
     @property
-    def tls_ca(self) -> Optional[str]:
-        """Returns TLS CA."""
+    def client_chain(self) -> Optional[str]:
+        """Returns TLS chain of the client."""
         if not self.relation.app:
             return None
 
@@ -3701,9 +3710,9 @@ class EtcdProvidesEvent(RelationEventWithSecret):
                 secret = self.framework.model.get_secret(id=secret_uri)
                 content = secret.get_content(refresh=True)
                 if content:
-                    return content.get("tls-ca")
+                    return content.get("client-chain")
 
-        return self.relation.data[self.relation.app].get("tls-ca")
+        return self.relation.data[self.relation.app].get("client-chain")
 
     @property
     def common_name(self) -> str | None:
@@ -3732,7 +3741,7 @@ class CommonNameUpdatedEvent(EtcdProvidesEvent):
         self.old_common_name = snapshot["old_common_name"]
 
 
-class ClientRelationUpdatedEvent(EtcdProvidesEvent):
+class ClientChainUpdatedEvent(EtcdProvidesEvent):
     """Event emitted when the client relation is updated."""
 
 
@@ -3742,7 +3751,7 @@ class EtcdProvidesEvents(CharmEvents):
     This class defines the events that Etcd can emit.
     """
 
-    client_relation_updated = EventSource(ClientRelationUpdatedEvent)
+    client_chain_updated = EventSource(ClientChainUpdatedEvent)
     common_name_updated = EventSource(CommonNameUpdatedEvent)
 
 
@@ -3819,17 +3828,16 @@ class EtcdProvidesEventHandlers(EventHandlers):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
-        getattr(self.on, "client_relation_updated").emit(
-            event.relation, app=event.app, unit=event.unit
-        )
-
         # register all new secrets with their labels
         new_data_keys = list(event.relation.data[event.app].keys())
         if any(newval for newval in new_data_keys if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, new_data_keys)
 
-        # Leader only
+        # if not leader react to client-chain changes only
         if not self.relation_data.local_unit.is_leader():
+            getattr(self.on, "client_chain_updated").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
             return
 
         old_data = get_encoded_dict(event.relation, self.relation_data.data_component, "data")
@@ -3846,7 +3854,7 @@ class EtcdProvidesEventHandlers(EventHandlers):
             )
 
         if secret_field_tls in diff.added or secret_field_tls in diff.changed:
-            getattr(self.on, "client_relation_updated").emit(
+            getattr(self.on, "client_chain_updated").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -3872,11 +3880,9 @@ class EtcdProvidesEventHandlers(EventHandlers):
             if unit.app != self.charm.app:
                 remote_unit = unit
 
-        # tls_ca is the only secret that can be updated
-        logger.info("tls_ca updated")
-        getattr(self.on, "client_relation_updated").emit(
-            relation, app=relation.app, unit=remote_unit
-        )
+        # client-chain is the only secret that can be updated
+        logger.info("client-chain updated")
+        getattr(self.on, "client_chain_updated").emit(relation, app=relation.app, unit=remote_unit)
 
 
 class EtcdProvides(EtcdProvidesData, EtcdProvidesEventHandlers):
@@ -3895,25 +3901,25 @@ class EtcdRequiresData(RequirerData):
         model: Model,
         relation_name: str,
         prefix: str,
-        tls_ca: str | None,
         common_name: str,
+        client_chain: str | None,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of Etcd client relations."""
         super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
         self.prefix = prefix
-        self.tls_ca = tls_ca
+        self.client_chain = client_chain
         self.common_name = common_name
 
-    def set_tls_ca(self, relation_id: int, tls_ca: str) -> None:
-        """Set the CA chain in the application relation databag.
+    def set_client_chain(self, relation_id: int, client_chain: str) -> None:
+        """Set the CA chain in the application relation databag / secret.
 
         Args:
             relation_id: the identifier for a particular relation.
-            tls_ca: CA chain.
+            client_chain: CA chain.
         """
-        self.update_relation_data(relation_id, {"tls-ca": tls_ca})
+        self.update_relation_data(relation_id, {"client-chain": client_chain})
 
     def set_common_name(self, relation_id: int, common_name: str) -> None:
         """Set the common name in the application relation databag.
@@ -3939,6 +3945,7 @@ class EtcdRequiresEventHandlers(EventHandlers):
         """Event emitted when the Etcd relation is created."""
         super()._on_relation_created_event(event)
 
+    def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
         if not self.relation_data.local_unit.is_leader():
             return
 
@@ -3946,8 +3953,8 @@ class EtcdRequiresEventHandlers(EventHandlers):
             "prefix": self.relation_data.prefix,
             "common-name": self.relation_data.common_name,
         }
-        if self.relation_data.tls_ca:
-            payload["tls-ca"] = self.relation_data.tls_ca
+        if self.relation_data.client_chain:
+            payload["client-chain"] = self.relation_data.client_chain
 
         self.relation_data.update_relation_data(
             event.relation.id,
@@ -4022,8 +4029,8 @@ class EtcdRequires(EtcdRequiresData, EtcdRequiresEventHandlers):
         charm: CharmBase,
         relation_name: str,
         prefix: str,
-        tls_ca: str | None,
         common_name: str,
+        client_chain: str | None,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
@@ -4032,8 +4039,8 @@ class EtcdRequires(EtcdRequiresData, EtcdRequiresEventHandlers):
             charm.model,
             relation_name,
             prefix,
-            tls_ca,
             common_name,
+            client_chain,
             extra_user_roles,
             additional_secret_fields,
         )
