@@ -507,7 +507,7 @@ class DataProvidesBaseTests(ABC):
             ),  # Data is the diff stored between multiple relation changed events.
             "username": "test-username",
             "password": "test-password",
-            "requested-secrets": '["tls-ca"]',
+            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
         }
 
 
@@ -818,7 +818,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                         self.DATABASE_FIELD: DATABASE,
                     }
                 ),
-                "requested-secrets": '["tls-ca"]',
+                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
             }
         }
 
@@ -858,7 +858,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                     self.DATABASE_FIELD: DATABASE,
                 }
             ),
-            "requested-secrets": '["tls-ca"]',
+            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
             self.DATABASE_FIELD: DATABASE,
         }
 
@@ -982,15 +982,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}tls")
         assert secret_id
 
-        relation_data == {
-            "data": json.dumps(
-                {REQ_SECRET_FIELDS: self.SECRET_FIELDS, self.DATABASE_FIELD: DATABASE}
-            ),  # Data is the diff stored between multiple relation changed events.   # noqa
-            "replset": "rs0",
-            "version": "1.0",
-            "uris": "host1:port,host2:port",
-        }
-
         secret = self.harness.charm.model.get_secret(id=secret_id)
         assert secret.peek_content() == {
             "tls": "True",
@@ -1022,15 +1013,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         relation_data = self.harness.get_relation_data(self.rel_id, "database")
         secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}tls")
         assert secret_id
-
-        relation_data == {
-            "data": '{REQ_SECRET_FIELDS: "'
-            + f"{json.dumps(self.SECRET_FIELDS)}"
-            + '"}',  # Data is the diff stored between multiple relation changed events.   # noqa
-            "replset": "rs0",
-            "version": "1.0",
-            "uris": "host1:port,host2:port",
-        }
 
         secret = self.harness.charm.model.get_secret(id=secret_id)
         assert secret.get_content() == {
@@ -1176,7 +1158,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                         self.DATABASE_FIELD: DATABASE,
                     }
                 ),
-                "requested-secrets": '["tls-ca"]',
+                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
             }
         }
 
@@ -1966,7 +1948,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "alias": "cluster1",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
             }
         }
 
@@ -1994,7 +1976,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "alias": "cluster1",
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
-            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
         }
 
         # Non-leader can try to fetch data (won't have anything thought, as only app data is there...
