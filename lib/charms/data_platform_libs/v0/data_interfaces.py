@@ -966,9 +966,6 @@ class Data(ABC):
         "client-chain": SECRET_GROUPS.MTLS,
     }
 
-    # To be replaced in descendants
-    MY_SECRET_FIELDS = ["username", "password", "uris", "tls", "tls-ca", "client-chain"]
-
     def __init__(
         self,
         model: Model,
@@ -983,7 +980,6 @@ class Data(ABC):
         self.secrets = SecretCache(self._model, self.component)
         self.data_component = None
         self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
-        self._my_secret_fields = self.MY_SECRET_FIELDS
 
     @property
     def relations(self) -> List[Relation]:
@@ -1011,12 +1007,6 @@ class Data(ABC):
         """Local access to secrets field, in case they are being used."""
         if self.secrets_enabled:
             return self._secret_fields
-
-    @property
-    def my_secret_fields(self) -> Optional[List[str]]:
-        """Local access to secrets field, in case they are being used."""
-        if self.secrets_enabled:
-            return self._my_secret_fields
 
     # Mandatory overrides for internal/helper methods
 
@@ -1652,12 +1642,12 @@ class EventHandlers(Object):
         if not self.relation_data.local_unit.is_leader():
             return
 
-        if self.relation_data.my_secret_fields:  # pyright: ignore [reportAttributeAccessIssue]
+        if self.relation_data.secret_fields:  # pyright: ignore [reportAttributeAccessIssue]
             set_encoded_field(
                 event.relation,
                 self.relation_data.component,
                 REQ_SECRET_FIELDS,
-                self.relation_data.my_secret_fields,  # pyright: ignore [reportAttributeAccessIssue]
+                self.relation_data.secret_fields,  # pyright: ignore [reportAttributeAccessIssue]
             )
 
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
@@ -1696,8 +1686,6 @@ class ProviderData(Data):
 
     RESOURCE_FIELD = "database"
 
-    MY_SECRET_FIELDS = ["client-chain"]
-
     def __init__(
         self,
         model: Model,
@@ -1705,7 +1693,6 @@ class ProviderData(Data):
     ) -> None:
         super().__init__(model, relation_name)
         self.data_component = self.local_app
-        self._my_secret_fields = self.MY_SECRET_FIELDS
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
@@ -1760,8 +1747,6 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
-    MY_SECRET_FIELDS = ["username", "password", "uris", "tls", "tls-ca"]
-
     def __init__(
         self,
         model,
@@ -1773,7 +1758,7 @@ class RequirerData(Data):
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
         if additional_secret_fields:
-            self._my_secret_fields += additional_secret_fields
+            self._secret_fields += additional_secret_fields
         self.data_component = self.local_unit
 
     # Internal helper functions
@@ -2299,7 +2284,11 @@ class DataPeerData(RequirerData, ProviderData):
             )
         else:
             _, normal_fields = self._process_secret_fields(
-                relation, self.secret_fields, fields, self._delete_relation_secret, fields=fields
+                relation,
+                self.secret_fields,
+                fields,
+                self._delete_relation_secret,
+                fields=fields,
             )
         self._delete_relation_data_without_secrets(self.component, relation, list(normal_fields))
 
