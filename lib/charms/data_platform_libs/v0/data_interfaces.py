@@ -966,6 +966,9 @@ class Data(ABC):
         "client-chain": SECRET_GROUPS.MTLS,
     }
 
+    # To be replaced in descendants
+    MY_SECRET_FIELDS = ["username", "password", "uris", "tls", "tls-ca", "client-chain"]
+
     def __init__(
         self,
         model: Model,
@@ -980,6 +983,7 @@ class Data(ABC):
         self.secrets = SecretCache(self._model, self.component)
         self.data_component = None
         self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
+        self._my_secret_fields = self.MY_SECRET_FIELDS
 
     @property
     def relations(self) -> List[Relation]:
@@ -1007,6 +1011,12 @@ class Data(ABC):
         """Local access to secrets field, in case they are being used."""
         if self.secrets_enabled:
             return self._secret_fields
+
+    @property
+    def my_secret_fields(self) -> Optional[List[str]]:
+        """Local access to secrets field, in case they are being used."""
+        if self.secrets_enabled:
+            return self._my_secret_fields
 
     # Mandatory overrides for internal/helper methods
 
@@ -1060,8 +1070,6 @@ class Data(ABC):
 
         if relation.app:
             req_secret_fields = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
-
-        req_secret_fields = req_secret_fields
 
         _, normal_fields = self._process_secret_fields(
             relation,
@@ -1367,7 +1375,6 @@ class Data(ABC):
             and (self.local_unit == self._model.unit and self.local_unit.is_leader())
             and set(req_secret_fields) & set(relation.data[self.component])
         )
-
         normal_fields = set(impacted_rel_fields)
         if req_secret_fields and self.secrets_enabled and not fallback_to_databag:
             normal_fields = normal_fields - set(req_secret_fields)
@@ -1645,12 +1652,12 @@ class EventHandlers(Object):
         if not self.relation_data.local_unit.is_leader():
             return
 
-        if self.relation_data.secret_fields:  # pyright: ignore [reportAttributeAccessIssue]
+        if self.relation_data.my_secret_fields:  # pyright: ignore [reportAttributeAccessIssue]
             set_encoded_field(
                 event.relation,
                 self.relation_data.component,
                 REQ_SECRET_FIELDS,
-                self.relation_data.secret_fields,  # pyright: ignore [reportAttributeAccessIssue]
+                self.relation_data.my_secret_fields,  # pyright: ignore [reportAttributeAccessIssue]
             )
 
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
@@ -1689,6 +1696,8 @@ class ProviderData(Data):
 
     RESOURCE_FIELD = "database"
 
+    MY_SECRET_FIELDS = ["client-chain"]
+
     def __init__(
         self,
         model: Model,
@@ -1696,7 +1705,7 @@ class ProviderData(Data):
     ) -> None:
         super().__init__(model, relation_name)
         self.data_component = self.local_app
-        self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
+        self._my_secret_fields = self.MY_SECRET_FIELDS
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
@@ -1751,6 +1760,8 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
+    MY_SECRET_FIELDS = ["username", "password", "uris", "tls", "tls-ca"]
+
     def __init__(
         self,
         model,
@@ -1761,16 +1772,9 @@ class RequirerData(Data):
         """Manage base client relations."""
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
-        self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
         if additional_secret_fields:
-            self._secret_fields += additional_secret_fields
+            self._my_secret_fields += additional_secret_fields
         self.data_component = self.local_unit
-
-    @property
-    def secret_fields(self) -> Optional[List[str]]:
-        """Local access to secrets field, in case they are being used."""
-        if self.secrets_enabled:
-            return self._secret_fields
 
     # Internal helper functions
 
@@ -3939,12 +3943,14 @@ class EtcdRequiresEventHandlers(EventHandlers):
         # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
 
-    def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
-        """Event emitted when the Etcd relation is created."""
-        super()._on_relation_created_event(event)
-
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
         if not self.relation_data.local_unit.is_leader():
+            return
+
+        requested_secrets = get_encoded_list(event.relation, event.relation.app, REQ_SECRET_FIELDS)
+        if not requested_secrets:
+            logger.debug("Provider did not set the requested secrets. Deferring.")
+            event.defer()
             return
 
         payload = {
@@ -3989,7 +3995,7 @@ class EtcdRequiresEventHandlers(EventHandlers):
 
         if "version" in diff.added or "version" in diff.changed:
             # Emit the default event (the one without an alias).
-            logger.info("etcd API version updated on %s", datetime.now())
+            logger.info("etcd version updated on %s", datetime.now())
             getattr(self.on, "etcd_version_updated").emit(
                 event.relation, app=event.app, unit=event.unit
             )
