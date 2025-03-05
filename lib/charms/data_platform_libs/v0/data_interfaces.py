@@ -3691,7 +3691,7 @@ class EtcdProvidesEvent(RelationEventWithSecret):
     """Base class for Etcd events."""
 
     @property
-    def prefix(self) -> str | None:
+    def prefix(self) -> Optional[str]:
         """Returns the index that was requested."""
         if not self.relation.app:
             return None
@@ -3715,7 +3715,7 @@ class EtcdProvidesEvent(RelationEventWithSecret):
         return self.relation.data[self.relation.app].get("client-chain")
 
     @property
-    def common_name(self) -> str | None:
+    def common_name(self) -> Optional[str]:
         """Returns the common name."""
         if not self.relation.app:
             return None
@@ -3900,7 +3900,7 @@ class EtcdRequiresData(RequirerData):
         relation_name: str,
         prefix: str,
         common_name: str,
-        client_chain: str | None,
+        client_chain: Optional[str],
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
@@ -4028,7 +4028,7 @@ class EtcdRequires(EtcdRequiresData, EtcdRequiresEventHandlers):
         relation_name: str,
         prefix: str,
         common_name: str,
-        client_chain: str | None,
+        client_chain: Optional[str],
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
