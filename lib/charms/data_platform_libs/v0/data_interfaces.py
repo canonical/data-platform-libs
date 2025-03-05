@@ -1693,6 +1693,7 @@ class ProviderData(Data):
     ) -> None:
         super().__init__(model, relation_name)
         self.data_component = self.local_app
+        self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
@@ -1757,6 +1758,7 @@ class RequirerData(Data):
         """Manage base client relations."""
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
+        self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
         if additional_secret_fields:
             self._secret_fields += additional_secret_fields
         self.data_component = self.local_unit
