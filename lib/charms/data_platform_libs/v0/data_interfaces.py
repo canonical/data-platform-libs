@@ -1501,6 +1501,10 @@ class Data(ABC):
         secret_field = self._generate_secret_field_name(group)
         # if the secret is not managed by this component,
         # we need to fetch it from the other side
+
+        # Fix for the linter
+        if not self.my_secret_groups:
+            raise DataInterfacesError("Secrets are not enabled for this component")
         component = self.component if group in self.my_secret_groups else relation.app
         return relation.data[component].get(secret_field)
 
