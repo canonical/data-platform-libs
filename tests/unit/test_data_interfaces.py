@@ -507,7 +507,7 @@ class DataProvidesBaseTests(ABC):
             ),  # Data is the diff stored between multiple relation changed events.
             "username": "test-username",
             "password": "test-password",
-            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
+            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
         }
 
 
@@ -818,7 +818,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                         self.DATABASE_FIELD: DATABASE,
                     }
                 ),
-                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
+                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
             }
         }
 
@@ -858,7 +858,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                     self.DATABASE_FIELD: DATABASE,
                 }
             ),
-            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
+            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
             self.DATABASE_FIELD: DATABASE,
         }
 
@@ -1158,7 +1158,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                         self.DATABASE_FIELD: DATABASE,
                     }
                 ),
-                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
+                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
             }
         }
 
@@ -1948,7 +1948,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "alias": "cluster1",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
+                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
             }
         }
 
@@ -1976,7 +1976,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "alias": "cluster1",
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
-            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "client-chain"]',
+            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
         }
 
         # Non-leader can try to fetch data (won't have anything thought, as only app data is there...

@@ -500,7 +500,7 @@ def leader_only(f):
 
 
 def juju_secrets_only(f):
-    """Ensure that certain operations would be only executed on Juju3."""
+    """Decorator to ensure that certain operations would be only executed on Juju3."""
 
     def wrapper(self, *args, **kwargs):
         if not self.secrets_enabled:
@@ -539,7 +539,7 @@ def either_static_or_dynamic_secrets(f):
 
 
 def legacy_apply_from_version(version: int) -> Callable:
-    """Decide whether to apply a legacy function or not.
+    """Decorator to decide whether to apply a legacy function or not.
 
     Based on LEGACY_SUPPORT_FROM module variable value, the importer charm may only want
     to apply legacy solutions starting from a specific LIBPATCH.
@@ -963,7 +963,7 @@ class Data(ABC):
         "uris": SECRET_GROUPS.USER,
         "tls": SECRET_GROUPS.TLS,
         "tls-ca": SECRET_GROUPS.TLS,
-        "client-chain": SECRET_GROUPS.MTLS,
+        "mtls-chain": SECRET_GROUPS.MTLS,
     }
 
     def __init__(
@@ -980,6 +980,8 @@ class Data(ABC):
         self.secrets = SecretCache(self._model, self.component)
         self.data_component = None
         self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
+        # TO BE REPLACED BY PROVIDER AND REQUIRER
+        self._my_secret_groups = list(self.SECRET_LABEL_MAP.values())
 
     @property
     def relations(self) -> List[Relation]:
@@ -1007,6 +1009,12 @@ class Data(ABC):
         """Local access to secrets field, in case they are being used."""
         if self.secrets_enabled:
             return self._secret_fields
+
+    @property
+    def my_secret_groups(self) -> Optional[List[SecretGroup]]:
+        """Local access to secrets field, in case they are being used."""
+        if self.secrets_enabled:
+            return self._my_secret_groups
 
     # Mandatory overrides for internal/helper methods
 
@@ -1223,18 +1231,18 @@ class Data(ABC):
     # Optional overrides
 
     def _legacy_apply_on_fetch(self) -> None:
-        """Provide a list of compatibility functions to be applied when fetching (legacy) data."""
+        """This function should provide a list of compatibility functions to be applied when fetching (legacy) data."""
         pass
 
     def _legacy_apply_on_update(self, fields: List[str]) -> None:
-        """Provide a list of compatibility functions to be applied when writing data.
+        """This function should provide a list of compatibility functions to be applied when writing data.
 
         Since data may be at a legacy version, migration may be mandatory.
         """
         pass
 
     def _legacy_apply_on_delete(self, fields: List[str]) -> None:
-        """Provide a list of compatibility functions to be applied when deleting (legacy) data."""
+        """This function should provide a list of compatibility functions to be applied when deleting (legacy) data."""
         pass
 
     # Internal helper methods
@@ -1491,7 +1499,10 @@ class Data(ABC):
     def get_secret_uri(self, relation: Relation, group: SecretGroup) -> Optional[str]:
         """Get the secret URI for the corresponding group."""
         secret_field = self._generate_secret_field_name(group)
-        return relation.data[relation.app].get(secret_field)
+        # if the secret is not managed by this component,
+        # we need to fetch it from the other side
+        component = self.component if group in self.my_secret_groups else relation.app
+        return relation.data[component].get(secret_field)
 
     def set_secret_uri(self, relation: Relation, group: SecretGroup, secret_uri: str) -> None:
         """Set the secret URI for the corresponding group."""
@@ -1686,6 +1697,8 @@ class ProviderData(Data):
 
     RESOURCE_FIELD = "database"
 
+    MY_SECRET_GROUPS = [SECRET_GROUPS.USER, SECRET_GROUPS.TLS, SECRET_GROUPS.EXTRA]
+
     def __init__(
         self,
         model: Model,
@@ -1694,6 +1707,7 @@ class ProviderData(Data):
         super().__init__(model, relation_name)
         self.data_component = self.local_app
         self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
+        self._my_secret_groups = self.MY_SECRET_GROUPS
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
@@ -1748,6 +1762,8 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
+    MY_SECRET_GROUPS = [SECRET_GROUPS.MTLS]
+
     def __init__(
         self,
         model,
@@ -1759,8 +1775,10 @@ class RequirerData(Data):
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
         self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
+        self._my_secret_groups = self.MY_SECRET_GROUPS
         if additional_secret_fields:
             self._secret_fields += additional_secret_fields
+            self._my_secret_groups += additional_secret_fields
         self.data_component = self.local_unit
 
     # Internal helper functions
@@ -1775,12 +1793,6 @@ class RequirerData(Data):
         return bool(data.get("username")) and bool(data.get("password"))
 
     # Public functions
-
-    def get_secret_uri(self, relation: Relation, group: SecretGroup) -> Optional[str]:
-        """Getting relation secret URI for the corresponding Secret Group."""
-        secret_field = self._generate_secret_field_name(group)
-        return relation.data[relation.app].get(secret_field)
-
     def is_resource_created(self, relation_id: Optional[int] = None) -> bool:
         """Check if the resource has been created.
 
@@ -1831,6 +1843,7 @@ class DataPeerData(RequirerData, ProviderData):
     SECRET_FIELDS = []
     SECRET_FIELD_NAME = "internal_secret"
     SECRET_LABEL_MAP = {}
+    MY_SECRET_GROUPS = []
 
     def __init__(
         self,
@@ -1862,6 +1875,7 @@ class DataPeerData(RequirerData, ProviderData):
         self._additional_secret_group_mapping = additional_secret_group_mapping
 
         for group, fields in additional_secret_group_mapping.items():
+            self._my_secret_groups.append(SecretGroup(group))
             if group not in SECRET_GROUPS.groups():
                 setattr(SECRET_GROUPS, group, group)
             for field in fields:
@@ -3694,7 +3708,7 @@ class EtcdProvidesEvent(RelationEventWithSecret):
         return self.relation.data[self.relation.app].get("prefix")
 
     @property
-    def client_chain(self) -> Optional[str]:
+    def mtls_chain(self) -> Optional[str]:
         """Returns TLS chain of the client."""
         if not self.relation.app:
             return None
@@ -3705,39 +3719,29 @@ class EtcdProvidesEvent(RelationEventWithSecret):
                 secret = self.framework.model.get_secret(id=secret_uri)
                 content = secret.get_content(refresh=True)
                 if content:
-                    return content.get("client-chain")
+                    return content.get("mtls-chain")
 
-        return self.relation.data[self.relation.app].get("client-chain")
-
-    @property
-    def common_name(self) -> Optional[str]:
-        """Returns the common name."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("common-name")
+        return self.relation.data[self.relation.app].get("mtls-chain")
 
 
-class CommonNameUpdatedEvent(EtcdProvidesEvent):
-    """Event emitted when the common name is updated."""
+class MTLSChainUpdatedEvent(EtcdProvidesEvent):
+    """Event emitted when the mtls relation is updated."""
 
-    def __init__(self, handle, relation, old_common_name: str, app=None, unit=None):
+    def __init__(
+        self, handle, relation, old_mtls_chain: Optional[str] = None, app=None, unit=None
+    ):
         super().__init__(handle, relation, app, unit)
 
-        self.old_common_name = old_common_name
+        self.old_mtls_chain = old_mtls_chain
 
     def snapshot(self):
         """Return a snapshot of the event."""
-        return super().snapshot() | {"old_common_name": self.old_common_name}
+        return super().snapshot() | {"old_mtls_chain": self.old_mtls_chain}
 
     def restore(self, snapshot):
         """Restore the event from a snapshot."""
         super().restore(snapshot)
-        self.old_common_name = snapshot["old_common_name"]
-
-
-class ClientChainUpdatedEvent(EtcdProvidesEvent):
-    """Event emitted when the client relation is updated."""
+        self.old_mtls_chain = snapshot["old_mtls_chain"]
 
 
 class EtcdProvidesEvents(CharmEvents):
@@ -3746,16 +3750,11 @@ class EtcdProvidesEvents(CharmEvents):
     This class defines the events that Etcd can emit.
     """
 
-    client_chain_updated = EventSource(ClientChainUpdatedEvent)
-    common_name_updated = EventSource(CommonNameUpdatedEvent)
+    mtls_chain_updated = EventSource(MTLSChainUpdatedEvent)
 
 
 class EtcdRequiresEvent(DatabaseRequiresEvent):
     """Base class for Etcd requirer events."""
-
-
-class TLSCAUpdatedEvent(AuthenticationEvent, EtcdRequiresEvent):
-    """Event emitted when the server CA is updated."""
 
 
 class EtcdVersionUpdatedEvent(EtcdRequiresEvent):
@@ -3777,7 +3776,7 @@ class EtcdRequiresEvents(CharmEvents):
     """
 
     endpoints_changed = EventSource(DatabaseEndpointsChangedEvent)
-    tls_ca_updated = EventSource(TLSCAUpdatedEvent)
+    authentication_updated = EventSource(AuthenticationEvent)
     etcd_version_updated = EventSource(EtcdVersionUpdatedEvent)
 
 
@@ -3828,30 +3827,8 @@ class EtcdProvidesEventHandlers(EventHandlers):
         if any(newval for newval in new_data_keys if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, new_data_keys)
 
-        # if not leader react to client-chain changes only
-        if not self.relation_data.local_unit.is_leader():
-            getattr(self.on, "client_chain_updated").emit(
-                event.relation, app=event.app, unit=event.unit
-            )
-            return
-
-        old_data = get_encoded_dict(event.relation, self.relation_data.data_component, "data")
-        old_common_name = old_data.get("common-name") if old_data else None
-        # Check which data has changed to emit customs events.
-        diff = self._diff(event)
-
-        secret_field_tls = self.relation_data._generate_secret_field_name(SECRET_GROUPS.MTLS)
-
-        # have been added to the relation databag by the application.
-        if "common-name" in diff.added or "common-name" in diff.changed:
-            getattr(self.on, "common_name_updated").emit(
-                event.relation, app=event.app, unit=event.unit, old_common_name=old_common_name
-            )
-
-        if secret_field_tls in diff.added or secret_field_tls in diff.changed:
-            getattr(self.on, "client_chain_updated").emit(
-                event.relation, app=event.app, unit=event.unit
-            )
+        getattr(self.on, "mtls_chain_updated").emit(event.relation, app=event.app, unit=event.unit)
+        return
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
         """Event notifying about a new value of a secret."""
@@ -3873,9 +3850,12 @@ class EtcdProvidesEventHandlers(EventHandlers):
             if unit.app != self.charm.app:
                 remote_unit = unit
 
-        # client-chain is the only secret that can be updated
-        logger.info("client-chain updated")
-        getattr(self.on, "client_chain_updated").emit(relation, app=relation.app, unit=remote_unit)
+        old_mtls_chain = event.secret.get_content().get("mtls-chain")
+        # mtls-chain is the only secret that can be updated
+        logger.info("mtls-chain updated")
+        getattr(self.on, "mtls_chain_updated").emit(
+            relation, app=relation.app, unit=remote_unit, old_mtls_chain=old_mtls_chain
+        )
 
 
 class EtcdProvides(EtcdProvidesData, EtcdProvidesEventHandlers):
@@ -3894,34 +3874,23 @@ class EtcdRequiresData(RequirerData):
         model: Model,
         relation_name: str,
         prefix: str,
-        common_name: str,
-        client_chain: Optional[str],
+        mtls_chain: Optional[str],
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of Etcd client relations."""
         super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
         self.prefix = prefix
-        self.client_chain = client_chain
-        self.common_name = common_name
+        self.mtls_chain = mtls_chain
 
-    def set_client_chain(self, relation_id: int, client_chain: str) -> None:
-        """Set the CA chain in the application relation databag / secret.
-
-        Args:
-            relation_id: the identifier for a particular relation.
-            client_chain: CA chain.
-        """
-        self.update_relation_data(relation_id, {"client-chain": client_chain})
-
-    def set_common_name(self, relation_id: int, common_name: str) -> None:
-        """Set the common name in the application relation databag.
+    def set_mtls_chain(self, relation_id: int, mtls_chain: str) -> None:
+        """Set the mtls chain in the application relation databag / secret.
 
         Args:
             relation_id: the identifier for a particular relation.
-            common_name: common name.
+            mtls_chain: mtls chain.
         """
-        self.update_relation_data(relation_id, {"common-name": common_name})
+        self.update_relation_data(relation_id, {"mtls-chain": mtls_chain})
 
 
 class EtcdRequiresEventHandlers(EventHandlers):
@@ -3946,10 +3915,9 @@ class EtcdRequiresEventHandlers(EventHandlers):
 
         payload = {
             "prefix": self.relation_data.prefix,
-            "common-name": self.relation_data.common_name,
         }
-        if self.relation_data.client_chain:
-            payload["client-chain"] = self.relation_data.client_chain
+        if self.relation_data.mtls_chain:
+            payload["mtls-chain"] = self.relation_data.mtls_chain
 
         self.relation_data.update_relation_data(
             event.relation.id,
@@ -3967,7 +3935,7 @@ class EtcdRequiresEventHandlers(EventHandlers):
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
 
-        # secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
+        secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
         secret_field_tls = self.relation_data._generate_secret_field_name(SECRET_GROUPS.TLS)
 
         # Emit a endpoints changed event if the etcd application added or changed this info
@@ -3979,10 +3947,19 @@ class EtcdRequiresEventHandlers(EventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
-        if secret_field_tls in diff.added or secret_field_tls in diff.changed:
+        if (
+            secret_field_tls in diff.added
+            or secret_field_tls in diff.changed
+            or secret_field_user in diff.added
+            or secret_field_user in diff.changed
+            or "username" in diff.added
+            or "username" in diff.changed
+        ):
             # Emit the default event (the one without an alias).
-            logger.info("server ca CA updated on %s", datetime.now())
-            getattr(self.on, "tls_ca_updated").emit(event.relation, app=event.app, unit=event.unit)
+            logger.info("authentication updated on %s", datetime.now())
+            getattr(self.on, "authentication_updated").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
 
         if "version" in diff.added or "version" in diff.changed:
             # Emit the default event (the one without an alias).
@@ -4011,9 +3988,11 @@ class EtcdRequiresEventHandlers(EventHandlers):
             if unit.app != self.charm.app:
                 remote_unit = unit
 
-        # tls_ca is the only secret that can be updated
-        logger.info("tls_ca updated")
-        getattr(self.on, "tls_ca_updated").emit(relation, app=relation.app, unit=remote_unit)
+        # secret-user or secret-tls updated
+        logger.info("authntication updated")
+        getattr(self.on, "authentication_updated").emit(
+            relation, app=relation.app, unit=remote_unit
+        )
 
 
 class EtcdRequires(EtcdRequiresData, EtcdRequiresEventHandlers):
@@ -4024,8 +4003,7 @@ class EtcdRequires(EtcdRequiresData, EtcdRequiresEventHandlers):
         charm: CharmBase,
         relation_name: str,
         prefix: str,
-        common_name: str,
-        client_chain: Optional[str],
+        mtls_chain: Optional[str],
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
@@ -4034,8 +4012,7 @@ class EtcdRequires(EtcdRequiresData, EtcdRequiresEventHandlers):
             charm.model,
             relation_name,
             prefix,
-            common_name,
-            client_chain,
+            mtls_chain,
             extra_user_roles,
             additional_secret_fields,
         )
