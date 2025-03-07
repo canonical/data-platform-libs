@@ -435,7 +435,7 @@ def set_encoded_field(
 
 
 def diff(event: RelationChangedEvent, bucket: Optional[Union[Unit, Application]]) -> Diff:
-    """Retrieve the diff of the data in the relation changed databag.
+    """Retrieves the diff of the data in the relation changed databag.
 
     Args:
         event: relation changed event.
@@ -1185,7 +1185,7 @@ class Data(ABC):
         return True
 
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
-        """Delete fields from the Relation not caring whether it's a secret or not."""
+        """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         req_secret_fields = []
         if relation.app:
             req_secret_fields = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
@@ -1296,7 +1296,7 @@ class Data(ABC):
             return
 
     def _group_secret_fields(self, secret_fields: List[str]) -> Dict[SecretGroup, List[str]]:
-        """Arrange secret mappings under their group.
+        """Helper function to arrange secret mappings under their group.
 
         NOTE: All unrecognized items end up in the 'extra' secret bucket.
         Make sure only secret fields are passed!
@@ -1315,7 +1315,7 @@ class Data(ABC):
         group: SecretGroup,
         secret_fields: Union[Set[str], List[str]] = [],
     ) -> Dict[str, str]:
-        """Retrieve collective, requested contents of a secret."""
+        """Helper function to retrieve collective, requested contents of a secret."""
         if (secret := self._get_relation_secret(relation.id, group)) and (
             secret_data := secret.get_content()
         ):
@@ -1519,7 +1519,7 @@ class Data(ABC):
         fields: Optional[List[str]] = None,
         relation_name: Optional[str] = None,
     ) -> Dict[int, Dict[str, str]]:
-        """Retrieve data from relation.
+        """Retrieves data from relation.
 
         This function can be used to retrieve data from a relation
         in the charm code when outside an event callback.
@@ -1775,7 +1775,7 @@ class RequirerData(Data):
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
-        """Manage base client relations."""
+        """Manager of base client relations."""
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
         self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
