@@ -2300,7 +2300,7 @@ class DataPeerData(RequirerData, ProviderData):
                 self.secret_fields,
                 fields,
                 self._update_relation_secret,
-                data=dict.fromkeys(fields, self.deleted_label),
+                data={field: self.deleted_label for field in fields},  # noqa C420
             )
         else:
             _, normal_fields = self._process_secret_fields(
