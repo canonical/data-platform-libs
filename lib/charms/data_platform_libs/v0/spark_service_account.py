@@ -1,19 +1,174 @@
-"""A library for creating service accounts that are configured to run Spark jobs.
+# Copyright 2025 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Complete documentation about creating and documenting libraries can be found
-in the SDK docs at https://juju.is/docs/sdk/libraries.
+r"""Library for creating service accounts that are configured to run Spark jobs.
 
-See `charmcraft publish-lib` and `charmcraft fetch-lib` for details of how to
-share and consume charm libraries. They serve to enhance collaboration
-between charmers. Use a charmer's libraries for classes that handle
-integration with their charm.
+This library contains the SparkServiceAccountProvider and SparkServiceAccountRequirer
+classes for handling the relation between charms that require Spark Service Account
+to be created in order to function, and charms that create and provide them.
 
-Bear in mind that new revisions of the different major API versions (v0, v1,
-v2 etc) are maintained independently.  You can continue to update v0 and v1
-after you have pushed v3.
+### SparkServiceAccountRequirer
 
-Markdown is supported, following the CommonMark specification.
+Following is an example of using the SparkServiceAccountRequirer class in the context
+of the application charm code:
+
+```python
+import json
+
+from charms.data_platform_libs.v0.spark_service_account import (
+    SparkServiceAccountRequirer,
+    ServiceAccountGrantedEvent,
+    ServiceAccountPropertyChangedEvent,
+    ServiceAccountGoneEvent
+)
+from ops.model import ActiveStatus, BlockedStatus
+
+
+class RequirerCharm(CharmBase):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        namespace, username = "default", "test"
+        self.spark_service_account_requirer = SparkServiceAccountRequirer(self, relation_name="service-account", service_account=f"{namespace}:{username}", )
+        self.framework.observe(
+            self.spark_service_account_requirer.on.account_granted, self._on_account_granted
+        )
+        self.framework.observe(
+            self.spark_service_account_requirer.on.account_gone, self._on_account_gone
+        )
+        self.framework.observe(
+            self.spark_service_account_requirer.on.properties_changed, self._on_spark_properties_changed
+        )
+
+    def _on_account_granted(self, event: ServiceAccountGrantedEvent):
+        # Handle the account_granted event
+
+        namespace, username = event.service_account.split(":")
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            namespace=namespace,
+            username=username,
+        )
+
+        # Start application with rendered configuration
+        self._start_application(config_file)
+
+        # Set appropriate status
+        self.unit.status = ActiveStatus("Received Spark service account")
+
+    def _on_spark_properties_changed(self, event: ServiceAccountPropertyChangedEvent):
+        # Handle the properties_changed event
+
+        # Fetch the Spark properties from event data
+        props_string = event.spark_properties
+        props = json.loads(props_string)
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            spark_properties=props
+        )
+
+        # Start application with rendered configuration
+        self._start_application(config_file)
+
+        # Set appropriate status
+        self.unit.status = ActiveStatus("Spark service account properties changed")
+
+    def _on_account_gone(self, event: ServiceAccountGoneEvent):
+        # Handle the account_gone event
+
+        # Create configuration file for app
+        config_file = self._render_app_config_file(
+            namespace=None,
+            username=None,
+            spark_properties=None
+        )
+
+        # Start application with rendered configuration
+        self._start_application(config_file)
+
+        # Set appropriate status
+        self.unit.status = BlockedStatus("Missing spark service account")
+
+### SparkServiceAccountProvider
+Following is an example of using the SparkServiceAccountProvider class in the context
+of the application charm code:
+
+```python
+from charms.data_platform_libs.v0.spark_service_account import (
+    SparkServiceAccountProvider,
+    ServiceAccountRequestedEvent,
+    ServiceAccountReleasedEvent,
+)
+
+
+class ProviderCharm(CharmBase):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        self.spark_service_account_provider = SparkServiceAccountProvider(self, relation_name="service-account")
+        self.framework.observe(self.sa.on.account_requested, self._on_service_account_requested)
+        self.framework.observe(self.sa.on.account_released, self._on_service_account_released)
+
+
+    def _on_service_account_requested(self, event: ServiceAccountRequestedEvent):
+        # Handle the account_requested event
+
+        namespace, username = event.service_account.split(":")
+
+        # Create the service account
+        self.create_service_account(namespace, username)
+
+        # Write the service account to relation data
+        self.spark_service_account_provider.set_service_account(event.relation.id, f"{namespace}:{username}")
+
+    def _on_service_account_released(self, event: ServiceAccountReleasedEvent):
+        # Handle account_released event
+
+        namespace, username = event.service_account.split(":")
+
+        # Delete the service account
+        self.delete_service_account(namespace, username)
+```
+
 """
+
+
+import logging
+from typing import List, Optional
+
+from ops import Model, RelationCreatedEvent, SecretChangedEvent
+from ops.charm import (
+    CharmBase,
+    CharmEvents,
+    RelationBrokenEvent,
+    RelationChangedEvent,
+    RelationEvent,
+)
+from ops.framework import EventSource, ObjectEvents
+
+from charms.data_platform_libs.v0.data_interfaces import (
+    SECRET_GROUPS,
+    EventHandlers,
+    ProviderData,
+    RelationEventWithSecret,
+    RequirerData,
+    RequirerEventHandlers,
+)
 
 # The unique Charmhub library identifier, never change it
 LIBID = "1f402a9b0ec547788b185c167ab9b5fe"
@@ -25,89 +180,11 @@ LIBAPI = 0
 # to 0 if you are raising the major API version
 LIBPATCH = 1
 
-
-import json
-import logging
-from collections import namedtuple
-from typing import List, Optional, Union
-
-from charms.data_platform_libs.v0.data_interfaces import (
-    SECRET_GROUPS,
-    EventHandlers,
-    ProviderData,
-    RelationEventWithSecret,
-    RequirerData,
-    RequirerEventHandlers,
-)
-from ops import Model, RelationCreatedEvent, SecretChangedEvent
-from ops.charm import (
-    CharmBase,
-    CharmEvents,
-    RelationBrokenEvent,
-    RelationChangedEvent,
-    RelationEvent,
-)
-from ops.framework import EventSource, ObjectEvents
-from ops.model import Application, Unit
-
-# The unique Charmhub library identifier, never change it
-LIBID = ""
-
-# Increment this major API version when introducing breaking changes
-LIBAPI = 0
-
-# Increment this PATCH version before using `charmcraft publish-lib` or reset
-# to 0 if you are raising the major API version
-LIBPATCH = 1
+PYDEPS = ["ops>=2.0.0"]
 
 SPARK_PROPERTIES_RELATION_FIELD = "spark-properties"
 
 logger = logging.getLogger(__name__)
-
-Diff = namedtuple("Diff", "added changed deleted")
-Diff.__doc__ = """
-A tuple for storing the diff between two data mappings.
-
-added - keys that were added
-changed - keys that still exist but have new values
-deleted - key that were deleted"""
-
-
-def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
-    """Retrieves the diff of the data in the relation changed databag.
-
-    Args:
-        event: relation changed event.
-        bucket: bucket of the databag (app or unit)
-
-    Returns:
-        a Diff instance containing the added, deleted and changed
-            keys from the event relation databag.
-    """
-    # Retrieve the old data from the data key in the application relation databag.
-    old_data = json.loads(event.relation.data[bucket].get("data", "{}"))
-    # Retrieve the new data from the event relation databag.
-    new_data = (
-        {key: value for key, value in event.relation.data[event.app].items() if key != "data"}
-        if event.app
-        else {}
-    )
-
-    # These are the keys that were added to the databag and triggered this event.
-    added = new_data.keys() - old_data.keys()
-    # These are the keys that were removed from the databag and triggered this event.
-    deleted = old_data.keys() - new_data.keys()
-    # These are the keys that already existed in the databag,
-    # but had their values changed.
-    changed = {key for key in old_data.keys() & new_data.keys() if old_data[key] != new_data[key]}
-
-    # TODO: evaluate the possibility of losing the diff if some error
-    # happens in the charm before the diff is completely checked (DPE-412).
-    # Convert the new_data to a serializable format and save it for a next diff check.
-    event.relation.data[bucket].update({"data": json.dumps(new_data)})
-
-    # Return the diff with all possible changes.
-    return Diff(added, changed, deleted)
 
 
 class ServiceAccountEvent(RelationEventWithSecret):
@@ -171,7 +248,7 @@ class SparkServiceAccountRequirerEvents(ObjectEvents):
 
 
 class SparkServiceAccountProviderData(ProviderData):
-    """Provider-side of the Spark Service Account relation."""
+    """Implementation of ProviderData for the Spark Service Account relation."""
 
     RESOURCE_FIELD = "service-account"
 
@@ -244,7 +321,7 @@ class SparkServiceAccountProvider(
 
 
 class SparkServiceAccountRequirerData(RequirerData):
-    """Requirer-side of the Spark Service Account relation."""
+    """Implementation of RequirerData for the Spark Service Account relation."""
 
     def __init__(
         self,
@@ -272,7 +349,7 @@ class SparkServiceAccountRequirerData(RequirerData):
 
 
 class SparkServiceAccountRequirerEventHandlers(RequirerEventHandlers):
-    """Requirer-side of the Spark Service Account relation."""
+    """Requirer-side event handlers of the Spark Service Account relation."""
 
     on = SparkServiceAccountRequirerEvents()  # pyright: ignore [reportAssignmentType]
 
