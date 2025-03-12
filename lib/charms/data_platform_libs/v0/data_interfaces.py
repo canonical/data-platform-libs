@@ -311,7 +311,7 @@ from typing import (
     ValuesView,
 )
 
-from ops import JujuVersion, Model, RelationJoinedEvent, Secret, SecretInfo, SecretNotFoundError
+from ops import JujuVersion, Model, Secret, SecretInfo, SecretNotFoundError
 from ops.charm import (
     CharmBase,
     CharmEvents,
@@ -352,6 +352,7 @@ deleted - key that were deleted"""
 
 PROV_SECRET_PREFIX = "secret-"
 REQ_SECRET_FIELDS = "requested-secrets"
+PROVIDED_SECRET_FIELDS = "provided-secrets"
 GROUP_MAPPING_FIELD = "secret_group_mapping"
 GROUP_SEPARATOR = "@"
 
@@ -966,6 +967,8 @@ class Data(ABC):
         "mtls-chain": SECRET_GROUPS.MTLS,
     }
 
+    SECRET_FIELDS = []
+
     def __init__(
         self,
         model: Model,
@@ -979,9 +982,10 @@ class Data(ABC):
         self.component = self.local_app if self.SCOPE == Scope.APP else self.local_unit
         self.secrets = SecretCache(self._model, self.component)
         self.data_component = None
-        self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
+        self._secret_fields = self.SECRET_FIELDS
+        self._remote_secret_fields = []
         # TO BE REPLACED BY PROVIDER AND REQUIRER
-        self._my_secret_groups = list(self.SECRET_LABEL_MAP.values())
+        self._my_secret_groups = []
 
     @property
     def relations(self) -> List[Relation]:
@@ -1011,10 +1015,16 @@ class Data(ABC):
             return self._secret_fields
 
     @property
+    def remote_secret_fields(self) -> Optional[List[str]]:
+        """Local access to secrets field, in case they are being used."""
+        if self.secrets_enabled:
+            return self._remote_secret_fields
+
+    @property
     def my_secret_groups(self) -> Optional[List[SecretGroup]]:
         """Local access to secrets field, in case they are being used."""
         if self.secrets_enabled:
-            return self._my_secret_groups
+            return [self.SECRET_LABEL_MAP[field] for field in self._secret_fields]
 
     # Mandatory overrides for internal/helper methods
 
@@ -1040,38 +1050,29 @@ class Data(ABC):
     def _fetch_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
-        """Fetch data available (directily or indirectly -- i.e. secrets) from the relation."""
+        """Fetch data available (directily or indirectly -- i.e. secrets) from the relation (remote app data)."""
         if not relation.app:
             return {}
         return self._fetch_relation_data_with_secrets(
-            relation.app, self.secret_fields, relation, fields
+            relation.app, self.remote_secret_fields, relation, fields
         )
 
     def _fetch_my_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> dict:
         """Fetch our own relation data."""
-        secret_fields = None
-        if relation.app:
-            secret_fields = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
-
         return self._fetch_relation_data_with_secrets(
             self.local_app,
-            secret_fields,
+            self.secret_fields,
             relation,
             fields,
         )
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
-        req_secret_fields = []
-
-        if relation.app:
-            req_secret_fields = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
-
         _, normal_fields = self._process_secret_fields(
             relation,
-            req_secret_fields,
+            self.secret_fields,
             list(data),
             self._add_or_update_relation_secrets,
             data=data,
@@ -1503,7 +1504,8 @@ class Data(ABC):
         # we need to fetch it from the other side
 
         # Fix for the linter
-        if not self.my_secret_groups:
+        # import pdb; pdb.set_trace()
+        if self.my_secret_groups is None:
             raise DataInterfacesError("Secrets are not enabled for this component")
         component = self.component if group in self.my_secret_groups else relation.app
         return relation.data[component].get(secret_field)
@@ -1641,11 +1643,6 @@ class EventHandlers(Object):
         )
 
         self.framework.observe(
-            self.charm.on[relation_data.relation_name].relation_joined,
-            self._on_relation_joined_event,
-        )
-
-        self.framework.observe(
             charm.on.secret_changed,
             self._on_secret_changed_event,
         )
@@ -1654,21 +1651,12 @@ class EventHandlers(Object):
 
     def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
         """Event emitted when the relation is created."""
-        if not self.relation_data.local_unit.is_leader():
-            return
-
-        if self.relation_data.secret_fields:  # pyright: ignore [reportAttributeAccessIssue]
-            set_encoded_field(
-                event.relation,
-                self.relation_data.component,
-                REQ_SECRET_FIELDS,
-                self.relation_data.secret_fields,  # pyright: ignore [reportAttributeAccessIssue]
-            )
-
-    def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
-        """Event emitted when the relation is joined."""
-        # This should be used if the requirer has secrets
         pass
+
+    @abstractmethod
+    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
+        """Event emitted when the relation data has changed."""
+        raise NotImplementedError
 
     @abstractmethod
     def _on_secret_changed_event(self, event: SecretChangedEvent) -> None:
@@ -1687,11 +1675,6 @@ class EventHandlers(Object):
         """
         return diff(event, self.relation_data.data_component)
 
-    @abstractmethod
-    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
-        """Event emitted when the relation data has changed."""
-        raise NotImplementedError
-
 
 # Base ProviderData and RequiresData
 
@@ -1701,8 +1684,6 @@ class ProviderData(Data):
 
     RESOURCE_FIELD = "database"
 
-    MY_SECRET_GROUPS = [SECRET_GROUPS.USER, SECRET_GROUPS.TLS, SECRET_GROUPS.EXTRA]
-
     def __init__(
         self,
         model: Model,
@@ -1710,8 +1691,9 @@ class ProviderData(Data):
     ) -> None:
         super().__init__(model, relation_name)
         self.data_component = self.local_app
-        self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
-        self._my_secret_groups = self.MY_SECRET_GROUPS
+        self._secret_fields = []
+        self._remote_secret_fields = []
+        self._my_secret_groups = []
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
@@ -1766,7 +1748,7 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
-    MY_SECRET_GROUPS = [SECRET_GROUPS.MTLS]
+    SECRET_FIELDS = ["mtls-chain"]
 
     def __init__(
         self,
@@ -1778,11 +1760,13 @@ class RequirerData(Data):
         """Manager of base client relations."""
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
-        self._secret_fields = list(self.SECRET_LABEL_MAP.keys())
-        self._my_secret_groups = self.MY_SECRET_GROUPS
+        self._secret_fields = self.SECRET_FIELDS
+        self._remote_secret_fields = [
+            field for field in self.SECRET_LABEL_MAP.keys() if field not in self._secret_fields
+        ]
+        self._my_secret_groups = [self.SECRET_LABEL_MAP[field] for field in self._secret_fields]
         if additional_secret_fields:
-            self._secret_fields += additional_secret_fields
-            self._my_secret_groups += additional_secret_fields
+            self._remote_secret_fields += additional_secret_fields
         self.data_component = self.local_unit
 
     # Internal helper functions
@@ -1836,6 +1820,59 @@ class RequirerData(Data):
     fetch_my_relation_field = leader_only(Data.fetch_my_relation_field)
 
 
+class RequirerEventHandlers(EventHandlers):
+    """Requires-side of the relation."""
+
+    def __init__(self, charm: CharmBase, relation_data: RequirerData, unique_key: str = ""):
+        """Manager of base client relations."""
+        super().__init__(charm, relation_data, unique_key)
+
+    # Event handlers
+
+    def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
+        """Event emitted when the relation is created."""
+        if not self.relation_data.local_unit.is_leader():
+            return
+
+        if self.relation_data.remote_secret_fields:
+            set_encoded_field(
+                event.relation,
+                self.relation_data.component,
+                REQ_SECRET_FIELDS,
+                self.relation_data.remote_secret_fields,
+            )
+
+        if self.relation_data.secret_fields:
+            set_encoded_field(
+                event.relation,
+                self.relation_data.component,
+                PROVIDED_SECRET_FIELDS,
+                self.relation_data.secret_fields,
+            )
+
+
+class ProviderEventHandlers(EventHandlers):
+    """Provider-side of the relation."""
+
+    def __init__(self, charm: CharmBase, relation_data: ProviderData, unique_key: str = ""):
+        """Manager of base client relations."""
+        super().__init__(charm, relation_data, unique_key)
+
+    # Event handlers
+
+    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
+        """Event emitted when the relation data has changed."""
+        requested_secrets = get_encoded_list(event.relation, event.relation.app, REQ_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(
+            event.relation, event.relation.app, PROVIDED_SECRET_FIELDS
+        )
+        if requested_secrets is not None:
+            self.relation_data._secret_fields = requested_secrets
+
+        if provided_secrets is not None:
+            self.relation_data._remote_secret_fields = provided_secrets
+
+
 ################################################################################
 # Peer Relation Data
 ################################################################################
@@ -1886,7 +1923,7 @@ class DataPeerData(RequirerData, ProviderData):
                 secret_group = SECRET_GROUPS.get_group(group)
                 internal_field = self._field_to_internal_name(field, secret_group)
                 self._secret_label_map.setdefault(group, []).append(internal_field)
-                self._secret_fields.append(internal_field)
+                self._remote_secret_fields.append(internal_field)
 
     @property
     def scope(self) -> Optional[Scope]:
@@ -1904,7 +1941,7 @@ class DataPeerData(RequirerData, ProviderData):
     @property
     def static_secret_fields(self) -> List[str]:
         """Re-definition of the property in a way that dynamically extended list is retrieved."""
-        return self._secret_fields
+        return self._remote_secret_fields
 
     @property
     def secret_fields(self) -> List[str]:
@@ -1925,7 +1962,11 @@ class DataPeerData(RequirerData, ProviderData):
         relation = self._model.relations[self.relation_name][0]
         fields = []
 
-        ignores = [SECRET_GROUPS.get_group("user"), SECRET_GROUPS.get_group("tls")]
+        ignores = [
+            SECRET_GROUPS.get_group("user"),
+            SECRET_GROUPS.get_group("tls"),
+            SECRET_GROUPS.get_group("mtls"),
+        ]
         for group in SECRET_GROUPS.groups():
             if group in ignores:
                 continue
@@ -2809,7 +2850,7 @@ class DatabaseProviderData(ProviderData):
         self.update_relation_data(relation_id, {"subordinated": "true"})
 
 
-class DatabaseProviderEventHandlers(EventHandlers):
+class DatabaseProviderEventHandlers(ProviderEventHandlers):
     """Provider-side of the database relation handlers."""
 
     on = DatabaseProvidesEvents()  # pyright: ignore [reportAssignmentType]
@@ -2824,6 +2865,7 @@ class DatabaseProviderEventHandlers(EventHandlers):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
+        super()._on_relation_changed_event(event)
         # Leader only
         if not self.relation_data.local_unit.is_leader():
             return
@@ -2919,7 +2961,7 @@ class DatabaseRequirerData(RequirerData):
             return False
 
 
-class DatabaseRequirerEventHandlers(EventHandlers):
+class DatabaseRequirerEventHandlers(RequirerEventHandlers):
     """Requires-side of the relation."""
 
     on = DatabaseRequiresEvents()  # pyright: ignore [reportAssignmentType]
@@ -3286,7 +3328,7 @@ class KafkaProviderData(ProviderData):
         self.update_relation_data(relation_id, {"zookeeper-uris": zookeeper_uris})
 
 
-class KafkaProviderEventHandlers(EventHandlers):
+class KafkaProviderEventHandlers(ProviderEventHandlers):
     """Provider-side of the Kafka relation."""
 
     on = KafkaProvidesEvents()  # pyright: ignore [reportAssignmentType]
@@ -3298,6 +3340,7 @@ class KafkaProviderEventHandlers(EventHandlers):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
+        super()._on_relation_changed_event(event)
         # Leader only
         if not self.relation_data.local_unit.is_leader():
             return
@@ -3351,7 +3394,7 @@ class KafkaRequirerData(RequirerData):
         self._topic = value
 
 
-class KafkaRequirerEventHandlers(EventHandlers):
+class KafkaRequirerEventHandlers(RequirerEventHandlers):
     """Requires-side of the Kafka relation."""
 
     on = KafkaRequiresEvents()  # pyright: ignore [reportAssignmentType]
@@ -3530,7 +3573,7 @@ class OpenSearchProvidesData(ProviderData):
         self.update_relation_data(relation_id, {"version": version})
 
 
-class OpenSearchProvidesEventHandlers(EventHandlers):
+class OpenSearchProvidesEventHandlers(ProviderEventHandlers):
     """Provider-side of the OpenSearch relation."""
 
     on = OpenSearchProvidesEvents()  # pyright: ignore[reportAssignmentType]
@@ -3542,6 +3585,8 @@ class OpenSearchProvidesEventHandlers(EventHandlers):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
+        super()._on_relation_changed_event(event)
+
         # Leader only
         if not self.relation_data.local_unit.is_leader():
             return
@@ -3580,7 +3625,7 @@ class OpenSearchRequiresData(RequirerData):
         self.index = index
 
 
-class OpenSearchRequiresEventHandlers(EventHandlers):
+class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
     """Requires events side of the OpenSearch relation."""
 
     on = OpenSearchRequiresEvents()  # pyright: ignore[reportAssignmentType]
@@ -3700,7 +3745,7 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
 # Etcd related events
 
 
-class EtcdProvidesEvent(RelationEventWithSecret):
+class EtcdProviderEvent(RelationEventWithSecret):
     """Base class for Etcd events."""
 
     @property
@@ -3728,7 +3773,7 @@ class EtcdProvidesEvent(RelationEventWithSecret):
         return self.relation.data[self.relation.app].get("mtls-chain")
 
 
-class MTLSChainUpdatedEvent(EtcdProvidesEvent):
+class MTLSChainUpdatedEvent(EtcdProviderEvent):
     """Event emitted when the mtls relation is updated."""
 
     def __init__(
@@ -3748,7 +3793,7 @@ class MTLSChainUpdatedEvent(EtcdProvidesEvent):
         self.old_mtls_chain = snapshot["old_mtls_chain"]
 
 
-class EtcdProvidesEvents(CharmEvents):
+class EtcdProviderEvents(CharmEvents):
     """Etcd events.
 
     This class defines the events that Etcd can emit.
@@ -3757,11 +3802,11 @@ class EtcdProvidesEvents(CharmEvents):
     mtls_chain_updated = EventSource(MTLSChainUpdatedEvent)
 
 
-class EtcdRequiresEvent(DatabaseRequiresEvent):
+class EtcdRequirerEvent(DatabaseRequiresEvent):
     """Base class for Etcd requirer events."""
 
 
-class EtcdVersionUpdatedEvent(EtcdRequiresEvent):
+class EtcdVersionUpdatedEvent(EtcdRequirerEvent):
     """Event emitted when the etcd API version is updated."""
 
     @property
@@ -3773,7 +3818,7 @@ class EtcdVersionUpdatedEvent(EtcdRequiresEvent):
         return self.relation.data[self.relation.app].get("version")
 
 
-class EtcdRequiresEvents(CharmEvents):
+class EtcdRequirerEvents(CharmEvents):
     """Etcd events.
 
     This class defines the events that the etcd requirer can emit.
@@ -3787,7 +3832,7 @@ class EtcdRequiresEvents(CharmEvents):
 # Etcd Provides and Requires Objects
 
 
-class EtcdProvidesData(ProviderData):
+class EtcdProviderData(ProviderData):
     """Provider-side of the Etcd relation."""
 
     RESOURCE_FIELD = "prefix"
@@ -3814,18 +3859,19 @@ class EtcdProvidesData(ProviderData):
         self.update_relation_data(relation_id, {"version": version})
 
 
-class EtcdProvidesEventHandlers(EventHandlers):
+class EtcdProviderEventHandlers(ProviderEventHandlers):
     """Provider-side of the Etcd relation."""
 
-    on = EtcdProvidesEvents()  # pyright: ignore[reportAssignmentType]
+    on = EtcdProviderEvents()  # pyright: ignore[reportAssignmentType]
 
-    def __init__(self, charm: CharmBase, relation_data: EtcdProvidesData) -> None:
+    def __init__(self, charm: CharmBase, relation_data: EtcdProviderData) -> None:
         super().__init__(charm, relation_data)
         # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
+        super()._on_relation_changed_event(event)
         # register all new secrets with their labels
         new_data_keys = list(event.relation.data[event.app].keys())
         if any(newval for newval in new_data_keys if self.relation_data._is_secret_field(newval)):
@@ -3862,15 +3908,15 @@ class EtcdProvidesEventHandlers(EventHandlers):
         )
 
 
-class EtcdProvides(EtcdProvidesData, EtcdProvidesEventHandlers):
+class EtcdProvides(EtcdProviderData, EtcdProviderEventHandlers):
     """Provider-side of the Etcd relation."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        EtcdProvidesData.__init__(self, charm.model, relation_name)
-        EtcdProvidesEventHandlers.__init__(self, charm, self)
+        EtcdProviderData.__init__(self, charm.model, relation_name)
+        EtcdProviderEventHandlers.__init__(self, charm, self)
 
 
-class EtcdRequiresData(RequirerData):
+class EtcdRequirerData(RequirerData):
     """Requires data side of the Etcd relation."""
 
     def __init__(
@@ -3897,25 +3943,19 @@ class EtcdRequiresData(RequirerData):
         self.update_relation_data(relation_id, {"mtls-chain": mtls_chain})
 
 
-class EtcdRequiresEventHandlers(EventHandlers):
+class EtcdRequirerEventHandlers(RequirerEventHandlers):
     """Requires events side of the Etcd relation."""
 
-    on = EtcdRequiresEvents()  # pyright: ignore[reportAssignmentType]
+    on = EtcdRequirerEvents()  # pyright: ignore[reportAssignmentType]
 
-    def __init__(self, charm: CharmBase, relation_data: EtcdRequiresData) -> None:
+    def __init__(self, charm: CharmBase, relation_data: EtcdRequirerData) -> None:
         super().__init__(charm, relation_data)
         # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
 
-    def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
-        if not self.relation_data.local_unit.is_leader():
-            return
-
-        requested_secrets = get_encoded_list(event.relation, event.relation.app, REQ_SECRET_FIELDS)
-        if not requested_secrets:
-            logger.debug("Provider did not set the requested secrets. Deferring.")
-            event.defer()
-            return
+    def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
+        """Event emitted when the Etcd relation is created."""
+        super()._on_relation_created_event(event)
 
         payload = {
             "prefix": self.relation_data.prefix,
@@ -3999,7 +4039,7 @@ class EtcdRequiresEventHandlers(EventHandlers):
         )
 
 
-class EtcdRequires(EtcdRequiresData, EtcdRequiresEventHandlers):
+class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
     """Requires-side of the Etcd relation."""
 
     def __init__(
@@ -4011,7 +4051,7 @@ class EtcdRequires(EtcdRequiresData, EtcdRequiresEventHandlers):
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
-        EtcdRequiresData.__init__(
+        EtcdRequirerData.__init__(
             self,
             charm.model,
             relation_name,
@@ -4020,4 +4060,4 @@ class EtcdRequires(EtcdRequiresData, EtcdRequiresEventHandlers):
             extra_user_roles,
             additional_secret_fields,
         )
-        EtcdRequiresEventHandlers.__init__(self, charm, self)
+        EtcdRequirerEventHandlers.__init__(self, charm, self)

@@ -19,6 +19,7 @@ from parameterized import parameterized
 
 from charms.data_platform_libs.v0.data_interfaces import (
     PROV_SECRET_PREFIX,
+    PROVIDED_SECRET_FIELDS,
     REQ_SECRET_FIELDS,
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
@@ -347,7 +348,7 @@ class OpenSearchCharm(CharmBase):
 
 
 class DataProvidesBaseTests(ABC):
-    SECRET_FIELDS = ["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]
+    SECRET_FIELDS = ["username", "password", "uris", "tls", "tls-ca"]
     DATABASE_FIELD = "database"
 
     @pytest.fixture
@@ -491,12 +492,14 @@ class DataProvidesBaseTests(ABC):
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_set_credentials_secrets_provides_juju3_requires_juju2(self):
         """Asserts that the databag is used if one side of the relation is on Juju2."""
+        # remove requested fields from requirer side (emulation of juju2)
+        self.harness.update_relation_data(self.rel_id, "application", {REQ_SECRET_FIELDS: ""})
+        self.harness._emit_relation_changed(self.rel_id, self.app_name)
+
         # We pretend that the connection is initialized
         self.harness.update_relation_data(
             self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
         )
-
-        self.harness.update_relation_data(self.rel_id, "application", {REQ_SECRET_FIELDS: ""})
         # Set the credentials in the relation using the provides charm library.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
 
@@ -507,7 +510,6 @@ class DataProvidesBaseTests(ABC):
             ),  # Data is the diff stored between multiple relation changed events.
             "username": "test-username",
             "password": "test-password",
-            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
         }
 
 
@@ -818,7 +820,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                         self.DATABASE_FIELD: DATABASE,
                     }
                 ),
-                "requested-secrets": json.dumps(self.SECRET_FIELDS),
             }
         }
 
@@ -987,7 +988,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             ),  # Data is the diff stored between multiple relation changed events.   # noqa
             "replset": "rs0",
             "version": "1.0",
-            "requested-secrets": json.dumps(self.SECRET_FIELDS),
         }
 
         secret = self.harness.charm.model.get_secret(id=tls_secret_id)
@@ -1179,7 +1179,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
                         self.DATABASE_FIELD: DATABASE,
                     }
                 ),
-                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
             }
         }
 
@@ -1286,7 +1285,7 @@ class TestDatabaseProvidesDynamicSecrets(ABC, unittest.TestCase):
         # Here we're artificially constructing the illegal situation
         # We "hack in" a statically pre-requiested secret into the data structure
         # (since the test charm doesn't have one)
-        interface._secret_fields.append("some-secret")
+        interface._remote_secret_fields.append("some-secret")
 
         with pytest.raises(IllegalOperationError):
             interface.set_secret(relation_id, "something", "else")
@@ -1969,7 +1968,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "alias": "cluster1",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
+                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca"]',
+                "provided-secrets": '["mtls-chain"]',
             }
         }
 
@@ -1997,7 +1997,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "alias": "cluster1",
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
-            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca", "mtls-chain"]',
+            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca"]',
+            "provided-secrets": '["mtls-chain"]',
         }
 
         # Non-leader can try to fetch data (won't have anything thought, as only app data is there...
@@ -2252,7 +2253,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "somedata": "somevalue",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                REQ_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.secret_fields),
+                REQ_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.remote_secret_fields),
+                PROVIDED_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.secret_fields),
             }
         }
 
