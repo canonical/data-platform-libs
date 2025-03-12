@@ -1024,7 +1024,11 @@ class Data(ABC):
     def my_secret_groups(self) -> Optional[List[SecretGroup]]:
         """Local access to secrets field, in case they are being used."""
         if self.secrets_enabled:
-            return [self.SECRET_LABEL_MAP[field] for field in self._secret_fields]
+            return [
+                self.SECRET_LABEL_MAP[field]
+                for field in self._secret_fields
+                if field in self.SECRET_LABEL_MAP
+            ]
 
     # Mandatory overrides for internal/helper methods
 
@@ -1070,6 +1074,14 @@ class Data(ABC):
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
+        requested_secrets = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(relation, relation.app, PROVIDED_SECRET_FIELDS)
+        if requested_secrets is not None:
+            self._secret_fields = requested_secrets
+
+        if provided_secrets is not None:
+            self._remote_secret_fields = provided_secrets
+
         _, normal_fields = self._process_secret_fields(
             relation,
             self.secret_fields,
@@ -1504,7 +1516,6 @@ class Data(ABC):
         # we need to fetch it from the other side
 
         # Fix for the linter
-        # import pdb; pdb.set_trace()
         if self.my_secret_groups is None:
             raise DataInterfacesError("Secrets are not enabled for this component")
         component = self.component if group in self.my_secret_groups else relation.app
