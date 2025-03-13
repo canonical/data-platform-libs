@@ -1055,7 +1055,6 @@ class Data(ABC):
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
         """Fetch data available (directily or indirectly -- i.e. secrets) from the relation (remote app data)."""
-        self._load_secrets_from_databag(relation)
         if not relation.app:
             return {}
         return self._fetch_relation_data_with_secrets(
@@ -1116,7 +1115,6 @@ class Data(ABC):
         uri_to_databag=True,
     ) -> bool:
         """Update contents for Secret group. If the Secret doesn't exist, create it."""
-        self._load_secrets_from_databag(relation)
         if self._get_relation_secret(relation.id, group):
             return self._update_relation_secret(relation, group, secret_fields, data)
         else:
@@ -1214,12 +1212,11 @@ class Data(ABC):
 
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
         """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
-        req_secret_fields = []
         if relation.app:
-            req_secret_fields = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
+            self._load_secrets_from_databag(relation)
 
         _, normal_fields = self._process_secret_fields(
-            relation, req_secret_fields, fields, self._delete_relation_secret, fields=fields
+            relation, self.secret_fields, fields, self._delete_relation_secret, fields=fields
         )
         self._delete_relation_data_without_secrets(self.local_app, relation, list(normal_fields))
 
