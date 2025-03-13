@@ -1062,10 +1062,13 @@ class Data(ABC):
             relation.app, self.remote_secret_fields, relation, fields
         )
 
-    # Mandatory overrides for requirer, implemented for Provider and Peer
+    # Mandatory overrides for requirer and peer, implemented for Provider
     # Requirer uses local component and switched keys
     # _secret_fields -> PROVIDER_SECRET_FIELDS
     # _remote_secret_fields -> REQ_SECRET_FIELDS
+    # provider uses remote component and
+    # _secret_fields -> REQ_SECRET_FIELDS
+    # _remote_secret_fields -> PROVIDED_SECRET_FIELDS
     def _load_secrets_from_databag(self, relation: Relation) -> None:
         """Load secrets from the databag."""
         requested_secrets = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
@@ -1846,10 +1849,10 @@ class RequirerData(Data):
         """Load secrets from the databag."""
         requested_secrets = get_encoded_list(relation, self.component, REQ_SECRET_FIELDS)
         provided_secrets = get_encoded_list(relation, self.component, PROVIDED_SECRET_FIELDS)
-        if requested_secrets is not None:
+        if requested_secrets:
             self._remote_secret_fields = requested_secrets
 
-        if provided_secrets is not None:
+        if provided_secrets:
             self._secret_fields = provided_secrets
 
 
@@ -2127,6 +2130,16 @@ class DataPeerData(RequirerData, ProviderData):
             return False
         return True
 
+    def _load_secrets_from_databag(self, relation: Relation) -> None:
+        """Load secrets from the databag."""
+        requested_secrets = get_encoded_list(relation, self.component, REQ_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(relation, self.component, PROVIDED_SECRET_FIELDS)
+        if requested_secrets:
+            self._remote_secret_fields = requested_secrets
+
+        if provided_secrets:
+            self._secret_fields = provided_secrets
+
     ##########################################################################
     # Backwards compatibility / Upgrades
     ##########################################################################
@@ -2353,6 +2366,8 @@ class DataPeerData(RequirerData, ProviderData):
     @either_static_or_dynamic_secrets
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Update data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
+        self._load_secrets_from_databag(relation)
+
         _, normal_fields = self._process_secret_fields(
             relation,
             self.secret_fields,
@@ -2368,6 +2383,7 @@ class DataPeerData(RequirerData, ProviderData):
     @either_static_or_dynamic_secrets
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
         """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
+        self._load_secrets_from_databag(relation)
         if self.secret_fields and self.deleted_label:
             _, normal_fields = self._process_secret_fields(
                 relation,
