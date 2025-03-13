@@ -1055,16 +1055,33 @@ class Data(ABC):
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
         """Fetch data available (directily or indirectly -- i.e. secrets) from the relation (remote app data)."""
+        self._load_secrets_from_databag(relation)
         if not relation.app:
             return {}
         return self._fetch_relation_data_with_secrets(
             relation.app, self.remote_secret_fields, relation, fields
         )
 
+    # Mandatory overrides for requirer, implemented for Provider and Peer
+    # Requirer uses local component and switched keys
+    # _secret_fields -> PROVIDER_SECRET_FIELDS
+    # _remote_secret_fields -> REQ_SECRET_FIELDS
+    def _load_secrets_from_databag(self, relation: Relation) -> None:
+        """Load secrets from the databag."""
+        requested_secrets = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(relation, relation.app, PROVIDED_SECRET_FIELDS)
+        if requested_secrets is not None:
+            self._secret_fields = requested_secrets
+
+        if provided_secrets is not None:
+            self._remote_secret_fields = provided_secrets
+
     def _fetch_my_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> dict:
         """Fetch our own relation data."""
+        # load secrets
+        self._load_secrets_from_databag(relation)
         return self._fetch_relation_data_with_secrets(
             self.local_app,
             self.secret_fields,
@@ -1074,13 +1091,7 @@ class Data(ABC):
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
-        requested_secrets = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
-        provided_secrets = get_encoded_list(relation, relation.app, PROVIDED_SECRET_FIELDS)
-        if requested_secrets is not None:
-            self._secret_fields = requested_secrets
-
-        if provided_secrets is not None:
-            self._remote_secret_fields = provided_secrets
+        self._load_secrets_from_databag(relation)
 
         _, normal_fields = self._process_secret_fields(
             relation,
@@ -1102,6 +1113,7 @@ class Data(ABC):
         uri_to_databag=True,
     ) -> bool:
         """Update contents for Secret group. If the Secret doesn't exist, create it."""
+        self._load_secrets_from_databag(relation)
         if self._get_relation_secret(relation.id, group):
             return self._update_relation_secret(relation, group, secret_fields, data)
         else:
@@ -1829,6 +1841,16 @@ class RequirerData(Data):
 
     fetch_my_relation_data = leader_only(Data.fetch_my_relation_data)
     fetch_my_relation_field = leader_only(Data.fetch_my_relation_field)
+
+    def _load_secrets_from_databag(self, relation: Relation) -> None:
+        """Load secrets from the databag."""
+        requested_secrets = get_encoded_list(relation, self.component, REQ_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(relation, self.component, PROVIDED_SECRET_FIELDS)
+        if requested_secrets is not None:
+            self._remote_secret_fields = requested_secrets
+
+        if provided_secrets is not None:
+            self._secret_fields = provided_secrets
 
 
 class RequirerEventHandlers(EventHandlers):
