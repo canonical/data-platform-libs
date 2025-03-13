@@ -1917,7 +1917,6 @@ class DataPeerData(RequirerData, ProviderData):
     SECRET_FIELDS = []
     SECRET_FIELD_NAME = "internal_secret"
     SECRET_LABEL_MAP = {}
-    MY_SECRET_GROUPS = []
 
     def __init__(
         self,
@@ -2428,7 +2427,7 @@ class DataPeerData(RequirerData, ProviderData):
     fetch_my_relation_field = Data.fetch_my_relation_field
 
 
-class DataPeerEventHandlers(EventHandlers):
+class DataPeerEventHandlers(RequirerEventHandlers):
     """Requires-side of the relation."""
 
     def __init__(self, charm: CharmBase, relation_data: RequirerData, unique_key: str = ""):
