@@ -1134,8 +1134,12 @@ class Data(ABC):
         label = self._generate_secret_label(self.relation_name, relation.id, group_mapping)
         secret = self.secrets.add(label, content, relation)
 
-        # According to lint we may not have a Secret ID
-        if uri_to_databag and secret.meta and secret.meta.id:
+        if uri_to_databag:
+            # According to lint we may not have a Secret ID
+            if not secret.meta or not secret.meta.id:
+                logging.error("Secret is missing Secret ID")
+                raise SecretError("Secret added but is missing Secret ID")
+
             self.set_secret_uri(relation, group_mapping, secret.meta.id)
 
         # Return the content that was added
