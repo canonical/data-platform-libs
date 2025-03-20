@@ -1135,11 +1135,7 @@ class Data(ABC):
         secret = self.secrets.add(label, content, relation)
 
         # According to lint we may not have a Secret ID
-        if not secret.meta or not secret.meta.id:
-            return False
-
-        if uri_to_databag:
-            logging.error("Secret is missing Secret ID")
+        if uri_to_databag and secret.meta and secret.meta.id:
             self.set_secret_uri(relation, group_mapping, secret.meta.id)
 
         # Return the content that was added
