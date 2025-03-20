@@ -1714,7 +1714,7 @@ class ProviderData(Data):
         super().__init__(model, relation_name)
         self.data_component = self.local_app
         self._secret_fields = []
-        self._remote_secret_fields = []
+        self._remote_secret_fields = list(self.SECRET_FIELDS)
         self._my_secret_groups = []
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
