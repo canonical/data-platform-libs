@@ -1068,15 +1068,10 @@ class Data(ABC):
     # provider uses remote component and
     # _secret_fields -> REQ_SECRET_FIELDS
     # _remote_secret_fields -> PROVIDED_SECRET_FIELDS
+    @abstractmethod
     def _load_secrets_from_databag(self, relation: Relation) -> None:
         """Load secrets from the databag."""
-        requested_secrets = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
-        provided_secrets = get_encoded_list(relation, relation.app, PROVIDED_SECRET_FIELDS)
-        if requested_secrets is not None:
-            self._secret_fields = requested_secrets
-
-        if provided_secrets is not None:
-            self._remote_secret_fields = provided_secrets
+        raise NotImplementedError
 
     def _fetch_my_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
@@ -1117,8 +1112,8 @@ class Data(ABC):
         """Update contents for Secret group. If the Secret doesn't exist, create it."""
         if self._get_relation_secret(relation.id, group):
             return self._update_relation_secret(relation, group, secret_fields, data)
-        else:
-            return self._add_relation_secret(relation, group, secret_fields, data, uri_to_databag)
+
+        return self._add_relation_secret(relation, group, secret_fields, data, uri_to_databag)
 
     @juju_secrets_only
     def _add_relation_secret(
@@ -1140,7 +1135,11 @@ class Data(ABC):
         secret = self.secrets.add(label, content, relation)
 
         # According to lint we may not have a Secret ID
-        if uri_to_databag and secret.meta and secret.meta.id:
+        if not secret.meta or not secret.meta.id:
+            return False
+
+        if uri_to_databag:
+            logging.error("Secret is missing Secret ID")
             self.set_secret_uri(relation, group_mapping, secret.meta.id)
 
         # Return the content that was added
@@ -1714,7 +1713,6 @@ class ProviderData(Data):
     ) -> None:
         super().__init__(model, relation_name)
         self.data_component = self.local_app
-        self._secret_fields = []
         self._remote_secret_fields = []
         self._my_secret_groups = []
 
@@ -1766,6 +1764,16 @@ class ProviderData(Data):
 
     fetch_my_relation_data = leader_only(Data.fetch_my_relation_data)
     fetch_my_relation_field = leader_only(Data.fetch_my_relation_field)
+
+    def _load_secrets_from_databag(self, relation: Relation) -> None:
+        """Load secrets from the databag."""
+        requested_secrets = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(relation, relation.app, PROVIDED_SECRET_FIELDS)
+        if requested_secrets is not None:
+            self._secret_fields = requested_secrets
+
+        if provided_secrets is not None:
+            self._remote_secret_fields = provided_secrets
 
 
 class RequirerData(Data):
