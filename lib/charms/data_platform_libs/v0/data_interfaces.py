@@ -1780,7 +1780,7 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
-    SECRET_FIELDS = ["username", "password", "uris", "tls", "tls-ca"]
+    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
 
     def __init__(
         self,

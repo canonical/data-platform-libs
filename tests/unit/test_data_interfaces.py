@@ -85,7 +85,7 @@ provides:
     interface: {OPENSEARCH_RELATION_INTERFACE}
 """
 
-
+SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
 #
 # Helper functions
 #
@@ -348,7 +348,7 @@ class OpenSearchCharm(CharmBase):
 
 
 class DataProvidesBaseTests(ABC):
-    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
+    SECRET_FIELDS = SECRET_FIELDS
     DATABASE_FIELD = "database"
 
     @pytest.fixture
@@ -1968,7 +1968,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "alias": "cluster1",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+                "requested-secrets": json.dumps(SECRET_FIELDS),
                 "provided-secrets": '["mtls-chain"]',
             }
         }
@@ -1997,7 +1997,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "alias": "cluster1",
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
-            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
+            "requested-secrets": json.dumps(SECRET_FIELDS),
             "provided-secrets": '["mtls-chain"]',
         }
 
