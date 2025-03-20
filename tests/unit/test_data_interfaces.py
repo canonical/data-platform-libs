@@ -348,7 +348,7 @@ class OpenSearchCharm(CharmBase):
 
 
 class DataProvidesBaseTests(ABC):
-    SECRET_FIELDS = ["username", "password", "uris", "tls", "tls-ca"]
+    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
     DATABASE_FIELD = "database"
 
     @pytest.fixture
@@ -1968,7 +1968,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "alias": "cluster1",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                "requested-secrets": '["username", "password", "uris", "tls", "tls-ca"]',
+                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
                 "provided-secrets": '["mtls-chain"]',
             }
         }
@@ -1997,7 +1997,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "alias": "cluster1",
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
-            "requested-secrets": '["username", "password", "uris", "tls", "tls-ca"]',
+            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris"]',
             "provided-secrets": '["mtls-chain"]',
         }
 
