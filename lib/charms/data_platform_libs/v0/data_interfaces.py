@@ -982,8 +982,8 @@ class Data(ABC):
         self.component = self.local_app if self.SCOPE == Scope.APP else self.local_unit
         self.secrets = SecretCache(self._model, self.component)
         self.data_component = None
-        self._secret_fields = self.SECRET_FIELDS
-        self._remote_secret_fields = []
+        self._secret_fields = []
+        self._remote_secret_fields = list(self.SECRET_FIELDS)
         # TO BE REPLACED BY PROVIDER AND REQUIRER
         self._my_secret_groups = []
 
@@ -1713,6 +1713,7 @@ class ProviderData(Data):
     ) -> None:
         super().__init__(model, relation_name)
         self.data_component = self.local_app
+        self._secret_fields = []
         self._remote_secret_fields = []
         self._my_secret_groups = []
 
@@ -1779,7 +1780,7 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
-    SECRET_FIELDS = ["mtls-chain"]
+    SECRET_FIELDS = ["username", "password", "uris", "tls", "tls-ca"]
 
     def __init__(
         self,
@@ -1791,9 +1792,11 @@ class RequirerData(Data):
         """Manager of base client relations."""
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
-        self._secret_fields = self.SECRET_FIELDS
-        self._remote_secret_fields = [
-            field for field in self.SECRET_LABEL_MAP.keys() if field not in self._secret_fields
+        self._remote_secret_fields = list(self.SECRET_FIELDS)
+        self._secret_fields = [
+            field
+            for field in self.SECRET_LABEL_MAP.keys()
+            if field not in self._remote_secret_fields
         ]
         self._my_secret_groups = [self.SECRET_LABEL_MAP[field] for field in self._secret_fields]
         if additional_secret_fields:
