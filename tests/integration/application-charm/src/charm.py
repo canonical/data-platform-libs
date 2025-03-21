@@ -13,6 +13,7 @@ from typing import Optional, Tuple
 
 from ops import Relation
 from ops.charm import ActionEvent, CharmBase
+from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus
 
@@ -36,6 +37,11 @@ if DATA_INTERFACES_VERSION > 34:
         KafkaRequirerEventHandlers,
     )
 
+if DATA_INTERFACES_VERSION > 41:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        KafkaConnectRequires,
+    )
+
 logger = logging.getLogger(__name__)
 
 # Extra roles that this application needs when interacting with the database.
@@ -43,6 +49,7 @@ EXTRA_USER_ROLES = "SUPERUSER"
 EXTRA_USER_ROLES_KAFKA = "producer,consumer"
 EXTRA_USER_ROLES_OPENSEARCH = "admin,default"
 CONSUMER_GROUP_PREFIX = "test-prefix"
+BAD_URL = "http://badurl"
 
 
 class ApplicationCharm(CharmBase):
@@ -169,6 +176,25 @@ class ApplicationCharm(CharmBase):
             self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
         )
         self.framework.observe(self.kafka.on.topic_created, self._on_kafka_topic_created)
+
+        # Kafka Connect events
+
+        if DATA_INTERFACES_VERSION > 41:
+
+            self.connect_source = KafkaConnectRequires(
+                self, "connect-source", "http://10.10.10.10:8080"
+            )
+
+            self.connect_sink = KafkaConnectRequires(self, "connect-sink", BAD_URL)
+
+            self.framework.observe(
+                self.connect_source.on.integration_created, self._on_connect_integration_created
+            )
+
+            self.framework.observe(
+                self.connect_source.on.integration_endpoints_changed,
+                self._on_connect_endpoints_changed,
+            )
 
         # OpenSearch events
 
@@ -333,6 +359,16 @@ class ApplicationCharm(CharmBase):
         """Event triggered when a topic was created for this application."""
         logger.info("On kafka topic created")
         self.unit.status = ActiveStatus("kafka_topic_created")
+
+    def _on_connect_integration_created(self, _: EventBase):
+        # TODO: def _on_connect_integration_created(self, _: IntegrationCreatedEvent):
+        """Event triggered when Kafka Connect integration credentials are created for this application."""
+        self.unit.status = ActiveStatus("connect_integration_created")
+
+    def _on_connect_endpoints_changed(self, _: EventBase):
+        # TODO: def _on_connect_endpoints_changed(self, _: IntegrationEndpointsChangedEvent):
+        """Event triggered when Kafka Connect REST endpoints change."""
+        self.unit.status = ActiveStatus("connect_endpoints_changed")
 
     def _on_opensearch_index_created(self, _: IndexCreatedEvent):
         """Event triggered when an index was created for this application."""
