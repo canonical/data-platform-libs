@@ -2540,7 +2540,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
 
 
 ################################################################################
-# Cross-charm Relatoins Data Handling and Evenets
+# Cross-charm Relations Data Handling and Events
 ################################################################################
 
 # Generic events
