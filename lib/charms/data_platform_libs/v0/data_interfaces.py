@@ -962,6 +962,7 @@ class Data(ABC):
         "username": SECRET_GROUPS.USER,
         "password": SECRET_GROUPS.USER,
         "uris": SECRET_GROUPS.USER,
+        "read-only-uris": SECRET_GROUPS.USER,
         "tls": SECRET_GROUPS.TLS,
         "tls-ca": SECRET_GROUPS.TLS,
         "mtls-chain": SECRET_GROUPS.MTLS,
@@ -1780,7 +1781,7 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
-    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
+    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]
 
     def __init__(
         self,
@@ -2783,6 +2784,19 @@ class DatabaseRequiresEvent(RelationEventWithSecret):
         return self.relation.data[self.relation.app].get("uris")
 
     @property
+    def read_only_uris(self) -> Optional[str]:
+        """Returns the readonly connection URIs."""
+        if not self.relation.app:
+            return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("user")
+            if secret:
+                return secret.get("read-only-uris")
+
+        return self.relation.data[self.relation.app].get("read-only-uris")
+
+    @property
     def version(self) -> Optional[str]:
         """Returns the version of the database.
 
@@ -2887,6 +2901,15 @@ class DatabaseProviderData(ProviderData):
             uris: connection URIs.
         """
         self.update_relation_data(relation_id, {"uris": uris})
+
+    def set_read_only_uris(self, relation_id: int, uris: str) -> None:
+        """Set the database readonly connection URIs in the application relation databag.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            uris: connection URIs.
+        """
+        self.update_relation_data(relation_id, {"read-only-uris": uris})
 
     def set_version(self, relation_id: int, version: str) -> None:
         """Set the database version in the application relation databag.

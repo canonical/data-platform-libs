@@ -85,7 +85,7 @@ provides:
     interface: {OPENSEARCH_RELATION_INTERFACE}
 """
 
-SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris"]
+SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]
 #
 # Helper functions
 #
@@ -946,6 +946,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         self.harness.charm.provider.set_tls(self.rel_id, "True")
         self.harness.charm.provider.set_tls_ca(self.rel_id, "Canonical")
         self.harness.charm.provider.set_uris(self.rel_id, "host1:port,host2:port")
+        self.harness.charm.provider.set_read_only_uris(self.rel_id, "host2:port")
         self.harness.charm.provider.set_version(self.rel_id, "1.0")
 
         # Check that the additional fields are present in the relation.
@@ -957,6 +958,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             "tls": "True",
             "tls-ca": "Canonical",
             "uris": "host1:port,host2:port",
+            "read-only-uris": "host2:port",
             "version": "1.0",
         }
 
