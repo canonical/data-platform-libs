@@ -275,7 +275,11 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Relation, Unit, WaitingStatus
-from pydantic import BaseModel, root_validator, validator
+
+try:
+    from pydantic.v1 import BaseModel, root_validator, validator
+except ModuleNotFoundError:
+    from pydantic import BaseModel, root_validator, validator
 
 # The unique Charmhub library identifier, never change it
 LIBID = "156258aefb79435a93d933409a8c8684"
@@ -285,9 +289,9 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 18
+LIBPATCH = 19
 
-PYDEPS = ["pydantic>=1.10,<2", "poetry-core"]
+PYDEPS = ["pydantic<3", "poetry-core"]
 
 logger = logging.getLogger(__name__)
 
