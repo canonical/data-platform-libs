@@ -1058,6 +1058,7 @@ class Data(ABC):
         """Fetch data available (directily or indirectly -- i.e. secrets) from the relation (remote app data)."""
         if not relation.app:
             return {}
+        self._load_secrets_from_databag(relation)
         return self._fetch_relation_data_with_secrets(
             relation.app, self.remote_secret_fields, relation, fields
         )
