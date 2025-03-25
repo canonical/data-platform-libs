@@ -1857,8 +1857,8 @@ class RequirerData(Data):
 
     def _load_secrets_from_databag(self, relation: Relation) -> None:
         """Load secrets from the databag."""
-        requested_secrets = get_encoded_list(relation, self.component, REQ_SECRET_FIELDS)
-        provided_secrets = get_encoded_list(relation, self.component, PROVIDED_SECRET_FIELDS)
+        requested_secrets = get_encoded_list(relation, self.local_unit, REQ_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(relation, self.local_unit, PROVIDED_SECRET_FIELDS)
         if requested_secrets:
             self._remote_secret_fields = requested_secrets
 
@@ -1881,17 +1881,32 @@ class RequirerEventHandlers(EventHandlers):
             return
 
         if self.relation_data.remote_secret_fields:
+            if self.relation_data.SCOPE == Scope.APP:
+                set_encoded_field(
+                    event.relation,
+                    self.relation_data.local_app,
+                    REQ_SECRET_FIELDS,
+                    self.relation_data.remote_secret_fields,
+                )
+
             set_encoded_field(
                 event.relation,
-                self.relation_data.component,
+                self.relation_data.local_unit,
                 REQ_SECRET_FIELDS,
                 self.relation_data.remote_secret_fields,
             )
 
         if self.relation_data.secret_fields:
+            if self.relation_data.SCOPE == Scope.APP:
+                set_encoded_field(
+                    event.relation,
+                    self.relation_data.local_app,
+                    PROVIDED_SECRET_FIELDS,
+                    self.relation_data.secret_fields,
+                )
             set_encoded_field(
                 event.relation,
-                self.relation_data.component,
+                self.relation_data.local_unit,
                 PROVIDED_SECRET_FIELDS,
                 self.relation_data.secret_fields,
             )
