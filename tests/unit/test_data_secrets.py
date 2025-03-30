@@ -54,6 +54,36 @@ def test_cached_secret_is_cached(harness, mocker):
 
 
 @pytest.mark.usefixtures("only_with_juju_secrets")
+def test_add_multiple_secrets(harness):
+    """Test that more than one secret key:value can be set."""
+    cache = SecretCache(harness.charm)
+
+    secret = cache.get("label1")
+    assert not secret
+    cache.add("label1", {"best-2020-picture": "Nomadland"}, scope="app")
+
+    secret = cache.get("label1")
+    assert secret
+    content = secret.get_content()
+    content["best-2021-picture"] = "CODA"
+    secret.set_content(content)
+
+    secret = cache.get("label1")
+    assert secret
+    content = secret.get_content()
+    content["best-2022-picture"] = "Everything Everywhere All at Once"
+    secret.set_content(content)
+
+    # Verify that it made it to Juju, not just to the cache.
+    secret = harness.model.get_secret(label="label1")
+    assert secret.get_content() == {
+        "best-2020-picture": "Nomadland",
+        "best-2021-picture": "CODA",
+        "best-2022-picture": "Everything Everywhere All at Once",
+    }
+
+
+@pytest.mark.usefixtures("only_with_juju_secrets")
 def test_secret_cache(harness):
     """Testing the SecretCache class."""
     cache = SecretCache(harness.charm)
