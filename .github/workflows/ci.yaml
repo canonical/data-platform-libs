@@ -71,6 +71,7 @@ jobs:
           - integration-s3
           - integration-opensearch
           - integration-kafka
+          - integration-spark-sa
         juju-version:
           - juju-bootstrap-option: "2.9.51"
             juju-snap-channel: "2.9/stable"
