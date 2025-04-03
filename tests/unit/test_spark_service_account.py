@@ -187,7 +187,7 @@ class TestSparkServiceAccountProvider:
         self.context.run(self.context.on.relation_broken(relation), state1)
         mock_delete_sa.assert_called_with(SERVICE_ACCOUNT)
 
-
+@pytest.mark.usefixtures("only_with_juju_secrets")
 class TestSparkServiceAccountRequirer:
 
     def get_relation(self) -> Relation:
