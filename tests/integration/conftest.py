@@ -111,6 +111,22 @@ async def s3_charm(ops_test: OpsTest):
 
 
 @pytest.fixture(scope="module")
+async def application_spark_service_account_charm(ops_test: OpsTest):
+    """Build the aplication-spark-service-account charm."""
+    charm_path = "tests/integration/application-spark-service-account-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def spark_service_account_charm(ops_test: OpsTest):
+    """Build the spark-service-account charm."""
+    charm_path = "tests/integration/spark-service-account-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
 async def kafka_charm(ops_test: OpsTest):
     """Build the Kafka charm."""
     charm_path = "tests/integration/kafka-charm"

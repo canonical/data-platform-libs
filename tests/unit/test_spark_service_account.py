@@ -169,7 +169,7 @@ class TestSparkServiceAccountProvider:
         assert "secret-extra" in local_app_data
 
         secret_id = local_app_data["secret-extra"]
-        secret_content = state2.get_secret(id=secret_id).latest_content
+        secret_content = state3.get_secret(id=secret_id).latest_content
         assert secret_content is not None
         spark_properties = json.loads(secret_content["spark-properties"])
         assert spark_properties["newkey"] == "newval"
@@ -184,8 +184,7 @@ class TestSparkServiceAccountProvider:
             }
         )
         state1 = State(relations=[relation], leader=True)
-        state2 = self.context.run(self.context.on.relation_changed(relation), state1)
-        self.context.run(self.context.on.relation_broken(relation), state2)
+        self.context.run(self.context.on.relation_broken(relation), state1)
         mock_delete_sa.assert_called_with(SERVICE_ACCOUNT)
 
 
