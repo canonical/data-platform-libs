@@ -100,6 +100,10 @@ jobs:
             ubuntu-versions: {series: focal}
           - tox-environments: integration-kafka
             ubuntu-versions: {series: focal}
+          - tox-environments: integration-spark-sa
+            juju-version: {juju-snap-channel: "2.9/stable"}
+          - tox-environments: integration-spark-sa
+            ubuntu-versions: {series: focal}
     name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
     needs:
       - lint
