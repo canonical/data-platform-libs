@@ -3865,7 +3865,7 @@ class EtcdProviderEvent(RelationEventWithSecret):
                 if content:
                     return content.get("mtls-chain")
 
-        return self.relation.data[self.relation.app].get("mtls-chain")
+        raise SecretsUnavailableError("Secrets unavailable on current Juju version")
 
 
 class MTLSChainUpdatedEvent(EtcdProviderEvent):
@@ -4009,6 +4009,8 @@ class EtcdProvides(EtcdProviderData, EtcdProviderEventHandlers):
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         EtcdProviderData.__init__(self, charm.model, relation_name)
         EtcdProviderEventHandlers.__init__(self, charm, self)
+        if not self.secrets_enabled:
+            raise SecretsUnavailableError("Secrets unavailable on current Juju version")
 
 
 class EtcdRequirerData(RequirerData):
@@ -4156,3 +4158,5 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
             additional_secret_fields,
         )
         EtcdRequirerEventHandlers.__init__(self, charm, self)
+        if not self.secrets_enabled:
+            raise SecretsUnavailableError("Secrets unavailable on current Juju version")
