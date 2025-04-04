@@ -3857,15 +3857,15 @@ class EtcdProviderEvent(RelationEventWithSecret):
         if not self.relation.app:
             return None
 
-        if self.secrets_enabled:
-            secret_field = f"{PROV_SECRET_PREFIX}{SECRET_GROUPS.MTLS}"
-            if secret_uri := self.relation.data[self.app].get(secret_field):
-                secret = self.framework.model.get_secret(id=secret_uri)
-                content = secret.get_content(refresh=True)
-                if content:
-                    return content.get("mtls-chain")
+        if not self.secrets_enabled:
+            raise SecretsUnavailableError("Secrets unavailable on current Juju version")
 
-        raise SecretsUnavailableError("Secrets unavailable on current Juju version")
+        secret_field = f"{PROV_SECRET_PREFIX}{SECRET_GROUPS.MTLS}"
+        if secret_uri := self.relation.data[self.app].get(secret_field):
+            secret = self.framework.model.get_secret(id=secret_uri)
+            content = secret.get_content(refresh=True)
+            if content:
+                return content.get("mtls-chain")
 
 
 class MTLSChainUpdatedEvent(EtcdProviderEvent):
