@@ -18,8 +18,8 @@ from ops.testing import Harness
 from parameterized import parameterized
 
 from charms.data_platform_libs.v0.data_interfaces import (
+    PROV_SECRET_FIELDS,
     PROV_SECRET_PREFIX,
-    PROVIDED_SECRET_FIELDS,
     REQ_SECRET_FIELDS,
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
@@ -603,7 +603,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         interface.update_relation_data(relation_id, {"secret-field": "bla"})
         interface.update_relation_data(relation_id, {"mysecret1@mygroup": "bla"})
 
-        assert set(interface.secret_fields) == {
+        assert set(interface.local_secret_fields) == {
             f"secret-field-{scope}",
             "secret-field",
             "mysecret1@mygroup",
@@ -2256,7 +2256,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
                 REQ_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.remote_secret_fields),
-                PROVIDED_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.secret_fields),
+                PROV_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.local_secret_fields),
             }
         }
 

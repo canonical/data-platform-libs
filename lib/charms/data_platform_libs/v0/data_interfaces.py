@@ -351,8 +351,8 @@ deleted - key that were deleted"""
 
 
 PROV_SECRET_PREFIX = "secret-"
+PROV_SECRET_FIELDS = "provided-secrets"
 REQ_SECRET_FIELDS = "requested-secrets"
-PROVIDED_SECRET_FIELDS = "provided-secrets"
 GROUP_MAPPING_FIELD = "secret_group_mapping"
 GROUP_SEPARATOR = "@"
 
@@ -983,10 +983,8 @@ class Data(ABC):
         self.component = self.local_app if self.SCOPE == Scope.APP else self.local_unit
         self.secrets = SecretCache(self._model, self.component)
         self.data_component = None
-        self._secret_fields = []
+        self._local_secret_fields = []
         self._remote_secret_fields = list(self.SECRET_FIELDS)
-        # TO BE REPLACED BY PROVIDER AND REQUIRER
-        self._my_secret_groups = []
 
     @property
     def relations(self) -> List[Relation]:
@@ -1010,10 +1008,10 @@ class Data(ABC):
         return self.SECRET_LABEL_MAP
 
     @property
-    def secret_fields(self) -> Optional[List[str]]:
+    def local_secret_fields(self) -> Optional[List[str]]:
         """Local access to secrets field, in case they are being used."""
         if self.secrets_enabled:
-            return self._secret_fields
+            return self._local_secret_fields
 
     @property
     def remote_secret_fields(self) -> Optional[List[str]]:
@@ -1027,7 +1025,7 @@ class Data(ABC):
         if self.secrets_enabled:
             return [
                 self.SECRET_LABEL_MAP[field]
-                for field in self._secret_fields
+                for field in self._local_secret_fields
                 if field in self.SECRET_LABEL_MAP
             ]
 
@@ -1052,6 +1050,18 @@ class Data(ABC):
         if secret_uri := self.get_secret_uri(relation, group_mapping):
             return self.secrets.get(label, secret_uri)
 
+    # Mandatory overrides for requirer and peer, implemented for Provider
+    # Requirer uses local component and switched keys
+    # _local_secret_fields -> PROV_SECRET_FIELDS
+    # _remote_secret_fields -> REQ_SECRET_FIELDS
+    # provider uses remote component and
+    # _local_secret_fields -> REQ_SECRET_FIELDS
+    # _remote_secret_fields -> PROV_SECRET_FIELDS
+    @abstractmethod
+    def _load_secrets_from_databag(self, relation: Relation) -> None:
+        """Load secrets from the databag."""
+        raise NotImplementedError
+
     def _fetch_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
@@ -1063,18 +1073,6 @@ class Data(ABC):
             relation.app, self.remote_secret_fields, relation, fields
         )
 
-    # Mandatory overrides for requirer and peer, implemented for Provider
-    # Requirer uses local component and switched keys
-    # _secret_fields -> PROVIDER_SECRET_FIELDS
-    # _remote_secret_fields -> REQ_SECRET_FIELDS
-    # provider uses remote component and
-    # _secret_fields -> REQ_SECRET_FIELDS
-    # _remote_secret_fields -> PROVIDED_SECRET_FIELDS
-    @abstractmethod
-    def _load_secrets_from_databag(self, relation: Relation) -> None:
-        """Load secrets from the databag."""
-        raise NotImplementedError
-
     def _fetch_my_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> dict:
@@ -1083,7 +1081,7 @@ class Data(ABC):
         self._load_secrets_from_databag(relation)
         return self._fetch_relation_data_with_secrets(
             self.local_app,
-            self.secret_fields,
+            self.local_secret_fields,
             relation,
             fields,
         )
@@ -1094,7 +1092,7 @@ class Data(ABC):
 
         _, normal_fields = self._process_secret_fields(
             relation,
-            self.secret_fields,
+            self.local_secret_fields,
             list(data),
             self._add_or_update_relation_secrets,
             data=data,
@@ -1217,7 +1215,7 @@ class Data(ABC):
             self._load_secrets_from_databag(relation)
 
         _, normal_fields = self._process_secret_fields(
-            relation, self.secret_fields, fields, self._delete_relation_secret, fields=fields
+            relation, self.local_secret_fields, fields, self._delete_relation_secret, fields=fields
         )
         self._delete_relation_data_without_secrets(self.local_app, relation, list(normal_fields))
 
@@ -1715,9 +1713,8 @@ class ProviderData(Data):
     ) -> None:
         super().__init__(model, relation_name)
         self.data_component = self.local_app
-        self._secret_fields = []
+        self._local_secret_fields = []
         self._remote_secret_fields = list(self.SECRET_FIELDS)
-        self._my_secret_groups = []
 
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
         """Set values for fields not caring whether it's a secret or not."""
@@ -1771,9 +1768,9 @@ class ProviderData(Data):
     def _load_secrets_from_databag(self, relation: Relation) -> None:
         """Load secrets from the databag."""
         requested_secrets = get_encoded_list(relation, relation.app, REQ_SECRET_FIELDS)
-        provided_secrets = get_encoded_list(relation, relation.app, PROVIDED_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(relation, relation.app, PROV_SECRET_FIELDS)
         if requested_secrets is not None:
-            self._secret_fields = requested_secrets
+            self._local_secret_fields = requested_secrets
 
         if provided_secrets is not None:
             self._remote_secret_fields = provided_secrets
@@ -1795,12 +1792,11 @@ class RequirerData(Data):
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
         self._remote_secret_fields = list(self.SECRET_FIELDS)
-        self._secret_fields = [
+        self._local_secret_fields = [
             field
             for field in self.SECRET_LABEL_MAP.keys()
             if field not in self._remote_secret_fields
         ]
-        self._my_secret_groups = [self.SECRET_LABEL_MAP[field] for field in self._secret_fields]
         if additional_secret_fields:
             self._remote_secret_fields += additional_secret_fields
         self.data_component = self.local_unit
@@ -1858,12 +1854,12 @@ class RequirerData(Data):
     def _load_secrets_from_databag(self, relation: Relation) -> None:
         """Load secrets from the databag."""
         requested_secrets = get_encoded_list(relation, self.local_unit, REQ_SECRET_FIELDS)
-        provided_secrets = get_encoded_list(relation, self.local_unit, PROVIDED_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(relation, self.local_unit, PROV_SECRET_FIELDS)
         if requested_secrets:
             self._remote_secret_fields = requested_secrets
 
         if provided_secrets:
-            self._secret_fields = provided_secrets
+            self._local_secret_fields = provided_secrets
 
 
 class RequirerEventHandlers(EventHandlers):
@@ -1896,19 +1892,19 @@ class RequirerEventHandlers(EventHandlers):
                 self.relation_data.remote_secret_fields,
             )
 
-        if self.relation_data.secret_fields:
+        if self.relation_data.local_secret_fields:
             if self.relation_data.SCOPE == Scope.APP:
                 set_encoded_field(
                     event.relation,
                     self.relation_data.local_app,
-                    PROVIDED_SECRET_FIELDS,
-                    self.relation_data.secret_fields,
+                    PROV_SECRET_FIELDS,
+                    self.relation_data.local_secret_fields,
                 )
             set_encoded_field(
                 event.relation,
                 self.relation_data.local_unit,
-                PROVIDED_SECRET_FIELDS,
-                self.relation_data.secret_fields,
+                PROV_SECRET_FIELDS,
+                self.relation_data.local_secret_fields,
             )
 
 
@@ -1924,11 +1920,9 @@ class ProviderEventHandlers(EventHandlers):
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation data has changed."""
         requested_secrets = get_encoded_list(event.relation, event.relation.app, REQ_SECRET_FIELDS)
-        provided_secrets = get_encoded_list(
-            event.relation, event.relation.app, PROVIDED_SECRET_FIELDS
-        )
+        provided_secrets = get_encoded_list(event.relation, event.relation.app, PROV_SECRET_FIELDS)
         if requested_secrets is not None:
-            self.relation_data._secret_fields = requested_secrets
+            self.relation_data._local_secret_fields = requested_secrets
 
         if provided_secrets is not None:
             self.relation_data._remote_secret_fields = provided_secrets
@@ -1976,7 +1970,6 @@ class DataPeerData(RequirerData, ProviderData):
         self._additional_secret_group_mapping = additional_secret_group_mapping
 
         for group, fields in additional_secret_group_mapping.items():
-            self._my_secret_groups.append(SecretGroup(group))
             if group not in SECRET_GROUPS.groups():
                 setattr(SECRET_GROUPS, group, group)
             for field in fields:
@@ -2004,7 +1997,7 @@ class DataPeerData(RequirerData, ProviderData):
         return self._remote_secret_fields
 
     @property
-    def secret_fields(self) -> List[str]:
+    def local_secret_fields(self) -> List[str]:
         """Re-definition of the property in a way that dynamically extended list is retrieved."""
         return (
             self.static_secret_fields if self.static_secret_fields else self.current_secret_fields
@@ -2135,11 +2128,11 @@ class DataPeerData(RequirerData, ProviderData):
     ) -> Dict[str, str]:
         """Select <field>: <value> pairs from input, that belong to this particular Secret group."""
         if group_mapping == SECRET_GROUPS.EXTRA:
-            return {k: v for k, v in content.items() if k in self.secret_fields}
+            return {k: v for k, v in content.items() if k in self.local_secret_fields}
         return {
             self._internal_name_to_field(k)[0]: v
             for k, v in content.items()
-            if k in self.secret_fields
+            if k in self.local_secret_fields
         }
 
     def valid_field_pattern(self, field: str, full_field: str) -> bool:
@@ -2157,12 +2150,12 @@ class DataPeerData(RequirerData, ProviderData):
     def _load_secrets_from_databag(self, relation: Relation) -> None:
         """Load secrets from the databag."""
         requested_secrets = get_encoded_list(relation, self.component, REQ_SECRET_FIELDS)
-        provided_secrets = get_encoded_list(relation, self.component, PROVIDED_SECRET_FIELDS)
+        provided_secrets = get_encoded_list(relation, self.component, PROV_SECRET_FIELDS)
         if requested_secrets:
             self._remote_secret_fields = requested_secrets
 
         if provided_secrets:
-            self._secret_fields = provided_secrets
+            self._local_secret_fields = provided_secrets
 
     ##########################################################################
     # Backwards compatibility / Upgrades
@@ -2219,7 +2212,7 @@ class DataPeerData(RequirerData, ProviderData):
         if current_data is not None:
             # Check if the secret we wanna delete actually exists
             # Given the "deleted label", here we can't rely on the default mechanism (i.e. 'key not found')
-            if non_existent := (set(fields) & set(self.secret_fields)) - set(
+            if non_existent := (set(fields) & set(self.local_secret_fields)) - set(
                 current_data.get(relation.id, [])
             ):
                 logger.debug(
@@ -2269,10 +2262,10 @@ class DataPeerData(RequirerData, ProviderData):
         Practically what happens here is to remove stuff from the databag that is
         to be stored in secrets.
         """
-        if not self.secret_fields:
+        if not self.local_secret_fields:
             return
 
-        secret_fields_passed = set(self.secret_fields) & set(fields)
+        secret_fields_passed = set(self.local_secret_fields) & set(fields)
         for field in secret_fields_passed:
             if self._fetch_relation_data_without_secrets(self.component, relation, [field]):
                 self._delete_relation_data_without_secrets(self.component, relation, [field])
@@ -2384,7 +2377,7 @@ class DataPeerData(RequirerData, ProviderData):
     ) -> Dict[str, str]:
         """Fetch data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         return self._fetch_relation_data_with_secrets(
-            self.component, self.secret_fields, relation, fields
+            self.component, self.local_secret_fields, relation, fields
         )
 
     @either_static_or_dynamic_secrets
@@ -2394,7 +2387,7 @@ class DataPeerData(RequirerData, ProviderData):
 
         _, normal_fields = self._process_secret_fields(
             relation,
-            self.secret_fields,
+            self.local_secret_fields,
             list(data),
             self._add_or_update_relation_secrets,
             data=data,
@@ -2408,10 +2401,10 @@ class DataPeerData(RequirerData, ProviderData):
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
         """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         self._load_secrets_from_databag(relation)
-        if self.secret_fields and self.deleted_label:
+        if self.local_secret_fields and self.deleted_label:
             _, normal_fields = self._process_secret_fields(
                 relation,
-                self.secret_fields,
+                self.local_secret_fields,
                 fields,
                 self._update_relation_secret,
                 data=dict.fromkeys(fields, self.deleted_label),
@@ -2419,7 +2412,7 @@ class DataPeerData(RequirerData, ProviderData):
         else:
             _, normal_fields = self._process_secret_fields(
                 relation,
-                self.secret_fields,
+                self.local_secret_fields,
                 fields,
                 self._delete_relation_secret,
                 fields=fields,
