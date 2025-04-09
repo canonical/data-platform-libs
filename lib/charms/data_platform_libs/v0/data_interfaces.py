@@ -3846,7 +3846,7 @@ class EtcdProviderEvent(RelationEventWithSecret):
 
     @property
     def mtls_cert(self) -> Optional[str]:
-        """Returns TLS chain of the client."""
+        """Returns TLS cert of the client."""
         if not self.relation.app:
             return None
 
@@ -3861,7 +3861,7 @@ class EtcdProviderEvent(RelationEventWithSecret):
                 return content.get("mtls-cert")
 
 
-class MTLSChainUpdatedEvent(EtcdProviderEvent):
+class MTLSCertUpdatedEvent(EtcdProviderEvent):
     """Event emitted when the mtls relation is updated."""
 
     def __init__(self, handle, relation, old_mtls_cert: Optional[str] = None, app=None, unit=None):
@@ -3885,7 +3885,7 @@ class EtcdProviderEvents(CharmEvents):
     This class defines the events that Etcd can emit.
     """
 
-    mtls_cert_updated = EventSource(MTLSChainUpdatedEvent)
+    mtls_cert_updated = EventSource(MTLSCertUpdatedEvent)
 
 
 class EtcdRequirerEvent(DatabaseRequiresEvent):
@@ -4022,11 +4022,11 @@ class EtcdRequirerData(RequirerData):
         self.mtls_cert = mtls_cert
 
     def set_mtls_cert(self, relation_id: int, mtls_cert: str) -> None:
-        """Set the mtls chain in the application relation databag / secret.
+        """Set the mtls cert in the application relation databag / secret.
 
         Args:
             relation_id: the identifier for a particular relation.
-            mtls_cert: mtls chain.
+            mtls_cert: mtls cert.
         """
         self.update_relation_data(relation_id, {"mtls-cert": mtls_cert})
 
