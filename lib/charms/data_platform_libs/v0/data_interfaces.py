@@ -965,7 +965,7 @@ class Data(ABC):
         "read-only-uris": SECRET_GROUPS.USER,
         "tls": SECRET_GROUPS.TLS,
         "tls-ca": SECRET_GROUPS.TLS,
-        "mtls-chain": SECRET_GROUPS.MTLS,
+        "mtls-cert": SECRET_GROUPS.MTLS,
     }
 
     SECRET_FIELDS = []
@@ -3845,7 +3845,7 @@ class EtcdProviderEvent(RelationEventWithSecret):
         return self.relation.data[self.relation.app].get("prefix")
 
     @property
-    def mtls_chain(self) -> Optional[str]:
+    def mtls_cert(self) -> Optional[str]:
         """Returns TLS chain of the client."""
         if not self.relation.app:
             return None
@@ -3858,27 +3858,25 @@ class EtcdProviderEvent(RelationEventWithSecret):
             secret = self.framework.model.get_secret(id=secret_uri)
             content = secret.get_content(refresh=True)
             if content:
-                return content.get("mtls-chain")
+                return content.get("mtls-cert")
 
 
 class MTLSChainUpdatedEvent(EtcdProviderEvent):
     """Event emitted when the mtls relation is updated."""
 
-    def __init__(
-        self, handle, relation, old_mtls_chain: Optional[str] = None, app=None, unit=None
-    ):
+    def __init__(self, handle, relation, old_mtls_cert: Optional[str] = None, app=None, unit=None):
         super().__init__(handle, relation, app, unit)
 
-        self.old_mtls_chain = old_mtls_chain
+        self.old_mtls_cert = old_mtls_cert
 
     def snapshot(self):
         """Return a snapshot of the event."""
-        return super().snapshot() | {"old_mtls_chain": self.old_mtls_chain}
+        return super().snapshot() | {"old_mtls_cert": self.old_mtls_cert}
 
     def restore(self, snapshot):
         """Restore the event from a snapshot."""
         super().restore(snapshot)
-        self.old_mtls_chain = snapshot["old_mtls_chain"]
+        self.old_mtls_cert = snapshot["old_mtls_cert"]
 
 
 class EtcdProviderEvents(CharmEvents):
@@ -3887,7 +3885,7 @@ class EtcdProviderEvents(CharmEvents):
     This class defines the events that Etcd can emit.
     """
 
-    mtls_chain_updated = EventSource(MTLSChainUpdatedEvent)
+    mtls_cert_updated = EventSource(MTLSChainUpdatedEvent)
 
 
 class EtcdRequirerEvent(DatabaseRequiresEvent):
@@ -3965,7 +3963,7 @@ class EtcdProviderEventHandlers(ProviderEventHandlers):
         if any(newval for newval in new_data_keys if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, new_data_keys)
 
-        getattr(self.on, "mtls_chain_updated").emit(event.relation, app=event.app, unit=event.unit)
+        getattr(self.on, "mtls_cert_updated").emit(event.relation, app=event.app, unit=event.unit)
         return
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
@@ -3988,11 +3986,11 @@ class EtcdProviderEventHandlers(ProviderEventHandlers):
             if unit.app != self.charm.app:
                 remote_unit = unit
 
-        old_mtls_chain = event.secret.get_content().get("mtls-chain")
-        # mtls-chain is the only secret that can be updated
-        logger.info("mtls-chain updated")
-        getattr(self.on, "mtls_chain_updated").emit(
-            relation, app=relation.app, unit=remote_unit, old_mtls_chain=old_mtls_chain
+        old_mtls_cert = event.secret.get_content().get("mtls-cert")
+        # mtls-cert is the only secret that can be updated
+        logger.info("mtls-cert updated")
+        getattr(self.on, "mtls_cert_updated").emit(
+            relation, app=relation.app, unit=remote_unit, old_mtls_cert=old_mtls_cert
         )
 
 
@@ -4014,23 +4012,23 @@ class EtcdRequirerData(RequirerData):
         model: Model,
         relation_name: str,
         prefix: str,
-        mtls_chain: Optional[str],
+        mtls_cert: Optional[str],
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of Etcd client relations."""
         super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
         self.prefix = prefix
-        self.mtls_chain = mtls_chain
+        self.mtls_cert = mtls_cert
 
-    def set_mtls_chain(self, relation_id: int, mtls_chain: str) -> None:
+    def set_mtls_cert(self, relation_id: int, mtls_cert: str) -> None:
         """Set the mtls chain in the application relation databag / secret.
 
         Args:
             relation_id: the identifier for a particular relation.
-            mtls_chain: mtls chain.
+            mtls_cert: mtls chain.
         """
-        self.update_relation_data(relation_id, {"mtls-chain": mtls_chain})
+        self.update_relation_data(relation_id, {"mtls-cert": mtls_cert})
 
 
 class EtcdRequirerEventHandlers(RequirerEventHandlers):
@@ -4050,8 +4048,8 @@ class EtcdRequirerEventHandlers(RequirerEventHandlers):
         payload = {
             "prefix": self.relation_data.prefix,
         }
-        if self.relation_data.mtls_chain:
-            payload["mtls-chain"] = self.relation_data.mtls_chain
+        if self.relation_data.mtls_cert:
+            payload["mtls-cert"] = self.relation_data.mtls_cert
 
         self.relation_data.update_relation_data(
             event.relation.id,
@@ -4137,7 +4135,7 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
         charm: CharmBase,
         relation_name: str,
         prefix: str,
-        mtls_chain: Optional[str],
+        mtls_cert: Optional[str],
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
@@ -4146,7 +4144,7 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
             charm.model,
             relation_name,
             prefix,
-            mtls_chain,
+            mtls_cert,
             extra_user_roles,
             additional_secret_fields,
         )

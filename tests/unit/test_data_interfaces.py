@@ -1971,7 +1971,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
                 "requested-secrets": json.dumps(SECRET_FIELDS),
-                "provided-secrets": '["mtls-chain"]',
+                "provided-secrets": '["mtls-cert"]',
             }
         }
 
@@ -2000,7 +2000,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
             "requested-secrets": json.dumps(SECRET_FIELDS),
-            "provided-secrets": '["mtls-chain"]',
+            "provided-secrets": '["mtls-cert"]',
         }
 
         # Non-leader can try to fetch data (won't have anything thought, as only app data is there...
