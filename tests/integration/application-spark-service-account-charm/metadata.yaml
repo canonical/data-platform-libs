@@ -1,0 +1,18 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: spark-sa-app
+description: |
+  A requirer charm for spark-service-account relation
+summary: |
+  A requirer charm for spark-service-account relation
+
+
+requires:
+  spark-service-account:
+    interface: spark_service_account
+
+
+peers:
+  spark-properties:
+    interface: spark-properties
