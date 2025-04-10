@@ -18,6 +18,7 @@ from ops.testing import Harness
 from parameterized import parameterized
 
 from charms.data_platform_libs.v0.data_interfaces import (
+    PROV_SECRET_FIELDS,
     PROV_SECRET_PREFIX,
     REQ_SECRET_FIELDS,
     DatabaseCreatedEvent,
@@ -84,7 +85,7 @@ provides:
     interface: {OPENSEARCH_RELATION_INTERFACE}
 """
 
-
+SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]
 #
 # Helper functions
 #
@@ -347,7 +348,7 @@ class OpenSearchCharm(CharmBase):
 
 
 class DataProvidesBaseTests(ABC):
-    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]
+    SECRET_FIELDS = SECRET_FIELDS
     DATABASE_FIELD = "database"
 
     @pytest.fixture
@@ -491,12 +492,14 @@ class DataProvidesBaseTests(ABC):
     @pytest.mark.usefixtures("only_with_juju_secrets")
     def test_set_credentials_secrets_provides_juju3_requires_juju2(self):
         """Asserts that the databag is used if one side of the relation is on Juju2."""
+        # remove requested fields from requirer side (emulation of juju2)
+        self.harness.update_relation_data(self.rel_id, "application", {REQ_SECRET_FIELDS: ""})
+        self.harness._emit_relation_changed(self.rel_id, self.app_name)
+
         # We pretend that the connection is initialized
         self.harness.update_relation_data(
             self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
         )
-
-        self.harness.update_relation_data(self.rel_id, "application", {REQ_SECRET_FIELDS: ""})
         # Set the credentials in the relation using the provides charm library.
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
 
@@ -600,7 +603,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         interface.update_relation_data(relation_id, {"secret-field": "bla"})
         interface.update_relation_data(relation_id, {"mysecret1@mygroup": "bla"})
 
-        assert set(interface.secret_fields) == {
+        assert set(interface.local_secret_fields) == {
             f"secret-field-{scope}",
             "secret-field",
             "mysecret1@mygroup",
@@ -804,7 +807,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         rel_data = interface.fetch_relation_data()
         assert rel_data == {
             0: {
-                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
+                "requested-secrets": json.dumps(self.SECRET_FIELDS),
                 self.DATABASE_FIELD: DATABASE,
             }
         }
@@ -813,10 +816,10 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             0: {
                 "data": json.dumps(
                     {
-                        "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
+                        "requested-secrets": json.dumps(self.SECRET_FIELDS),
                         self.DATABASE_FIELD: DATABASE,
                     }
-                )
+                ),
             }
         }
 
@@ -852,21 +855,18 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         assert datadict == {
             "data": json.dumps(
                 {
-                    "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
+                    "requested-secrets": json.dumps(self.SECRET_FIELDS),
                     self.DATABASE_FIELD: DATABASE,
                 }
             ),
-            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
+            "requested-secrets": json.dumps(self.SECRET_FIELDS),
             self.DATABASE_FIELD: DATABASE,
         }
 
         # Non-leader can fetch the data
         self.harness.set_leader(False)
         with self._caplog.at_level(logging.ERROR):
-            assert (
-                datadict["requested-secrets"]
-                == '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]'
-            )
+            assert datadict["requested-secrets"] == json.dumps(self.SECRET_FIELDS)
             assert (
                 "This operation (fetch_my_relation_field()) can only be performed by the leader unit"
                 not in self._caplog.text
@@ -979,22 +979,27 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
 
         # Check that the additional fields are present in the relation.
         relation_data = self.harness.get_relation_data(self.rel_id, "database")
-        secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}tls")
-        assert secret_id
+        tls_secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}tls")
+        assert tls_secret_id
+        user_secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}user")
+        assert user_secret_id
 
-        relation_data == {
+        assert relation_data == {
             "data": json.dumps(
-                {REQ_SECRET_FIELDS: self.SECRET_FIELDS, self.DATABASE_FIELD: DATABASE}
+                {REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS), self.DATABASE_FIELD: DATABASE}
             ),  # Data is the diff stored between multiple relation changed events.   # noqa
             "replset": "rs0",
             "version": "1.0",
-            "uris": "host1:port,host2:port",
         }
 
-        secret = self.harness.charm.model.get_secret(id=secret_id)
+        secret = self.harness.charm.model.get_secret(id=tls_secret_id)
         assert secret.peek_content() == {
             "tls": "True",
             "tls-ca": "Canonical",
+        }
+        user_secret = self.harness.charm.model.get_secret(id=user_secret_id)
+        assert user_secret.peek_content() == {
+            "uris": "host1:port,host2:port",
         }
 
     @patch.object(DatabaseRequires, "_on_secret_changed_event")
@@ -1023,7 +1028,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         secret_id = relation_data.pop(f"{PROV_SECRET_PREFIX}tls")
         assert secret_id
 
-        relation_data == {
+        assert relation_data == {
             "data": '{REQ_SECRET_FIELDS: "'
             + f"{json.dumps(self.SECRET_FIELDS)}"
             + '"}',  # Data is the diff stored between multiple relation changed events.   # noqa
@@ -1282,7 +1287,7 @@ class TestDatabaseProvidesDynamicSecrets(ABC, unittest.TestCase):
         # Here we're artificially constructing the illegal situation
         # We "hack in" a statically pre-requiested secret into the data structure
         # (since the test charm doesn't have one)
-        interface._secret_fields.append("some-secret")
+        interface._remote_secret_fields.append("some-secret")
 
         with pytest.raises(IllegalOperationError):
             interface.set_secret(relation_id, "something", "else")
@@ -1965,7 +1970,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "alias": "cluster1",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
+                "requested-secrets": json.dumps(SECRET_FIELDS),
+                "provided-secrets": '["mtls-cert"]',
             }
         }
 
@@ -1993,7 +1999,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "alias": "cluster1",
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
-            "requested-secrets": '["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]',
+            "requested-secrets": json.dumps(SECRET_FIELDS),
+            "provided-secrets": '["mtls-cert"]',
         }
 
         # Non-leader can try to fetch data (won't have anything thought, as only app data is there...
@@ -2248,7 +2255,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "somedata": "somevalue",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                REQ_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.secret_fields),
+                REQ_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.remote_secret_fields),
+                PROV_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.local_secret_fields),
             }
         }
 
