@@ -331,7 +331,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 44
+LIBPATCH = 45
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -3888,20 +3888,8 @@ class EtcdProviderEvents(CharmEvents):
     mtls_cert_updated = EventSource(MTLSCertUpdatedEvent)
 
 
-class EtcdRequirerEvent(DatabaseRequiresEvent):
-    """Base class for Etcd requirer events."""
-
-
-class EtcdVersionUpdatedEvent(EtcdRequirerEvent):
-    """Event emitted when the etcd API version is updated."""
-
-    @property
-    def version(self) -> Optional[str]:
-        """Returns the etcd version."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("version")
+class EtcdReadyEvent(AuthenticationEvent, DatabaseRequiresEvent):
+    """Event emitted when the etcd relation is ready to be consumed."""
 
 
 class EtcdRequirerEvents(CharmEvents):
@@ -3911,8 +3899,7 @@ class EtcdRequirerEvents(CharmEvents):
     """
 
     endpoints_changed = EventSource(DatabaseEndpointsChangedEvent)
-    authentication_updated = EventSource(AuthenticationEvent)
-    etcd_version_updated = EventSource(EtcdVersionUpdatedEvent)
+    etcd_ready = EventSource(EtcdReadyEvent)
 
 
 # Etcd Provides and Requires Objects
@@ -3926,12 +3913,21 @@ class EtcdProviderData(ProviderData):
     def __init__(self, model: Model, relation_name: str) -> None:
         super().__init__(model, relation_name)
 
+    def set_uris(self, relation_id: int, uris: str) -> None:
+        """Set the database connection URIs in the application relation databag.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            uris: connection URIs.
+        """
+        self.update_relation_data(relation_id, {"uris": uris})
+
     def set_endpoints(self, relation_id: int, endpoints: str) -> None:
         """Set the endpoints in the application relation databag.
 
         Args:
             relation_id: the identifier for a particular relation.
-            endpoints: the endpoint addresses for etcd nodes.
+            endpoints: the endpoint addresses for etcd nodes "ip:port" format.
         """
         self.update_relation_data(relation_id, {"endpoints": endpoints})
 
@@ -3943,6 +3939,15 @@ class EtcdProviderData(ProviderData):
             version: etcd API version.
         """
         self.update_relation_data(relation_id, {"version": version})
+
+    def set_tls_ca(self, relation_id: int, tls_ca: str) -> None:
+        """Set the TLS CA in the application relation databag.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            tls_ca: TLS certification authority.
+        """
+        self.update_relation_data(relation_id, {"tls-ca": tls_ca, "tls": "True"})
 
 
 class EtcdProviderEventHandlers(ProviderEventHandlers):
@@ -4088,17 +4093,8 @@ class EtcdRequirerEventHandlers(RequirerEventHandlers):
             or "username" in diff.changed
         ):
             # Emit the default event (the one without an alias).
-            logger.info("authentication updated on %s", datetime.now())
-            getattr(self.on, "authentication_updated").emit(
-                event.relation, app=event.app, unit=event.unit
-            )
-
-        if "version" in diff.added or "version" in diff.changed:
-            # Emit the default event (the one without an alias).
-            logger.info("etcd version updated on %s", datetime.now())
-            getattr(self.on, "etcd_version_updated").emit(
-                event.relation, app=event.app, unit=event.unit
-            )
+            logger.info("etcd ready on %s", datetime.now())
+            getattr(self.on, "etcd_ready").emit(event.relation, app=event.app, unit=event.unit)
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
         """Event notifying about a new value of a secret."""
@@ -4121,10 +4117,8 @@ class EtcdRequirerEventHandlers(RequirerEventHandlers):
                 remote_unit = unit
 
         # secret-user or secret-tls updated
-        logger.info("authntication updated")
-        getattr(self.on, "authentication_updated").emit(
-            relation, app=relation.app, unit=remote_unit
-        )
+        logger.info("etcd_ready updated")
+        getattr(self.on, "etcd_ready").emit(relation, app=relation.app, unit=remote_unit)
 
 
 class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
