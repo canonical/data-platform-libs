@@ -1,0 +1,27 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  container:
+    type: string
+    description: The name of the Azure Storage Container.
+    default: 'test-container'
+  storage-account:
+    type: string
+    description: The name of the Azure storage account.
+    default: 'test-storage-account'
+  path:
+    type: string
+    description: The path inside the bucket/container to store objects.
+    default: ''
+  connection-protocol:
+    type: string  
+    description: |
+      The storage protocol to use when connecting to Azure storage. 
+      Possible values: "wasb", "wasbs" for Azure Blob Storage and 
+      "abfs", "abfss" for Azure Data Lake Storage v2.
+    default: 'abfss'
+  secret-key:
+    type: string
+    description: The secret key corresponding to the Azure Storage account.
+    default: 'boobar'

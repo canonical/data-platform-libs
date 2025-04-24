@@ -1,0 +1,15 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: azure-storage-provider
+description: |
+  A charm that implements the provider side of of azure_storage relation 
+summary: |
+  A charm that implements the provider side of of azure_storage relation 
+
+series:
+  - jammy
+
+provides:
+  azure-storage-credentials:
+    interface: azure_storage
