@@ -111,6 +111,21 @@ async def s3_charm(ops_test: OpsTest):
 
 
 @pytest.fixture(scope="module")
+async def application_azure_storage_charm(ops_test: OpsTest):
+    """Build the application-azure-storage charm."""
+    charm_path = "tests/integration/application-azure-storage-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def azure_storage_charm(ops_test: OpsTest):
+    """Build the Azure Storage charm."""
+    charm_path = "tests/integration/azure-storage-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+@pytest.fixture(scope="module")
 async def kafka_charm(ops_test: OpsTest):
     """Build the Kafka charm."""
     charm_path = "tests/integration/kafka-charm"

@@ -5,10 +5,11 @@ description: |
   Data platform libs application charm used in integration tests.
 summary: |
   Data platform libs application meant to be used
-  only for testing of the libs in this repository.
+  only for testing of the libs in this repository. Implements the requirer
+  side of Azure Storage relation interface.
 
 requires:
-  first-s3-credentials:
-    interface: s3-credentials
-  second-s3-credentials:
-    interface: s3-credentials
+  first-azure-storage-credentials:
+    interface: azure_storage
+  second-azure-storage-credentials:
+    interface: azure_storage

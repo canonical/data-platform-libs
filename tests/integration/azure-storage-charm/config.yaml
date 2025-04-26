@@ -24,4 +24,4 @@ options:
   secret-key:
     type: string
     description: The secret key corresponding to the Azure Storage account.
-    default: 'boobar'
+    default: 'foobar'
