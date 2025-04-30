@@ -8,7 +8,6 @@ import logging
 
 import pytest
 import yaml
-
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)

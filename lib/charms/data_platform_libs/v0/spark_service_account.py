@@ -84,7 +84,7 @@ class RequirerCharm(CharmBase):
         props = json.loads(props_string)
 
         resource_manifest = self.service_account_requirer.relation_data.fetch_relation_field(event.relation.id, "resource-manifest")
-        
+
         # Create configuration file for app
         config_file = self._render_app_config_file(
             namespace=namespace,
@@ -148,7 +148,7 @@ class ProviderCharm(CharmBase):
         if not skip_creation:
             # Create the service account
             self.create_service_account(namespace, username)
-        
+
         resource_manifest = self.generate_resource_manifest(namespace, username)
         spark_properties = self.generate_spark_properties(namespace, username)
 
@@ -173,7 +173,7 @@ class ProviderCharm(CharmBase):
 
 
 import logging
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 from ops import Model, RelationCreatedEvent, SecretChangedEvent
 from ops.charm import (
