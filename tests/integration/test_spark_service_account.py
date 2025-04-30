@@ -7,6 +7,8 @@ import json
 import logging
 
 import pytest
+import yaml
+
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -72,8 +74,16 @@ async def test_spark_service_account_relation_with_charm_libraries(ops_test: Ops
     )
     result = await action.wait()
     spark_properties = json.loads(result.results.get("spark-properties", "{}"))
-
     assert spark_properties["default-key"] == "default-val"
+
+    app_unit = ops_test.model.applications[APPLICATION_APP_NAME].units[0]
+    action = await app_unit.run_action(
+        action_name="get-resource-manifest",
+    )
+    result = await action.wait()
+    resource_manifest = yaml.safe_load(result.results.get("resource-manifest", ""))
+
+    assert resource_manifest["foo"] == "bar"
 
 
 @pytest.mark.abort_on_fail

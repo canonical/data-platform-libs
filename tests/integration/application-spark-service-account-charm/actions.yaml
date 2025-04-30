@@ -1,2 +1,5 @@
 get-spark-properties:
   description: Get spark properties
+
+get-resource-manifest:
+  description: Get K8s resource manifest

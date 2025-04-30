@@ -56,11 +56,17 @@ class RequirerCharm(CharmBase):
         # Handle the account_granted event
 
         namespace, username = event.service_account.split(":")
+        props_string = self.service_account_requirer.relation_data.fetch_relation_field(event.relation.id, "spark-properties")
+        props = json.loads(props_string)
+
+        resource_manifest = self.service_account_requirer.relation_data.fetch_relation_field(event.relation.id, "resource-manifest")
 
         # Create configuration file for app
         config_file = self._render_app_config_file(
             namespace=namespace,
             username=username,
+            spark_properties=props,
+            resource_manifest=resource_manifest
         )
 
         # Start application with rendered configuration
@@ -71,14 +77,20 @@ class RequirerCharm(CharmBase):
 
     def _on_spark_properties_changed(self, event: ServiceAccountPropertyChangedEvent):
         # Handle the properties_changed event
+        namespace, username = event.service_account.split(":")
 
         # Fetch the Spark properties from event data
-        props_string = event.spark_properties
+        props_string = self.service_account_requirer.relation_data.fetch_relation_field(event.relation.id, "spark-properties")
         props = json.loads(props_string)
 
+        resource_manifest = self.service_account_requirer.relation_data.fetch_relation_field(event.relation.id, "resource-manifest")
+        
         # Create configuration file for app
         config_file = self._render_app_config_file(
-            spark_properties=props
+            namespace=namespace,
+            username=username,
+            spark_properties=props,
+            resource_manifest=resource_manifest
         )
 
         # Start application with rendered configuration
@@ -94,7 +106,8 @@ class RequirerCharm(CharmBase):
         config_file = self._render_app_config_file(
             namespace=None,
             username=None,
-            spark_properties=None
+            spark_properties=None,
+            resource_manifest=None,
         )
 
         # Start application with rendered configuration
@@ -102,6 +115,7 @@ class RequirerCharm(CharmBase):
 
         # Set appropriate status
         self.unit.status = BlockedStatus("Missing spark service account")
+```
 
 ### SparkServiceAccountProvider
 Following is an example of using the SparkServiceAccountProvider class in the context
@@ -129,27 +143,37 @@ class ProviderCharm(CharmBase):
         # Handle the account_requested event
 
         namespace, username = event.service_account.split(":")
+        skip_creation = event.skip_creation
 
-        # Create the service account
-        self.create_service_account(namespace, username)
+        if not skip_creation:
+            # Create the service account
+            self.create_service_account(namespace, username)
+        
+        resource_manifest = self.generate_resource_manifest(namespace, username)
+        spark_properties = self.generate_spark_properties(namespace, username)
 
-        # Write the service account to relation data
+        # Write the service account, Spark properties and resource manifest to relation data
         self.spark_service_account_provider.set_service_account(event.relation.id, f"{namespace}:{username}")
+        self.spark_service_account_provider.set_spark_properties(event.relation.id, spark_properties)
+        self.spark_service_account_provider.set_resource_manifest(event.relation.id, resource_manifest)
+
 
     def _on_service_account_released(self, event: ServiceAccountReleasedEvent):
         # Handle account_released event
 
         namespace, username = event.service_account.split(":")
+        skip_creation = event.skip_creation
 
-        # Delete the service account
-        self.delete_service_account(namespace, username)
+        if not skip_creation:
+            # Delete the service account
+            self.delete_service_account(namespace, username)
 ```
 
 """
 
 
 import logging
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from ops import Model, RelationCreatedEvent, SecretChangedEvent
 from ops.charm import (
@@ -364,7 +388,7 @@ class SparkServiceAccountRequirerData(RequirerData):
             additional_secret_fields.append(SPARK_PROPERTIES_RELATION_FIELD)
         super().__init__(model, relation_name, additional_secret_fields=additional_secret_fields)
         self.service_account = service_account
-        self.skip_creation = skip_creation
+        self.skip_creation = "true" if skip_creation else "false"
 
     @property
     def service_account(self):
@@ -468,7 +492,7 @@ class SparkServiceAccountRequirer(
             charm.model,
             relation_name,
             service_account,
-            skip_creation,
-            additional_secret_fields,
+            skip_creation=skip_creation,
+            additional_secret_fields=additional_secret_fields,
         )
         SparkServiceAccountRequirerEventHandlers.__init__(self, charm, self)

@@ -12,6 +12,7 @@ from ops import ActiveStatus
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from spark8t.domain import PropertyFile
+import yaml
 
 from charms.data_platform_libs.v0.data_interfaces import DataPeer
 from charms.data_platform_libs.v0.spark_service_account import (
@@ -27,7 +28,7 @@ USERNAME = "user"
 SERVICE_ACCOUNT = f"{NAMESPASCE}:{USERNAME}"
 PEER_REL = "spark-properties"
 PROVIDER_REL = "spark-service-account"
-
+RESOURCE_MANIFEST = {"foo": "bar"}
 
 class SparkServiceAccountProviderCharm(CharmBase):
     def __init__(self, *args):
@@ -111,6 +112,8 @@ class SparkServiceAccountProviderCharm(CharmBase):
         self.service_account_provider.set_spark_properties(
             event.relation.id, json.dumps(properties)
         )
+        self.service_account_provider.set_resource_manifest(event.relation.id, yaml.dump(RESOURCE_MANIFEST))  # type: ignore
+
 
     def _on_service_account_released(self, event: ServiceAccountReleasedEvent):
         """Handle the `ServiceAccountReleased` event for the Spark Integration hub."""

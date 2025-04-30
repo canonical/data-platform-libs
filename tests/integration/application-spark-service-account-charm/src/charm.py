@@ -56,6 +56,10 @@ class SparkServiceAccountRequirerCharm(CharmBase):
         self.framework.observe(
             self.on.get_spark_properties_action, self._on_get_spark_properties_action
         )
+        self.framework.observe(
+            self.on.get_resource_manifest_action, self._on_get_resource_manifest_action
+        )
+
 
     def _on_start(self, _) -> None:
         """Only sets a blocked status."""
@@ -124,6 +128,18 @@ class SparkServiceAccountRequirerCharm(CharmBase):
             return
         props = relation_data[peer_relation.id]
         event.set_results({"spark-properties": json.dumps(props)})
+
+
+    def _on_get_resource_manifest_action(self, event: ActionEvent):
+        sa_relation = self.model.get_relation(REQUIRER_REL)
+        if not sa_relation:
+            logger.warning("No service account relation")
+            return
+        
+        resource_manifest = self.service_account_requirer.fetch_relation_field(
+            relation_id=sa_relation.id, field="resource-manifest"
+        )
+        event.set_results({"resource-manifest": resource_manifest})
 
 
 if __name__ == "__main__":
