@@ -58,6 +58,10 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     shutil.copyfile(library_path, install_path)
     install_path = "tests/integration/opensearch-charm/" + library_path
     shutil.copyfile(library_path, install_path)
+    install_path = "tests/integration/spark-service-account-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
+    install_path = "tests/integration/application-spark-service-account-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -66,6 +70,18 @@ def copy_s3_library_into_charm(ops_test: OpsTest):
     library_path = "lib/charms/data_platform_libs/v0/s3.py"
     install_path_provider = "tests/integration/s3-charm/" + library_path
     install_path_requirer = "tests/integration/application-s3-charm/" + library_path
+    shutil.copyfile(library_path, install_path_provider)
+    shutil.copyfile(library_path, install_path_requirer)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def copy_spark_service_account_library_into_charm(ops_test: OpsTest):
+    """Copy the spark service account library to the applications charm folder."""
+    library_path = "lib/charms/data_platform_libs/v0/spark_service_account.py"
+    install_path_provider = "tests/integration/spark-service-account-charm/" + library_path
+    install_path_requirer = (
+        "tests/integration/application-spark-service-account-charm/" + library_path
+    )
     shutil.copyfile(library_path, install_path_provider)
     shutil.copyfile(library_path, install_path_requirer)
 

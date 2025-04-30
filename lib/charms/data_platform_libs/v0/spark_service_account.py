@@ -211,6 +211,23 @@ class ServiceAccountEvent(RelationEventWithSecret):
 
         return self.relation.data[self.relation.app].get("spark-properties", "{}")
 
+    @property
+    def resource_manifest(self) -> Optional[str]:
+        """Returns the resource manifest associated with service account."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("resource-manifest", "{}")
+
+    @property
+    def skip_creation(self) -> bool:
+        """Returns the skip-creation flag associated with service account."""
+        if not self.relation.app:
+            return False
+
+        skip = self.relation.data[self.relation.app].get("skip-creation", "false")
+        return skip.lower() == "true"
+
 
 class ServiceAccountRequestedEvent(ServiceAccountEvent):
     """Event emitted when a set of service account is requested for use on this relation."""
@@ -273,6 +290,15 @@ class SparkServiceAccountProviderData(ProviderData):
         """
         self.update_relation_data(relation_id, {SPARK_PROPERTIES_RELATION_FIELD: spark_properties})
 
+    def set_resource_manifest(self, relation_id: int, resource_manifest: str) -> None:
+        """Set the resource manifest in the application relation databag.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            resource_manifest: the dictionary that contains key-value for resource manifest.
+        """
+        self.update_relation_data(relation_id, {"resource-manifest": resource_manifest})
+
 
 class SparkServiceAccountProviderEventHandlers(EventHandlers):
     """Provider-side of the Spark Service Account relation."""
@@ -328,6 +354,7 @@ class SparkServiceAccountRequirerData(RequirerData):
         model: Model,
         relation_name: str,
         service_account: str,
+        skip_creation: bool = False,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of Spark Service Account relations."""
@@ -337,6 +364,7 @@ class SparkServiceAccountRequirerData(RequirerData):
             additional_secret_fields.append(SPARK_PROPERTIES_RELATION_FIELD)
         super().__init__(model, relation_name, additional_secret_fields=additional_secret_fields)
         self.service_account = service_account
+        self.skip_creation = skip_creation
 
     @property
     def service_account(self):
@@ -371,7 +399,8 @@ class SparkServiceAccountRequirerEventHandlers(RequirerEventHandlers):
 
         # Sets service_account in the relation
         relation_data = {
-            f: getattr(self.relation_data, f.replace("-", "_"), "") for f in ["service-account"]
+            f: getattr(self.relation_data, f.replace("-", "_"), "")
+            for f in ["service-account", "skip-creation"]
         }
 
         self.relation_data.update_relation_data(event.relation.id, relation_data)
@@ -431,6 +460,7 @@ class SparkServiceAccountRequirer(
         charm: CharmBase,
         relation_name: str,
         service_account: str,
+        skip_creation: bool = False,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
         SparkServiceAccountRequirerData.__init__(
@@ -438,6 +468,7 @@ class SparkServiceAccountRequirer(
             charm.model,
             relation_name,
             service_account,
+            skip_creation,
             additional_secret_fields,
         )
         SparkServiceAccountRequirerEventHandlers.__init__(self, charm, self)

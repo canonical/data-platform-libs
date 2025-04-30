@@ -40,7 +40,7 @@ class SparkServiceAccountRequirerCharm(CharmBase):
 
         # Charm events defined in the spark_service_account charm library.
         self.service_account_requirer = SparkServiceAccountRequirer(
-            self, relation_name=REQUIRER_REL, service_account=SERVICE_ACCOUNT1
+            self, relation_name=REQUIRER_REL, service_account=SERVICE_ACCOUNT1, skip_creation=False
         )
 
         self.framework.observe(
