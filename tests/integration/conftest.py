@@ -58,6 +58,10 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     shutil.copyfile(library_path, install_path)
     install_path = "tests/integration/opensearch-charm/" + library_path
     shutil.copyfile(library_path, install_path)
+    install_path = "tests/integration/spark-service-account-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
+    install_path = "tests/integration/application-spark-service-account-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -66,6 +70,18 @@ def copy_s3_library_into_charm(ops_test: OpsTest):
     library_path = "lib/charms/data_platform_libs/v0/s3.py"
     install_path_provider = "tests/integration/s3-charm/" + library_path
     install_path_requirer = "tests/integration/application-s3-charm/" + library_path
+    shutil.copyfile(library_path, install_path_provider)
+    shutil.copyfile(library_path, install_path_requirer)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def copy_spark_service_account_library_into_charm(ops_test: OpsTest):
+    """Copy the spark service account library to the applications charm folder."""
+    library_path = "lib/charms/data_platform_libs/v0/spark_service_account.py"
+    install_path_provider = "tests/integration/spark-service-account-charm/" + library_path
+    install_path_requirer = (
+        "tests/integration/application-spark-service-account-charm/" + library_path
+    )
     shutil.copyfile(library_path, install_path_provider)
     shutil.copyfile(library_path, install_path_requirer)
 
@@ -106,6 +122,22 @@ async def application_s3_charm(ops_test: OpsTest):
 async def s3_charm(ops_test: OpsTest):
     """Build the S3 charm."""
     charm_path = "tests/integration/s3-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def application_spark_service_account_charm(ops_test: OpsTest):
+    """Build the aplication-spark-service-account charm."""
+    charm_path = "tests/integration/application-spark-service-account-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def spark_service_account_charm(ops_test: OpsTest):
+    """Build the spark-service-account charm."""
+    charm_path = "tests/integration/spark-service-account-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 

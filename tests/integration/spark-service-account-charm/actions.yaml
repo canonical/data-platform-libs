@@ -1,0 +1,9 @@
+get-spark-properties:
+  description: Get spark properties
+
+add-spark-property:
+  description: Add spark property
+  params:
+    conf:
+      type: string
+      description: The spark property in format key=value
