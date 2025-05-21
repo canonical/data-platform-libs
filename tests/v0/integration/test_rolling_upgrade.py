@@ -21,7 +21,7 @@ APPLICATION_APP_NAME = "application"
 DATABASE_APP_NAME = "database"
 APP_NAMES = [APPLICATION_APP_NAME, DATABASE_APP_NAME]
 DATABASE_APP_METADATA = yaml.safe_load(
-    Path("./tests/integration/database-charm/metadata.yaml").read_text()
+    Path("./tests/v0/integration/database-charm/metadata.yaml").read_text()
 )
 FIRST_DATABASE_RELATION_NAME = "first-database"
 SECOND_DATABASE_RELATION_NAME = "second-database"
@@ -37,7 +37,7 @@ async def downgrade_to_databag(ops_test, app_name):
     for unit in ops_test.model.applications[app_name].units:
         unit_name_with_dash = unit.name.replace("/", "-")
         complete_command = (
-            "scp tests/integration/data/data_interfaces.py "
+            "scp tests/v0/integration/data/data_interfaces.py "
             f"{unit.name}:/var/lib/juju/agents/unit-{unit_name_with_dash}/charm/lib/charms/data_platform_libs/v0/"
         )
         x, stdout, y = await ops_test.juju(*complete_command.split())
