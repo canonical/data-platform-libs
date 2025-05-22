@@ -1893,6 +1893,32 @@ class DataRequirerBaseTests(ABC):
         verify_relation_interface_dict(interface, self.rel_id)
         verify_relation_interface_dict_external_relation(interface, self.rel_id)
 
+    def test_relation_interface_consistency(self):
+        """Check the consistency of the public interface init function."""
+        with pytest.raises(ValueError):
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                role_type="INVALID_ROLE_TYPE",
+            )
+        with pytest.raises(ValueError):
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                role_type=ROLE_USER,
+                extra_group_roles=EXTRA_GROUP_ROLES,
+            )
+        with pytest.raises(ValueError):
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                role_type=ROLE_GROUP,
+                extra_user_roles=EXTRA_USER_ROLES,
+            )
+
 
 class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
     metadata = METADATA
