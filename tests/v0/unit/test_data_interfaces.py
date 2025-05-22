@@ -1555,8 +1555,8 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
 
     @patch.object(OpenSearchCharm, "_on_index_requested")
     def test_on_index_requested(self, _on_index_requested):
-        """Asserts that the correct hook is called when a new topic is requested."""
-        # Simulate the request of a new topic plus extra user roles.
+        """Asserts that the correct hook is called when a new index is requested."""
+        # Simulate the request of a new index plus extra user roles.
         self.harness.update_relation_data(
             self.rel_id,
             "application",
@@ -1566,7 +1566,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         # Assert the correct hook is called.
         _on_index_requested.assert_called_once()
 
-        # Assert the topic name and the extra user roles
+        # Assert the index name and the extra user roles
         # are accessible in the providers charm library event.
         event = _on_index_requested.call_args[0][0]
         assert event.index == INDEX
