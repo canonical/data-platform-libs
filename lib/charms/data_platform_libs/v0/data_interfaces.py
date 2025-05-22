@@ -349,6 +349,8 @@ added - keys that were added
 changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
+ROLE_USER = "USER"
+ROLE_GROUP = "GROUP"
 
 PROV_SECRET_PREFIX = "secret-"
 PROV_SECRET_FIELDS = "provided-secrets"
@@ -1772,14 +1774,18 @@ class RequirerData(Data):
         self,
         model,
         relation_name: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of base client relations."""
         super().__init__(model, relation_name)
+        self.role_type = role_type
         self.extra_user_roles = extra_user_roles
         self.extra_group_roles = extra_group_roles
+        self._validate_role_type()
+
         self._remote_secret_fields = list(self.SECRET_FIELDS)
         self._local_secret_fields = [
             field
@@ -1790,7 +1796,7 @@ class RequirerData(Data):
             self._remote_secret_fields += additional_secret_fields
         self.data_component = self.local_unit
 
-    # Internal helper functions
+    # Internal functions
 
     def _is_resource_created_for_relation(self, relation: Relation) -> bool:
         if not relation.app:
@@ -1801,7 +1807,19 @@ class RequirerData(Data):
         )
         return bool(data.get("username")) and bool(data.get("password"))
 
+    def _validate_role_type(self) -> None:
+        """Validates the consistency of the provided role-type and its extra roles."""
+        if self.role_type not in {ROLE_USER, ROLE_GROUP}:
+            raise ValueError("Invalid role_type. Possible values are USER and GROUP")
+
+        if self.role_type == ROLE_USER and self.extra_group_roles:
+            raise ValueError("Inconsistent role information. Use extra_user_roles instead")
+
+        if self.role_type == ROLE_GROUP and self.extra_user_roles:
+            raise ValueError("Inconsistent role information. Use extra_group_roles instead")
+
     # Public functions
+
     def is_resource_created(self, relation_id: Optional[int] = None) -> bool:
         """Check if the resource has been created.
 
@@ -1933,6 +1951,7 @@ class DataPeerData(RequirerData, ProviderData):
         self,
         model,
         relation_name: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -1944,6 +1963,7 @@ class DataPeerData(RequirerData, ProviderData):
             self,
             model,
             relation_name,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -2462,6 +2482,7 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
         self,
         charm,
         relation_name: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -2474,6 +2495,7 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
             self,
             charm.model,
             relation_name,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -2500,6 +2522,7 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
         self,
         charm,
         relation_name: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -2512,6 +2535,7 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
             self,
             charm.model,
             relation_name,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -2556,6 +2580,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
         unit: Unit,
         charm: CharmBase,
         relation_name: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -2568,6 +2593,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
             unit,
             charm.model,
             relation_name,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -2587,6 +2613,14 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
 
 class ExtraRoleEvent(RelationEvent):
     """Base class for data events."""
+
+    @property
+    def role_type(self) -> Optional[str]:
+        """Returns the role_type that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("role-type")
 
     @property
     def extra_user_roles(self) -> Optional[str]:
@@ -2993,6 +3027,7 @@ class DatabaseRequirerData(RequirerData):
         model: Model,
         relation_name: str,
         database_name: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
@@ -3003,6 +3038,7 @@ class DatabaseRequirerData(RequirerData):
         super().__init__(
             model,
             relation_name,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -3179,6 +3215,8 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
         event_data = {"database": self.relation_data.database}
 
+        if self.relation_data.role_type:
+            event_data["role-type"] = self.relation_data.role_type
         if self.relation_data.extra_user_roles:
             event_data["extra-user-roles"] = self.relation_data.extra_user_roles
         if self.relation_data.extra_group_roles:
@@ -3270,6 +3308,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
         charm: CharmBase,
         relation_name: str,
         database_name: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
@@ -3281,6 +3320,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
             charm.model,
             relation_name,
             database_name,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             relations_aliases,
@@ -3476,6 +3516,7 @@ class KafkaRequirerData(RequirerData):
         model: Model,
         relation_name: str,
         topic: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         consumer_group_prefix: Optional[str] = None,
@@ -3485,6 +3526,7 @@ class KafkaRequirerData(RequirerData):
         super().__init__(
             model,
             relation_name,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -3525,6 +3567,8 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
         # Sets topic, extra user roles, and "consumer-group-prefix" in the relation
         relation_data = {"topic": self.relation_data.topic}
 
+        if self.relation_data.role_type:
+            relation_data["role-type"] = self.relation_data.role_type
         if self.relation_data.extra_user_roles:
             relation_data["extra-user-roles"] = self.relation_data.extra_user_roles
         if self.relation_data.extra_group_roles:
@@ -3582,6 +3626,7 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
         charm: CharmBase,
         relation_name: str,
         topic: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         consumer_group_prefix: Optional[str] = None,
@@ -3592,6 +3637,7 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
             charm.model,
             relation_name,
             topic,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             consumer_group_prefix,
@@ -3732,6 +3778,7 @@ class OpenSearchRequiresData(RequirerData):
         model: Model,
         relation_name: str,
         index: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -3740,6 +3787,7 @@ class OpenSearchRequiresData(RequirerData):
         super().__init__(
             model,
             relation_name,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -3768,6 +3816,8 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
         # Otherwise, sets only the index.
         data = {"index": self.relation_data.index}
 
+        if self.relation_data.role_type:
+            data["role-type"] = self.relation_data.role_type
         if self.relation_data.extra_user_roles:
             data["extra-user-roles"] = self.relation_data.extra_user_roles
         if self.relation_data.extra_group_roles:
@@ -3853,6 +3903,7 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
         charm: CharmBase,
         relation_name: str,
         index: str,
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -3862,6 +3913,7 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
             charm.model,
             relation_name,
             index,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -4057,6 +4109,7 @@ class EtcdRequirerData(RequirerData):
         relation_name: str,
         prefix: str,
         mtls_cert: Optional[str],
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -4065,6 +4118,7 @@ class EtcdRequirerData(RequirerData):
         super().__init__(
             model,
             relation_name,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -4176,6 +4230,7 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
         relation_name: str,
         prefix: str,
         mtls_cert: Optional[str],
+        role_type: Optional[str] = ROLE_USER,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -4186,6 +4241,7 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
             relation_name,
             prefix,
             mtls_cert,
+            role_type,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
