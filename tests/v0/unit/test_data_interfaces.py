@@ -21,6 +21,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     PROV_SECRET_FIELDS,
     PROV_SECRET_PREFIX,
     REQ_SECRET_FIELDS,
+    ROLE_USER,
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseProvides,
@@ -50,6 +51,7 @@ PEER_RELATION_NAME = "database-peers"
 
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
+EXTRA_GROUP_ROLES = "CUSTOM_ROLE_1,CUSTOM_ROLE_2"
 DATABASE_RELATION_INTERFACE = "database_client"
 DATABASE_RELATION_NAME = "database"
 DATABASE_METADATA = f"""
@@ -877,8 +879,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         # Assert the correct hook is called.
         _on_database_requested.assert_called_once()
 
-        # Assert the database name and the extra user roles
-        # are accessible in the providers charm library event.
+        # Assert the database name and the role info are accessible in the providers charm library event.
         event = _on_database_requested.call_args[0][0]
         assert event.database == DATABASE
         assert event.extra_user_roles == EXTRA_USER_ROLES
@@ -890,8 +891,22 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             "application",
             {self.DATABASE_FIELD: DATABASE, "external-node-connectivity": "true"},
         )
+
         event = _on_database_requested.call_args[0][0]
         assert event.external_node_connectivity is True
+
+        # Reset the mock call count.
+        _on_database_requested.reset_mock()
+
+        # Simulate the request of a new database role.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {self.DATABASE_FIELD: DATABASE, "role-type": ROLE_USER},
+        )
+
+        # Assert the correct hook is called.
+        _on_database_requested.assert_not_called()
 
     def test_set_endpoints(self):
         """Asserts that the endpoints are in the relation databag when they change."""
@@ -1411,11 +1426,23 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         # Assert the correct hook is called.
         _on_topic_requested.assert_called_once()
 
-        # Assert the topic name and the extra user roles
-        # are accessible in the providers charm library event.
+        # Assert the topic name and role info are accessible in the providers charm library event.
         event = _on_topic_requested.call_args[0][0]
         assert event.topic == TOPIC
         assert event.extra_user_roles == EXTRA_USER_ROLES
+
+        # Reset the mock call count.
+        _on_topic_requested.reset_mock()
+
+        # Simulate the request of a new topic role.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {"topic": TOPIC, "role-type": ROLE_USER},
+        )
+
+        # Assert the correct hook is called.
+        _on_topic_requested.assert_not_called()
 
     def test_set_bootstrap_server(self):
         """Asserts that the bootstrap-server are in the relation databag when they change."""
@@ -1566,11 +1593,23 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         # Assert the correct hook is called.
         _on_index_requested.assert_called_once()
 
-        # Assert the index name and the extra user roles
-        # are accessible in the providers charm library event.
+        # Assert the index name and the role info are accessible in the providers charm library event.
         event = _on_index_requested.call_args[0][0]
         assert event.index == INDEX
         assert event.extra_user_roles == EXTRA_USER_ROLES
+
+        # Reset the mock call count.
+        _on_index_requested.reset_mock()
+
+        # Simulate the request of a new index role.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {"index": INDEX, "role-type": ROLE_USER},
+        )
+
+        # Assert the correct hook is called.
+        _on_index_requested.assert_not_called()
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_additional_fields(self):
@@ -1657,6 +1696,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
 CLUSTER_ALIASES = ["cluster1", "cluster2"]
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
+EXTRA_GROUP_ROLES = "CUSTOM_ROLE_1,CUSTOM_ROLE_2"
 DATABASE_RELATION_INTERFACE = "database_client"
 DATABASE_RELATION_NAME = "database"
 KAFKA_RELATION_INTERFACE = "kafka_client"
@@ -1681,9 +1721,20 @@ class ApplicationCharmDatabase(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.requirer = DatabaseRequires(
-            self, DATABASE_RELATION_NAME, DATABASE, EXTRA_USER_ROLES, CLUSTER_ALIASES[:]
+            charm=self,
+            relation_name=DATABASE_RELATION_NAME,
+            database_name=DATABASE,
+            extra_user_roles=EXTRA_USER_ROLES,
+            relations_aliases=CLUSTER_ALIASES[:],
         )
-        self.framework.observe(self.requirer.on.database_created, self._on_database_created)
+        self.framework.observe(
+            self.requirer.on.database_created,
+            self._on_database_created,
+        )
+        self.framework.observe(
+            self.requirer.on.database_role_created,
+            self._on_database_role_created,
+        )
         self.framework.observe(
             self.on[DATABASE_RELATION_NAME].relation_broken, self._on_relation_broken
         )
@@ -1724,6 +1775,9 @@ class ApplicationCharmDatabase(CharmBase):
     def _on_database_created(self, _) -> None:
         self.log_relation_size("on_database_created")
 
+    def _on_database_role_created(self, _) -> None:
+        self.log_relation_size("on_database_role_created")
+
     def _on_relation_broken(self, _) -> None:
         # This should not raise errors
         self.requirer.fetch_relation_data()
@@ -1745,7 +1799,12 @@ class ApplicationCharmKafka(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.requirer = KafkaRequires(self, KAFKA_RELATION_NAME, TOPIC, EXTRA_USER_ROLES)
+        self.requirer = KafkaRequires(
+            charm=self,
+            relation_name=KAFKA_RELATION_NAME,
+            topic=TOPIC,
+            extra_user_roles=EXTRA_USER_ROLES,
+        )
         self.framework.observe(self.requirer.on.topic_created, self._on_topic_created)
         self.framework.observe(
             self.requirer.on.bootstrap_server_changed, self._on_bootstrap_server_changed
@@ -1763,7 +1822,12 @@ class ApplicationCharmOpenSearch(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.requirer = OpenSearchRequires(self, OPENSEARCH_RELATION_NAME, INDEX, EXTRA_USER_ROLES)
+        self.requirer = OpenSearchRequires(
+            charm=self,
+            relation_name=OPENSEARCH_RELATION_NAME,
+            index=INDEX,
+            extra_user_roles=EXTRA_USER_ROLES,
+        )
         self.framework.observe(self.requirer.on.index_created, self._on_index_created)
 
     def _on_index_created(self, _) -> None:
@@ -1780,6 +1844,7 @@ def reset_aliases():
     for cluster_alias in CLUSTER_ALIASES:
         try:
             delattr(DatabaseRequiresEvents, f"{cluster_alias}_database_created")
+            delattr(DatabaseRequiresEvents, f"{cluster_alias}_database_role_created")
             delattr(DatabaseRequiresEvents, f"{cluster_alias}_endpoints_changed")
             delattr(DatabaseRequiresEvents, f"{cluster_alias}_read_only_endpoints_changed")
         except AttributeError:

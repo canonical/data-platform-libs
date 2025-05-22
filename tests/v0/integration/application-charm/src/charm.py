@@ -60,7 +60,10 @@ class ApplicationCharm(CharmBase):
         # (these events are defined in the database requires charm library).
         database_name = f'{self.app.name.replace("-", "_")}_first_database'
         self.first_database = DatabaseRequires(
-            self, "first-database", database_name, EXTRA_USER_ROLES
+            charm=self,
+            relation_name="first-database",
+            database_name=database_name,
+            extra_user_roles=EXTRA_USER_ROLES,
         )
         self.framework.observe(
             self.first_database.on.database_created, self._on_first_database_created
@@ -76,19 +79,19 @@ class ApplicationCharm(CharmBase):
         # Keeping the charm backwards compatible, for upgrades testing
         if DATA_INTERFACES_VERSION > 17:
             self.second_database = DatabaseRequires(
-                self,
-                "second-database",
-                database_name,
-                EXTRA_USER_ROLES,
+                charm=self,
+                relation_name="second-database",
+                database_name=database_name,
+                extra_user_roles=EXTRA_USER_ROLES,
                 additional_secret_fields=["topsecret", "donttellanyone"],
                 external_node_connectivity=True,
             )
         else:
             self.second_database = DatabaseRequires(
-                self,
-                "second-database",
-                database_name,
-                EXTRA_USER_ROLES,
+                charm=self,
+                relation_name="second-database",
+                database_name=database_name,
+                extra_user_roles=EXTRA_USER_ROLES,
             )
 
         self.framework.observe(
@@ -101,7 +104,10 @@ class ApplicationCharm(CharmBase):
         # Multiple database clusters charm events (clusters/relations without alias).
         database_name = f'{self.app.name.replace("-", "_")}_multiple_database_clusters'
         self.database_clusters = DatabaseRequires(
-            self, "multiple-database-clusters", database_name, EXTRA_USER_ROLES
+            charm=self,
+            relation_name="multiple-database-clusters",
+            database_name=database_name,
+            extra_user_roles=EXTRA_USER_ROLES,
         )
         self.framework.observe(
             self.database_clusters.on.database_created, self._on_cluster_database_created
@@ -116,11 +122,11 @@ class ApplicationCharm(CharmBase):
         database_name = f'{self.app.name.replace("-", "_")}_aliased_multiple_database_clusters'
         cluster_aliases = ["cluster1", "cluster2"]  # Aliases for the multiple clusters/relations.
         self.aliased_database_clusters = DatabaseRequires(
-            self,
-            "aliased-multiple-database-clusters",
-            database_name,
-            EXTRA_USER_ROLES,
-            cluster_aliases,
+            charm=self,
+            relation_name="aliased-multiple-database-clusters",
+            database_name=database_name,
+            extra_user_roles=EXTRA_USER_ROLES,
+            relations_aliases=cluster_aliases,
         )
         # Each database cluster will have its own events
         # with the name having the cluster/relation alias as the prefix.
@@ -144,7 +150,11 @@ class ApplicationCharm(CharmBase):
         # Kafka events
 
         self.kafka = KafkaRequires(
-            self, "kafka-client", "test-topic", EXTRA_USER_ROLES_KAFKA, CONSUMER_GROUP_PREFIX
+            charm=self,
+            relation_name="kafka-client",
+            topic="test-topic",
+            extra_user_roles=EXTRA_USER_ROLES_KAFKA,
+            consumer_group_prefix=CONSUMER_GROUP_PREFIX,
         )
 
         if DATA_INTERFACES_VERSION > 34:
@@ -152,7 +162,7 @@ class ApplicationCharm(CharmBase):
                 model=self.model,
                 relation_name="kafka-split-pattern-client",
                 topic="test-topic-split-pattern",
-                extra_user_roles=EXTRA_USER_ROLES,
+                extra_user_roles=EXTRA_USER_ROLES_KAFKA,
                 consumer_group_prefix=CONSUMER_GROUP_PREFIX,
             )
             self.kafka_split_pattern = KafkaRequirerEventHandlers(
@@ -174,7 +184,10 @@ class ApplicationCharm(CharmBase):
         # OpenSearch events
 
         self.opensearch = OpenSearchRequires(
-            self, "opensearch-client", "test-index", EXTRA_USER_ROLES_OPENSEARCH
+            charm=self,
+            relation_name="opensearch-client",
+            index="test-index",
+            extra_user_roles=EXTRA_USER_ROLES_OPENSEARCH,
         )
         self.framework.observe(self.opensearch.on.index_created, self._on_opensearch_index_created)
         self.framework.observe(
