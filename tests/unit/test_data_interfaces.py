@@ -21,6 +21,8 @@ from charms.data_platform_libs.v0.data_interfaces import (
     PROV_SECRET_FIELDS,
     PROV_SECRET_PREFIX,
     REQ_SECRET_FIELDS,
+    ROLE_GROUP,
+    ROLE_USER,
     DatabaseCreatedEvent,
     DatabaseEndpointsChangedEvent,
     DatabaseProvides,
@@ -50,6 +52,7 @@ PEER_RELATION_NAME = "database-peers"
 
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
+EXTRA_GROUP_ROLES = "CUSTOM_ROLE_1,CUSTOM_ROLE_2"
 DATABASE_RELATION_INTERFACE = "database_client"
 DATABASE_RELATION_NAME = "database"
 DATABASE_METADATA = f"""
@@ -875,21 +878,25 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
     @patch.object(DatabaseCharm, "_on_database_requested")
     def test_on_database_requested(self, _on_database_requested):
         """Asserts that the correct hook is called when a new database is requested."""
-        # Simulate the request of a new database plus extra user roles.
+        # Simulate the request of a new database plus extra group roles.
         self.harness.update_relation_data(
             self.rel_id,
             "application",
-            {self.DATABASE_FIELD: DATABASE, "extra-user-roles": EXTRA_USER_ROLES},
+            {
+                self.DATABASE_FIELD: DATABASE,
+                "role-type": ROLE_GROUP,
+                "extra-group-roles": EXTRA_GROUP_ROLES,
+            },
         )
 
         # Assert the correct hook is called.
         _on_database_requested.assert_called_once()
 
-        # Assert the database name and the extra user roles
-        # are accessible in the providers charm library event.
+        # Assert the database name and the role info are accessible in the providers charm library event.
         event = _on_database_requested.call_args[0][0]
         assert event.database == DATABASE
-        assert event.extra_user_roles == EXTRA_USER_ROLES
+        assert event.role_type == ROLE_GROUP
+        assert event.extra_group_roles == EXTRA_GROUP_ROLES
         assert event.external_node_connectivity is False
 
         # Assert that the event will detect a raised external-node-connectivity flag
@@ -1409,21 +1416,21 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
     @patch.object(KafkaCharm, "_on_topic_requested")
     def test_on_topic_requested(self, _on_topic_requested):
         """Asserts that the correct hook is called when a new topic is requested."""
-        # Simulate the request of a new topic plus extra user roles.
+        # Simulate the request of a new topic.
         self.harness.update_relation_data(
             self.rel_id,
             "application",
-            {"topic": TOPIC, "extra-user-roles": EXTRA_USER_ROLES},
+            {"topic": TOPIC, "role-type": ROLE_GROUP, "extra-group-roles": EXTRA_GROUP_ROLES},
         )
 
         # Assert the correct hook is called.
         _on_topic_requested.assert_called_once()
 
-        # Assert the topic name and the extra user roles
-        # are accessible in the providers charm library event.
+        # Assert the topic name and role info are accessible in the providers charm library event.
         event = _on_topic_requested.call_args[0][0]
         assert event.topic == TOPIC
-        assert event.extra_user_roles == EXTRA_USER_ROLES
+        assert event.role_type == ROLE_GROUP
+        assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     def test_set_bootstrap_server(self):
         """Asserts that the bootstrap-server are in the relation databag when they change."""
@@ -1564,21 +1571,21 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
     @patch.object(OpenSearchCharm, "_on_index_requested")
     def test_on_index_requested(self, _on_index_requested):
         """Asserts that the correct hook is called when a new index is requested."""
-        # Simulate the request of a new index plus extra user roles.
+        # Simulate the request of a new index.
         self.harness.update_relation_data(
             self.rel_id,
             "application",
-            {"index": INDEX, "extra-user-roles": EXTRA_USER_ROLES},
+            {"index": INDEX, "role-type": ROLE_GROUP, "extra-group-roles": EXTRA_GROUP_ROLES},
         )
 
         # Assert the correct hook is called.
         _on_index_requested.assert_called_once()
 
-        # Assert the index name and the extra user roles
-        # are accessible in the providers charm library event.
+        # Assert the index name and the role info are accessible in the providers charm library event.
         event = _on_index_requested.call_args[0][0]
         assert event.index == INDEX
-        assert event.extra_user_roles == EXTRA_USER_ROLES
+        assert event.role_type == ROLE_GROUP
+        assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_additional_fields(self):
@@ -1665,6 +1672,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
 CLUSTER_ALIASES = ["cluster1", "cluster2"]
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
+EXTRA_GROUP_ROLES = "CUSTOM_ROLE_1,CUSTOM_ROLE_2"
 DATABASE_RELATION_INTERFACE = "database_client"
 DATABASE_RELATION_NAME = "database"
 KAFKA_RELATION_INTERFACE = "kafka_client"
@@ -1689,7 +1697,11 @@ class ApplicationCharmDatabase(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.requirer = DatabaseRequires(
-            self, DATABASE_RELATION_NAME, DATABASE, EXTRA_USER_ROLES, CLUSTER_ALIASES[:]
+            charm=self,
+            relation_name=DATABASE_RELATION_NAME,
+            database_name=DATABASE,
+            extra_user_roles=EXTRA_USER_ROLES,
+            relations_aliases=CLUSTER_ALIASES[:],
         )
         self.framework.observe(self.requirer.on.database_created, self._on_database_created)
         self.framework.observe(
@@ -1753,7 +1765,12 @@ class ApplicationCharmKafka(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.requirer = KafkaRequires(self, KAFKA_RELATION_NAME, TOPIC, EXTRA_USER_ROLES)
+        self.requirer = KafkaRequires(
+            charm=self,
+            relation_name=KAFKA_RELATION_NAME,
+            topic=TOPIC,
+            extra_user_roles=EXTRA_USER_ROLES,
+        )
         self.framework.observe(self.requirer.on.topic_created, self._on_topic_created)
         self.framework.observe(
             self.requirer.on.bootstrap_server_changed, self._on_bootstrap_server_changed
@@ -1771,7 +1788,12 @@ class ApplicationCharmOpenSearch(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.requirer = OpenSearchRequires(self, OPENSEARCH_RELATION_NAME, INDEX, EXTRA_USER_ROLES)
+        self.requirer = OpenSearchRequires(
+            charm=self,
+            relation_name=OPENSEARCH_RELATION_NAME,
+            index=INDEX,
+            extra_user_roles=EXTRA_USER_ROLES,
+        )
         self.framework.observe(self.requirer.on.index_created, self._on_index_created)
 
     def _on_index_created(self, _) -> None:
@@ -1969,7 +1991,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             0: {
                 "alias": "cluster1",
                 "database": "data_platform",
-                "extra-user-roles": "CREATEDB,CREATEROLE",
+                "role-type": ROLE_USER,
+                "extra-user-roles": EXTRA_USER_ROLES,
                 "requested-secrets": json.dumps(SECRET_FIELDS),
                 "provided-secrets": '["mtls-cert"]',
             }
@@ -1998,7 +2021,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert datadict == {
             "alias": "cluster1",
             "database": "data_platform",
-            "extra-user-roles": "CREATEDB,CREATEROLE",
+            "role-type": ROLE_USER,
+            "extra-user-roles": EXTRA_USER_ROLES,
             "requested-secrets": json.dumps(SECRET_FIELDS),
             "provided-secrets": '["mtls-cert"]',
         }
@@ -2254,7 +2278,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "alias": "cluster1",
                 "somedata": "somevalue",
                 "database": "data_platform",
-                "extra-user-roles": "CREATEDB,CREATEROLE",
+                "role-type": ROLE_USER,
+                "extra-user-roles": EXTRA_USER_ROLES,
                 REQ_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.remote_secret_fields),
                 PROV_SECRET_FIELDS: json.dumps(self.harness.charm.requirer.local_secret_fields),
             }
