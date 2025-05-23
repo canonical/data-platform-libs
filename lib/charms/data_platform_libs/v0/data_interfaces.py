@@ -1930,6 +1930,21 @@ class ProviderEventHandlers(EventHandlers):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
 
+    @staticmethod
+    def _validate_role_consistency(event: RelationEvent, diff: Diff) -> None:
+        """Validates that role information is not changed after relation is established.
+
+        - When role-type changes, backwards compatibility is broken.
+        - When extra-user-roles changes, role membership checks become incredibly complex.
+        - When extra-group-roles changes, role membership checks become incredibly complex.
+        """
+        if not isinstance(event, RelationChangedEvent):
+            return
+
+        for key in ["role-type", "extra-user-roles", "extra-group-roles"]:
+            if key in diff.changed:
+                raise ValueError(f"Cannot change {key} after relation has already been created")
+
     # Event handlers
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
@@ -3004,8 +3019,12 @@ class DatabaseProviderEventHandlers(ProviderEventHandlers):
         # Leader only
         if not self.relation_data.local_unit.is_leader():
             return
+
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
+
+        # Validate role information is not dynamically changed
+        self._validate_role_consistency(event, diff)
 
         # Emit a database requested event if the setup key (database name)
         # was added to the relation databag, but the role-type key was not.
@@ -3541,6 +3560,9 @@ class KafkaProviderEventHandlers(ProviderEventHandlers):
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
+        # Validate role information is not dynamically changed
+        self._validate_role_consistency(event, diff)
+
         # Emit a topic requested event if the setup key (topic name)
         # was added to the relation databag, but the role-type key was not.
         if "topic" in diff.added and "role-type" not in diff.added:
@@ -3846,8 +3868,12 @@ class OpenSearchProvidesEventHandlers(ProviderEventHandlers):
         # Leader only
         if not self.relation_data.local_unit.is_leader():
             return
+
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
+
+        # Validate role information is not dynamically changed
+        self._validate_role_consistency(event, diff)
 
         # Emit an index requested event if the setup key (index name)
         # was added to the relation databag, but the role-type key was not.
@@ -4157,6 +4183,12 @@ class EtcdProviderEventHandlers(ProviderEventHandlers):
         new_data_keys = list(event.relation.data[event.app].keys())
         if any(newval for newval in new_data_keys if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, new_data_keys)
+
+        # Check which data has changed to emit customs events.
+        diff = self._diff(event)
+
+        # Validate role information is not dynamically changed
+        self._validate_role_consistency(event, diff)
 
         getattr(self.on, "mtls_cert_updated").emit(event.relation, app=event.app, unit=event.unit)
         return
