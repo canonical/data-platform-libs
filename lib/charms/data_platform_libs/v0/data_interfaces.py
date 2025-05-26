@@ -34,6 +34,7 @@ application charm code:
 from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
     DatabaseRequires,
+    DatabaseRoleCreatedEvent,
 )
 
 class ApplicationCharm(CharmBase):
@@ -45,6 +46,7 @@ class ApplicationCharm(CharmBase):
         # Charm events defined in the database requires charm library.
         self.database = DatabaseRequires(self, relation_name="database", database_name="database")
         self.framework.observe(self.database.on.database_created, self._on_database_created)
+        self.framework.observe(self.database.on.database_role_created, self._on_database_role_created)
 
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
         # Handle the created database
@@ -61,12 +63,17 @@ class ApplicationCharm(CharmBase):
 
         # Set active status
         self.unit.status = ActiveStatus("received database credentials")
+
+    def _on_database_role_created(self, event: DatabaseRoleCreatedEvent) -> None:
+        # Handle the created role
+        ...
 ```
 
 As shown above, the library provides some custom events to handle specific situations,
 which are listed below:
 
 -  database_created: event emitted when the requested database is created.
+-  database_role_created: event emitted when the requested role is created.
 -  endpoints_changed: event emitted when the read/write endpoints of the database have changed.
 -  read_only_endpoints_changed: event emitted when the read-only endpoints of the database
   have changed. Event is not triggered if read/write endpoints changed too.
@@ -141,7 +148,6 @@ class ApplicationCharm(CharmBase):
             event.endpoints,
         )
         ...
-
 ```
 
 When it's needed to check whether a plugin (extension) is enabled on the PostgreSQL
@@ -154,7 +160,6 @@ parts:
   charm:
     charm-binary-python-packages:
       - psycopg[binary]
-
 ```
 
 ### Provider Charm
@@ -187,6 +192,7 @@ class SampleCharm(CharmBase):
         self.provided_database.set_credentials(event.relation.id, username, password)
         # set other variables for the relation event.set_tls("False")
 ```
+
 As shown above, the library provides a custom event (database_requested) to handle
 the situation when an application charm requests a new database to be created.
 It's preferred to subscribe to this event instead of relation changed event to avoid
@@ -207,6 +213,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     BootstrapServerChangedEvent,
     KafkaRequires,
     TopicCreatedEvent,
+    TopicRoleCreatedEvent,
 )
 
 class ApplicationCharm(CharmBase):
@@ -219,6 +226,9 @@ class ApplicationCharm(CharmBase):
         )
         self.framework.observe(
             self.kafka.on.topic_created, self._on_kafka_topic_created
+        )
+        self.framework.observe(
+            self.kafka.on.topic_role_created, self._on_kafka_topic_role_created
         )
 
     def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
@@ -238,6 +248,9 @@ class ApplicationCharm(CharmBase):
         zookeeper_uris = event.zookeeper_uris
         ...
 
+    def _on_kafka_topic_role_created(self, event: TopicRoleCreatedEvent):
+        # Event triggered when a role was created for this application
+        ...
 ```
 
 As shown above, the library provides some custom events to handle specific situations,
@@ -268,6 +281,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
         # Charm events defined in the Kafka Provides charm library.
         self.kafka_provider = KafkaProvides(self, relation_name="kafka_client")
         self.framework.observe(self.kafka_provider.on.topic_requested, self._on_topic_requested)
+        self.framework.observe(self.kafka_provider.on.role_requested, self._on_role_requested)
         # Kafka generic helper
         self.kafka = KafkaHelper()
 
@@ -283,6 +297,9 @@ from charms.data_platform_libs.v0.data_interfaces import (
         self.kafka_provider.set_tls(relation_id, "False")
         self.kafka_provider.set_zookeeper_uris(relation_id, ...)
 
+    def _on_role_requested(self, event: RoleRequestedEvent):
+        # Handle the on_topic_role_requested event.
+        ...
 ```
 As shown above, the library provides a custom event (topic_requested) to handle
 the situation when an application charm requests a new topic to be created.
@@ -2634,7 +2651,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
 # Generic events
 
 
-class ExtraRoleEvent(RelationEvent):
+class RoleEvent(RelationEvent):
     """Base class for data events."""
 
     @property
@@ -2768,8 +2785,16 @@ class DatabaseProvidesEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("database")
 
 
-class DatabaseRequestedEvent(DatabaseProvidesEvent, ExtraRoleEvent):
+class DatabaseRequestedEvent(DatabaseProvidesEvent):
     """Event emitted when a new database is requested for use on this relation."""
+
+    @property
+    def extra_user_roles(self) -> Optional[str]:
+        """Returns the extra user roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-user-roles")
 
     @property
     def external_node_connectivity(self) -> bool:
@@ -2783,6 +2808,10 @@ class DatabaseRequestedEvent(DatabaseProvidesEvent, ExtraRoleEvent):
         )
 
 
+class DatabaseRoleRequestedEvent(DatabaseProvidesEvent, RoleEvent):
+    """Event emitted when a new role is requested for use on this relation."""
+
+
 class DatabaseProvidesEvents(CharmEvents):
     """Database events.
 
@@ -2790,6 +2819,7 @@ class DatabaseProvidesEvents(CharmEvents):
     """
 
     database_requested = EventSource(DatabaseRequestedEvent)
+    database_role_requested = EventSource(DatabaseRoleRequestedEvent)
 
 
 class DatabaseRequiresEvent(RelationEventWithSecret):
@@ -2883,6 +2913,10 @@ class DatabaseCreatedEvent(AuthenticationEvent, DatabaseRequiresEvent):
     """Event emitted when a new database is created for use on this relation."""
 
 
+class DatabaseRoleCreatedEvent(AuthenticationEvent, DatabaseRequiresEvent):
+    """Event emitted when a new role is created for use on this relation."""
+
+
 class DatabaseEndpointsChangedEvent(AuthenticationEvent, DatabaseRequiresEvent):
     """Event emitted when the read/write endpoints are changed."""
 
@@ -2898,6 +2932,7 @@ class DatabaseRequiresEvents(CharmEvents):
     """
 
     database_created = EventSource(DatabaseCreatedEvent)
+    database_role_created = EventSource(DatabaseRoleCreatedEvent)
     endpoints_changed = EventSource(DatabaseEndpointsChangedEvent)
     read_only_endpoints_changed = EventSource(DatabaseReadOnlyEndpointsChangedEvent)
 
@@ -3033,6 +3068,13 @@ class DatabaseProviderEventHandlers(ProviderEventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
+        # Emit a role requested event if the setup key (database name)
+        # was added to the relation databag, in addition to the role-type key.
+        if "database" in diff.added and "role-type" in diff.added:
+            getattr(self.on, "database_role_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
     def _on_secret_changed_event(self, event: SecretChangedEvent) -> None:
         """Event emitted when the secret has changed."""
         pass
@@ -3152,9 +3194,17 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
         if self.relation_data.relations_aliases:
             for relation_alias in self.relation_data.relations_aliases:
-                self.on.define_event(f"{relation_alias}_database_created", DatabaseCreatedEvent)
                 self.on.define_event(
-                    f"{relation_alias}_endpoints_changed", DatabaseEndpointsChangedEvent
+                    f"{relation_alias}_database_created",
+                    DatabaseCreatedEvent,
+                )
+                self.on.define_event(
+                    f"{relation_alias}_database_role_created",
+                    DatabaseRoleCreatedEvent,
+                )
+                self.on.define_event(
+                    f"{relation_alias}_endpoints_changed",
+                    DatabaseEndpointsChangedEvent,
                 )
                 self.on.define_event(
                     f"{relation_alias}_read_only_endpoints_changed",
@@ -3293,8 +3343,20 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "database_created")
 
-            # To avoid unnecessary application restarts do not trigger
-            # “endpoints_changed“ event if “database_created“ is triggered.
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        if self._credentials_shared(diff) and "role-type" in app_databag:
+            # Emit the default event (the one without an alias).
+            logger.info("role created at %s", datetime.now())
+            getattr(self.on, "database_role_created").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # Emit the aliased event (if any).
+            self._emit_aliased_event(event, "database_role_created")
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
         # Emit an endpoints changed event if the database
@@ -3309,8 +3371,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "endpoints_changed")
 
-            # To avoid unnecessary application restarts do not trigger
-            # “read_only_endpoints_changed“ event if “endpoints_changed“ is triggered.
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
         # Emit a read only endpoints changed event if the database
@@ -3417,8 +3478,20 @@ class KafkaClientMtlsCertUpdatedEvent(KafkaProvidesEvent):
         self.old_mtls_cert = snapshot["old_mtls_cert"]
 
 
-class TopicRequestedEvent(KafkaProvidesEvent, ExtraRoleEvent):
+class TopicRequestedEvent(KafkaProvidesEvent):
     """Event emitted when a new topic is requested for use on this relation."""
+
+    @property
+    def extra_user_roles(self) -> Optional[str]:
+        """Returns the extra user roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-user-roles")
+
+
+class TopicRoleRequestedEvent(KafkaProvidesEvent, RoleEvent):
+    """Event emitted when a new role is requested for use on this relation."""
 
 
 class KafkaProvidesEvents(CharmEvents):
@@ -3428,6 +3501,7 @@ class KafkaProvidesEvents(CharmEvents):
     """
 
     topic_requested = EventSource(TopicRequestedEvent)
+    topic_role_requested = EventSource(TopicRoleRequestedEvent)
     mtls_cert_updated = EventSource(KafkaClientMtlsCertUpdatedEvent)
 
 
@@ -3471,6 +3545,10 @@ class TopicCreatedEvent(AuthenticationEvent, KafkaRequiresEvent):
     """Event emitted when a new topic is created for use on this relation."""
 
 
+class TopicRoleCreatedEvent(AuthenticationEvent, KafkaRequiresEvent):
+    """Event emitted when a new role is created for use on this relation."""
+
+
 class BootstrapServerChangedEvent(AuthenticationEvent, KafkaRequiresEvent):
     """Event emitted when the bootstrap server is changed."""
 
@@ -3482,6 +3560,7 @@ class KafkaRequiresEvents(CharmEvents):
     """
 
     topic_created = EventSource(TopicCreatedEvent)
+    topic_role_created = EventSource(TopicRoleCreatedEvent)
     bootstrap_server_changed = EventSource(BootstrapServerChangedEvent)
 
 
@@ -3567,6 +3646,13 @@ class KafkaProviderEventHandlers(ProviderEventHandlers):
         # was added to the relation databag, but the role-type key was not.
         if "topic" in diff.added and "role-type" not in diff.added:
             getattr(self.on, "topic_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a role requested event if the setup key (topic name)
+        # was added to the relation databag, in addition to the role-type key.
+        if "topic" in diff.added and "role-type" in diff.added:
+            getattr(self.on, "topic_role_requested").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -3718,8 +3804,17 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
             logger.info("topic created at %s", datetime.now())
             getattr(self.on, "topic_created").emit(event.relation, app=event.app, unit=event.unit)
 
-            # To avoid unnecessary application restarts do not trigger
-            # “endpoints_changed“ event if “topic_created“ is triggered.
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        if self._credentials_shared(diff) and "role-type" in app_databag:
+            # Emit the default event (the one without an alias).
+            logger.info("role created at %s", datetime.now())
+            getattr(self.on, "topic_role_created").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
         # Emit an endpoints (bootstrap-server) changed event if the Kafka endpoints
@@ -3730,6 +3825,8 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
             getattr(self.on, "bootstrap_server_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )  # here check if this is the right design
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
 
@@ -3778,8 +3875,20 @@ class OpenSearchProvidesEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("index")
 
 
-class IndexRequestedEvent(OpenSearchProvidesEvent, ExtraRoleEvent):
+class IndexRequestedEvent(OpenSearchProvidesEvent):
     """Event emitted when a new index is requested for use on this relation."""
+
+    @property
+    def extra_user_roles(self) -> Optional[str]:
+        """Returns the extra user roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-user-roles")
+
+
+class IndexRoleRequestedEvent(OpenSearchProvidesEvent, RoleEvent):
+    """Event emitted when a new role is requested for use on this relation."""
 
 
 class OpenSearchProvidesEvents(CharmEvents):
@@ -3789,6 +3898,7 @@ class OpenSearchProvidesEvents(CharmEvents):
     """
 
     index_requested = EventSource(IndexRequestedEvent)
+    index_role_requested = EventSource(IndexRoleRequestedEvent)
 
 
 class OpenSearchRequiresEvent(DatabaseRequiresEvent):
@@ -3799,6 +3909,10 @@ class IndexCreatedEvent(AuthenticationEvent, OpenSearchRequiresEvent):
     """Event emitted when a new index is created for use on this relation."""
 
 
+class IndexRoleCreatedEvent(AuthenticationEvent, OpenSearchRequiresEvent):
+    """Event emitted when a new index is created for use on this relation."""
+
+
 class OpenSearchRequiresEvents(CharmEvents):
     """OpenSearch events.
 
@@ -3806,6 +3920,7 @@ class OpenSearchRequiresEvents(CharmEvents):
     """
 
     index_created = EventSource(IndexCreatedEvent)
+    index_role_created = EventSource(IndexRoleCreatedEvent)
     endpoints_changed = EventSource(DatabaseEndpointsChangedEvent)
     authentication_updated = EventSource(AuthenticationEvent)
 
@@ -3879,6 +3994,13 @@ class OpenSearchProvidesEventHandlers(ProviderEventHandlers):
         # was added to the relation databag, but the role-type key was not.
         if "index" in diff.added and "role-type" not in diff.added:
             getattr(self.on, "index_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a role requested event if the setup key (index name)
+        # was added to the relation databag, in addition to the role-type key.
+        if "index" in diff.added and "role-type" in diff.added:
+            getattr(self.on, "index_role_requested").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -4005,18 +4127,29 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
             logger.info("index created at: %s", datetime.now())
             getattr(self.on, "index_created").emit(event.relation, app=event.app, unit=event.unit)
 
-            # To avoid unnecessary application restarts do not trigger
-            # “endpoints_changed“ event if “index_created“ is triggered.
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
-        # Emit a endpoints changed event if the OpenSearch application added or changed this info
-        # in the relation databag.
+        if self._credentials_shared(diff) and "role-type" in app_databag:
+            # Emit the default event (the one without an alias).
+            logger.info("role created at: %s", datetime.now())
+            getattr(self.on, "index_role_created").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        # Emit a endpoints changed event if the OpenSearch application
+        # added or changed this info in the relation databag.
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("endpoints changed on %s", datetime.now())
             getattr(self.on, "endpoints_changed").emit(
                 event.relation, app=event.app, unit=event.unit
-            )  # here check if this is the right design
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
 
