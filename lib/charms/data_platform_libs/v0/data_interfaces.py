@@ -1856,6 +1856,14 @@ class RequirerEventHandlers(EventHandlers):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
 
+    def _credentials_shared(self, diff: Diff) -> bool:
+        """Whether the relation data-bag contains username / password keys."""
+        secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
+
+        return secret_field_user in diff.added or (
+            "username" in diff.added and "password" in diff.added
+        )
+
     # Event handlers
 
     def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
@@ -3189,10 +3197,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
         # Check if the database is created
         # (the database charm shared the credentials).
-        secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
-        if (
-            "username" in diff.added and "password" in diff.added
-        ) or secret_field_user in diff.added:
+        if self._credentials_shared(diff):
             # Emit the default event (the one without an alias).
             logger.info("database created at %s", datetime.now())
             getattr(self.on, "database_created").emit(
@@ -3600,10 +3605,7 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
 
-        secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
-        if (
-            "username" in diff.added and "password" in diff.added
-        ) or secret_field_user in diff.added:
+        if self._credentials_shared(diff):
             # Emit the default event (the one without an alias).
             logger.info("topic created at %s", datetime.now())
             getattr(self.on, "topic_created").emit(event.relation, app=event.app, unit=event.unit)
@@ -3866,9 +3868,7 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
 
         # Check if the index is created
         # (the OpenSearch charm shares the credentials).
-        if (
-            "username" in diff.added and "password" in diff.added
-        ) or secret_field_user in diff.added:
+        if self._credentials_shared(diff):
             # Emit the default event (the one without an alias).
             logger.info("index created at: %s", datetime.now())
             getattr(self.on, "index_created").emit(event.relation, app=event.app, unit=event.unit)
