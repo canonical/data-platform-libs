@@ -535,14 +535,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         harness.begin_with_initial_hooks()
         return harness, rel_id
 
-    @patch.object(DatabaseCharm, "_on_database_requested")
-    def emit_database_requested_event(self, _on_database_requested):
-        # Emit the database requested event.
-        relation = self.harness.charm.model.get_relation(DATABASE_RELATION_NAME, self.rel_id)
-        application = self.harness.charm.model.get_app("database")
-        self.harness.charm.provider.on.database_requested.emit(relation, application)
-        return _on_database_requested.call_args[0][0]
-
     #
     # Peer Data tests
     #
