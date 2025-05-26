@@ -32,10 +32,10 @@ DATABASE_DUMMY_APP_NAME = "dummy-database"
 ANOTHER_DATABASE_APP_NAME = "another-database"
 APP_NAMES = [APPLICATION_APP_NAME, DATABASE_APP_NAME, ANOTHER_DATABASE_APP_NAME]
 DATABASE_APP_METADATA = yaml.safe_load(
-    Path("./tests/integration/database-charm/metadata.yaml").read_text()
+    Path("./tests/v0/integration/database-charm/metadata.yaml").read_text()
 )
 DATABASE_DUMMY_APP_METADATA = yaml.safe_load(
-    Path("./tests/integration/dummy-database-charm/metadata.yaml").read_text()
+    Path("./tests/v0/integration/dummy-database-charm/metadata.yaml").read_text()
 )
 FIRST_DATABASE_RELATION_NAME = "first-database"
 SECOND_DATABASE_RELATION_NAME = "second-database"

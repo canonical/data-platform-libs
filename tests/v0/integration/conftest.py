@@ -48,15 +48,15 @@ def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
 def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     """Copy the data_interfaces library to the different charm folder."""
     library_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"
-    install_path = "tests/integration/database-charm/" + library_path
+    install_path = "tests/v0/integration/database-charm/" + library_path
     shutil.copyfile(library_path, install_path)
-    install_path = "tests/integration/dummy-database-charm/" + library_path
+    install_path = "tests/v0/integration/dummy-database-charm/" + library_path
     shutil.copyfile(library_path, install_path)
-    install_path = "tests/integration/kafka-charm/" + library_path
+    install_path = "tests/v0/integration/kafka-charm/" + library_path
     shutil.copyfile(library_path, install_path)
-    install_path = "tests/integration/application-charm/" + library_path
+    install_path = "tests/v0/integration/application-charm/" + library_path
     shutil.copyfile(library_path, install_path)
-    install_path = "tests/integration/opensearch-charm/" + library_path
+    install_path = "tests/v0/integration/opensearch-charm/" + library_path
     shutil.copyfile(library_path, install_path)
 
 
@@ -64,8 +64,8 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
 def copy_s3_library_into_charm(ops_test: OpsTest):
     """Copy the s3 library to the applications charm folder."""
     library_path = "lib/charms/data_platform_libs/v0/s3.py"
-    install_path_provider = "tests/integration/s3-charm/" + library_path
-    install_path_requirer = "tests/integration/application-s3-charm/" + library_path
+    install_path_provider = "tests/v0/integration/s3-charm/" + library_path
+    install_path_requirer = "tests/v0/integration/application-s3-charm/" + library_path
     shutil.copyfile(library_path, install_path_provider)
     shutil.copyfile(library_path, install_path_requirer)
 
@@ -73,7 +73,7 @@ def copy_s3_library_into_charm(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def application_charm(ops_test: OpsTest):
     """Build the application charm."""
-    charm_path = "tests/integration/application-charm"
+    charm_path = "tests/v0/integration/application-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -81,7 +81,7 @@ async def application_charm(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def database_charm(ops_test: OpsTest):
     """Build the database charm."""
-    charm_path = "tests/integration/database-charm"
+    charm_path = "tests/v0/integration/database-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -89,7 +89,7 @@ async def database_charm(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def dummy_database_charm(ops_test: OpsTest):
     """Build the database charm."""
-    charm_path = "tests/integration/dummy-database-charm"
+    charm_path = "tests/v0/integration/dummy-database-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -97,7 +97,7 @@ async def dummy_database_charm(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def application_s3_charm(ops_test: OpsTest):
     """Build the application-s3 charm."""
-    charm_path = "tests/integration/application-s3-charm"
+    charm_path = "tests/v0/integration/application-s3-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -105,7 +105,7 @@ async def application_s3_charm(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def s3_charm(ops_test: OpsTest):
     """Build the S3 charm."""
-    charm_path = "tests/integration/s3-charm"
+    charm_path = "tests/v0/integration/s3-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -113,7 +113,7 @@ async def s3_charm(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def kafka_charm(ops_test: OpsTest):
     """Build the Kafka charm."""
-    charm_path = "tests/integration/kafka-charm"
+    charm_path = "tests/v0/integration/kafka-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -126,7 +126,7 @@ async def opensearch_charm(ops_test: OpsTest):
     all these relations. This might be easily achieved by merging this repo with the
     data-integrator charm repo.
     """
-    charm_path = "tests/integration/opensearch-charm"
+    charm_path = "tests/v0/integration/opensearch-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -134,7 +134,7 @@ async def opensearch_charm(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def secrets_charm(ops_test: OpsTest):
     """Build the secrets charm."""
-    charm_path = "tests/integration/secrets-charm"
+    charm_path = "tests/v0/integration/secrets-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -174,7 +174,7 @@ def fetch_old_versions():
     """Fetching the previous 4 versions of the lib for upgrade tests."""
     cwd = os.getcwd()
     src_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"
-    data_path = f"{cwd}/tests/integration/data/data_interfaces.py"
+    data_path = f"{cwd}/tests/v0/integration/data/data_interfaces.py"
     tmp_path = "./tmp_repo_checkout"
 
     os.mkdir(tmp_path)
