@@ -29,10 +29,6 @@ jobs:
         run: python3 -m pip install tox
       - name: Run linters
         run: tox run -e lint-v${{ matrix.libs-version }}
-      - name: Install noctua
-        run: pipx install git+https://github.com/lucabello/noctua
-      - name: dry run publish libs
-        run: noctua charm libraries publish --dry-run
 
   unit-test:
     name: Unit tests

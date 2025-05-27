@@ -20,11 +20,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Install noctua
+        run: pipx install git+https://github.com/lucabello/noctua
       - name: Release any bumped charm libs
-        uses: canonical/charming-actions/release-libraries@2.7.0
-        with:
-          credentials: "${{ secrets.CHARMHUB_TOKEN }}"
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
+        env:
+          CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
+        run: noctua charm libraries publish
       - name: Select charmhub channel
         uses: canonical/charming-actions/channel@2.7.0
         id: channel
