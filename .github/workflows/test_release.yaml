@@ -1,0 +1,34 @@
+name: Test Release to latest/edge
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  schedule:
+    - cron: '53 0 * * *' # Daily at 00:53 UTC
+  # Triggered on push to branch "main" by .github/workflows/release.yaml
+  workflow_call:
+
+jobs:
+  release-to-charmhub:
+    name: Release to CharmHub
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+      - name: Install noctua
+        run: pipx install git+https://github.com/lucabello/noctua
+      - name: Release any bumped charm libs
+        env:
+          CHARMCRAFT_AUTH: ${{ secrets.CHARMHUB_TOKEN }}
+        run: noctua charm libraries publish --dry-run
+      - name: Select charmhub channel
+        uses: canonical/charming-actions/channel@2.7.0
+        id: channel
