@@ -2927,6 +2927,10 @@ class DatabaseRoleRequestedEvent(DatabaseProvidesEvent, RoleProvidesEvent):
     """Event emitted when a new role is requested for use on this relation."""
 
 
+class DatabaseRolePermissionsChangedEvent(DatabaseProvidesEvent, RoleProvidesEvent):
+    """Event emitted when existing role permissions are changed on this relation."""
+
+
 class DatabaseProvidesEvents(CharmEvents):
     """Database events.
 
@@ -2935,6 +2939,7 @@ class DatabaseProvidesEvents(CharmEvents):
 
     database_requested = EventSource(DatabaseRequestedEvent)
     database_role_requested = EventSource(DatabaseRoleRequestedEvent)
+    database_role_permissions_changed = EventSource(DatabaseRolePermissionsChangedEvent)
 
 
 class DatabaseRequiresEvent(RelationEventWithSecret):
@@ -3187,6 +3192,17 @@ class DatabaseProviderEventHandlers(ProviderEventHandlers):
         # was added to the relation databag, in addition to the role-type key.
         if "database" in diff.added and "role-type" in diff.added:
             getattr(self.on, "database_role_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a permissions changed event if the setup key (database name)
+        # was added to the relation databag, and the role-permissions key changed.
+        if (
+            "database" not in diff.added
+            and "role-type" not in diff.added
+            and ("role-permissions" in diff.added or "role-permissions" in diff.changed)
+        ):
+            getattr(self.on, "database_role_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -3615,6 +3631,10 @@ class TopicRoleRequestedEvent(KafkaProvidesEvent, RoleProvidesEvent):
     """Event emitted when a new role is requested for use on this relation."""
 
 
+class TopicRolePermissionsChangedEvent(KafkaProvidesEvent, RoleProvidesEvent):
+    """Event emitted when existing role permissions are changed on this relation."""
+
+
 class KafkaProvidesEvents(CharmEvents):
     """Kafka events.
 
@@ -3623,6 +3643,7 @@ class KafkaProvidesEvents(CharmEvents):
 
     topic_requested = EventSource(TopicRequestedEvent)
     topic_role_requested = EventSource(TopicRoleRequestedEvent)
+    topic_role_permissions_changed = EventSource(TopicRolePermissionsChangedEvent)
     mtls_cert_updated = EventSource(KafkaClientMtlsCertUpdatedEvent)
 
 
@@ -3774,6 +3795,17 @@ class KafkaProviderEventHandlers(ProviderEventHandlers):
         # was added to the relation databag, in addition to the role-type key.
         if "topic" in diff.added and "role-type" in diff.added:
             getattr(self.on, "topic_role_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a permissions changed event if the setup key (topic name)
+        # was added to the relation databag, and the role-permissions key changed.
+        if (
+            "topic" not in diff.added
+            and "role-type" not in diff.added
+            and ("role-permissions" in diff.added or "role-permissions" in diff.changed)
+        ):
+            getattr(self.on, "topic_role_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -4014,6 +4046,10 @@ class IndexRoleRequestedEvent(OpenSearchProvidesEvent, RoleProvidesEvent):
     """Event emitted when a new role is requested for use on this relation."""
 
 
+class IndexRolePermissionsChangedEvent(OpenSearchProvidesEvent, RoleProvidesEvent):
+    """Event emitted when existing role permissions are changed on this relation."""
+
+
 class OpenSearchProvidesEvents(CharmEvents):
     """OpenSearch events.
 
@@ -4022,6 +4058,7 @@ class OpenSearchProvidesEvents(CharmEvents):
 
     index_requested = EventSource(IndexRequestedEvent)
     index_role_requested = EventSource(IndexRoleRequestedEvent)
+    index_role_permissions_changed = EventSource(IndexRolePermissionsChangedEvent)
 
 
 class OpenSearchRequiresEvent(DatabaseRequiresEvent):
@@ -4124,6 +4161,17 @@ class OpenSearchProvidesEventHandlers(ProviderEventHandlers):
         # was added to the relation databag, in addition to the role-type key.
         if "index" in diff.added and "role-type" in diff.added:
             getattr(self.on, "index_role_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a permissions changed event if the setup key (index name)
+        # was added to the relation databag, and the role-permissions key changed.
+        if (
+            "index" not in diff.added
+            and "role-type" not in diff.added
+            and ("role-permissions" in diff.added or "role-permissions" in diff.changed)
+        ):
+            getattr(self.on, "index_role_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
