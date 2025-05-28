@@ -1819,6 +1819,7 @@ class RequirerData(Data):
         model,
         relation_name: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -1826,9 +1827,12 @@ class RequirerData(Data):
         """Manager of base client relations."""
         super().__init__(model, relation_name)
         self.role_type = role_type
+        self.role_permissions = role_permissions
         self.extra_user_roles = extra_user_roles
         self.extra_group_roles = extra_group_roles
+
         self._validate_role_type()
+        self._validate_role_permissions()
 
         self._remote_secret_fields = list(self.SECRET_FIELDS)
         self._local_secret_fields = [
@@ -1868,6 +1872,20 @@ class RequirerData(Data):
 
         if self.role_type == ROLE_GROUP and self.extra_user_roles:
             raise ValueError("Inconsistent role information. Use extra_group_roles instead")
+
+    def _validate_role_permissions(self) -> None:
+        """Validates whether the provided role permissions follow the right JSON format."""
+        if not self.role_permissions:
+            return
+
+        accepted_keys = {"resource_name", "resource_type", "privileges"}
+
+        try:
+            permissions = json.loads(self.role_permissions)
+            for permission in permissions:
+                assert permission.keys() == accepted_keys
+        except json.decoder.JSONDecodeError:
+            raise ValueError("Invalid role permissions format. It must be JSON format")
 
     # Public functions
 
@@ -2038,6 +2056,7 @@ class DataPeerData(RequirerData, ProviderData):
         model,
         relation_name: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -2050,6 +2069,7 @@ class DataPeerData(RequirerData, ProviderData):
             model,
             relation_name,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -2570,6 +2590,7 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
         charm,
         relation_name: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -2583,6 +2604,7 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
             charm.model,
             relation_name,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -2610,6 +2632,7 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
         charm,
         relation_name: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -2623,6 +2646,7 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
             charm.model,
             relation_name,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -2668,6 +2692,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
         charm: CharmBase,
         relation_name: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -2681,6 +2706,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
             charm.model,
             relation_name,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -2739,6 +2765,14 @@ class RoleProvidesEvent(RelationEvent):
             return None
 
         return self.relation.data[self.relation.app].get("role-type")
+
+    @property
+    def role_permissions(self) -> Optional[str]:
+        """Returns the role_permissions that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("role-permissions")
 
     @property
     def extra_user_roles(self) -> Optional[str]:
@@ -3178,6 +3212,7 @@ class DatabaseRequirerData(RequirerData):
         relation_name: str,
         database_name: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
@@ -3189,6 +3224,7 @@ class DatabaseRequirerData(RequirerData):
             model,
             relation_name,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -3375,6 +3411,8 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
         if self.relation_data.role_type:
             event_data["role-type"] = self.relation_data.role_type
+        if self.relation_data.role_permissions:
+            event_data["role-permissions"] = self.relation_data.role_permissions
         if self.relation_data.extra_user_roles:
             event_data["extra-user-roles"] = self.relation_data.extra_user_roles
         if self.relation_data.extra_group_roles:
@@ -3477,6 +3515,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
         relation_name: str,
         database_name: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
@@ -3489,6 +3528,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
             relation_name,
             database_name,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             relations_aliases,
@@ -3782,6 +3822,7 @@ class KafkaRequirerData(RequirerData):
         relation_name: str,
         topic: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         consumer_group_prefix: Optional[str] = None,
@@ -3793,6 +3834,7 @@ class KafkaRequirerData(RequirerData):
             model,
             relation_name,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -3848,6 +3890,8 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
 
         if self.relation_data.role_type:
             relation_data["role-type"] = self.relation_data.role_type
+        if self.relation_data.role_permissions:
+            relation_data["role-permissions"] = self.relation_data.role_permissions
         if self.relation_data.extra_user_roles:
             relation_data["extra-user-roles"] = self.relation_data.extra_user_roles
         if self.relation_data.extra_group_roles:
@@ -3916,6 +3960,7 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
         relation_name: str,
         topic: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         consumer_group_prefix: Optional[str] = None,
@@ -3928,6 +3973,7 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
             relation_name,
             topic,
             role_type,
+            role_permissions,
             extra_user_roles=extra_user_roles,
             extra_group_roles=extra_group_roles,
             consumer_group_prefix=consumer_group_prefix,
@@ -4099,6 +4145,7 @@ class OpenSearchRequiresData(RequirerData):
         relation_name: str,
         index: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -4108,6 +4155,7 @@ class OpenSearchRequiresData(RequirerData):
             model,
             relation_name,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -4138,6 +4186,8 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
 
         if self.relation_data.role_type:
             data["role-type"] = self.relation_data.role_type
+        if self.relation_data.role_permissions:
+            data["role-permissions"] = self.relation_data.role_permissions
         if self.relation_data.extra_user_roles:
             data["extra-user-roles"] = self.relation_data.extra_user_roles
         if self.relation_data.extra_group_roles:
@@ -4235,6 +4285,7 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
         relation_name: str,
         index: str,
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -4245,6 +4296,7 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
             relation_name,
             index,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -4447,6 +4499,7 @@ class EtcdRequirerData(RequirerData):
         prefix: str,
         mtls_cert: Optional[str],
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -4456,6 +4509,7 @@ class EtcdRequirerData(RequirerData):
             model,
             relation_name,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
@@ -4568,6 +4622,7 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
         prefix: str,
         mtls_cert: Optional[str],
         role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
@@ -4579,6 +4634,7 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
             prefix,
             mtls_cert,
             role_type,
+            role_permissions,
             extra_user_roles,
             extra_group_roles,
             additional_secret_fields,
