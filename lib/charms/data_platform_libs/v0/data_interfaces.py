@@ -2930,6 +2930,10 @@ class DatabaseEntityRequestedEvent(DatabaseProvidesEvent, EntityProvidesEvent):
     """Event emitted when a new entity is requested for use on this relation."""
 
 
+class DatabaseEntityPermissionsChangedEvent(DatabaseProvidesEvent, EntityProvidesEvent):
+    """Event emitted when existing entity permissions are changed on this relation."""
+
+
 class DatabaseProvidesEvents(CharmEvents):
     """Database events.
 
@@ -2938,6 +2942,7 @@ class DatabaseProvidesEvents(CharmEvents):
 
     database_requested = EventSource(DatabaseRequestedEvent)
     database_entity_requested = EventSource(DatabaseEntityRequestedEvent)
+    database_entity_permissions_changed = EventSource(DatabaseEntityPermissionsChangedEvent)
 
 
 class DatabaseRequiresEvent(RelationEventWithSecret):
@@ -3193,6 +3198,20 @@ class DatabaseProviderEventHandlers(ProviderEventHandlers):
         # was added to the relation databag, in addition to the entity-type key.
         if "database" in diff.added and "entity-type" in diff.added:
             getattr(self.on, "database_entity_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        # Emit a permissions changed event if the setup key (database name)
+        # was added to the relation databag, and the entity-permissions key changed.
+        if (
+            "database" not in diff.added
+            and "entity-type" not in diff.added
+            and ("entity-permissions" in diff.added or "entity-permissions" in diff.changed)
+        ):
+            getattr(self.on, "database_entity_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -3623,6 +3642,10 @@ class TopicEntityRequestedEvent(KafkaProvidesEvent, EntityProvidesEvent):
     """Event emitted when a new entity is requested for use on this relation."""
 
 
+class TopicEntityPermissionsChangedEvent(KafkaProvidesEvent, EntityProvidesEvent):
+    """Event emitted when existing entity permissions are changed on this relation."""
+
+
 class KafkaProvidesEvents(CharmEvents):
     """Kafka events.
 
@@ -3631,6 +3654,7 @@ class KafkaProvidesEvents(CharmEvents):
 
     topic_requested = EventSource(TopicRequestedEvent)
     topic_entity_requested = EventSource(TopicEntityRequestedEvent)
+    topic_entity_permissions_changed = EventSource(TopicEntityPermissionsChangedEvent)
     mtls_cert_updated = EventSource(KafkaClientMtlsCertUpdatedEvent)
 
 
@@ -3785,6 +3809,20 @@ class KafkaProviderEventHandlers(ProviderEventHandlers):
         # was added to the relation databag, in addition to the entity-type key.
         if "topic" in diff.added and "entity-type" in diff.added:
             getattr(self.on, "topic_entity_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        # Emit a permissions changed event if the setup key (topic name)
+        # was added to the relation databag, and the entity-permissions key changed.
+        if (
+            "topic" not in diff.added
+            and "entity-type" not in diff.added
+            and ("entity-permissions" in diff.added or "entity-permissions" in diff.changed)
+        ):
+            getattr(self.on, "topic_entity_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -4034,6 +4072,10 @@ class IndexEntityRequestedEvent(OpenSearchProvidesEvent, EntityProvidesEvent):
     """Event emitted when a new entity is requested for use on this relation."""
 
 
+class IndexEntityPermissionsChangedEvent(OpenSearchProvidesEvent, EntityProvidesEvent):
+    """Event emitted when existing entity permissions are changed on this relation."""
+
+
 class OpenSearchProvidesEvents(CharmEvents):
     """OpenSearch events.
 
@@ -4042,6 +4084,7 @@ class OpenSearchProvidesEvents(CharmEvents):
 
     index_requested = EventSource(IndexRequestedEvent)
     index_entity_requested = EventSource(IndexEntityRequestedEvent)
+    index_entity_permissions_changed = EventSource(IndexEntityPermissionsChangedEvent)
 
 
 class OpenSearchRequiresEvent(DatabaseRequiresEvent):
@@ -4147,6 +4190,20 @@ class OpenSearchProvidesEventHandlers(ProviderEventHandlers):
         # was added to the relation databag, in addition to the entity-type key.
         if "index" in diff.added and "entity-type" in diff.added:
             getattr(self.on, "index_entity_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        # Emit a permissions changed event if the setup key (index name)
+        # was added to the relation databag, and the entity-permissions key changed.
+        if (
+            "index" not in diff.added
+            and "entity-type" not in diff.added
+            and ("entity-permissions" in diff.added or "entity-permissions" in diff.changed)
+        ):
+            getattr(self.on, "index_entity_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
