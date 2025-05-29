@@ -51,6 +51,9 @@ logger = getLogger(__name__)
 PEER_RELATION_NAME = "database-peers"
 
 DATABASE = "data_platform"
+ROLE_PERMISSIONS = (
+    '[{"resource_name": "cars", "resource_type": "TABLE", "privileges": ["SELECT"]}]'
+)
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 EXTRA_GROUP_ROLES = "CUSTOM_ROLE_1,CUSTOM_ROLE_2"
 DATABASE_RELATION_INTERFACE = "database_client"
@@ -949,6 +952,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 self.DATABASE_FIELD: DATABASE,
                 "role-type": ROLE_USER,
+                "role-permissions": ROLE_PERMISSIONS,
                 "extra-user-roles": EXTRA_USER_ROLES,
             },
         )
@@ -960,6 +964,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_database_role_requested.call_args[0][0]
         assert event.database == DATABASE
         assert event.role_type == ROLE_USER
+        assert event.role_permissions == ROLE_PERMISSIONS
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
         # Reset the relation data keys + mock count
@@ -973,6 +978,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 self.DATABASE_FIELD: DATABASE,
                 "role-type": ROLE_GROUP,
+                "role-permissions": ROLE_PERMISSIONS,
                 "extra-group-roles": EXTRA_GROUP_ROLES,
             },
         )
@@ -984,6 +990,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_database_role_requested.call_args[0][0]
         assert event.database == DATABASE
         assert event.role_type == ROLE_GROUP
+        assert event.role_permissions == ROLE_PERMISSIONS
         assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     def test_set_endpoints(self):
@@ -1532,6 +1539,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "topic": TOPIC,
                 "role-type": ROLE_USER,
+                "role-permissions": ROLE_PERMISSIONS,
                 "extra-user-roles": EXTRA_USER_ROLES,
             },
         )
@@ -1543,6 +1551,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_topic_role_requested.call_args[0][0]
         assert event.topic == TOPIC
         assert event.role_type == ROLE_USER
+        assert event.role_permissions == ROLE_PERMISSIONS
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
         # Reset the relation data keys + mock count
@@ -1556,6 +1565,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "topic": TOPIC,
                 "role-type": ROLE_GROUP,
+                "role-permissions": ROLE_PERMISSIONS,
                 "extra-group-roles": EXTRA_GROUP_ROLES,
             },
         )
@@ -1567,6 +1577,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_topic_role_requested.call_args[0][0]
         assert event.topic == TOPIC
         assert event.role_type == ROLE_GROUP
+        assert event.role_permissions == ROLE_PERMISSIONS
         assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     def test_set_bootstrap_server(self):
@@ -1746,6 +1757,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "index": INDEX,
                 "role-type": ROLE_USER,
+                "role-permissions": ROLE_PERMISSIONS,
                 "extra-user-roles": EXTRA_USER_ROLES,
             },
         )
@@ -1757,6 +1769,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_index_role_requested.call_args[0][0]
         assert event.index == INDEX
         assert event.role_type == ROLE_USER
+        assert event.role_permissions == ROLE_PERMISSIONS
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
         # Reset the relation data keys + mock count
@@ -1770,6 +1783,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "index": INDEX,
                 "role-type": ROLE_GROUP,
+                "role-permissions": ROLE_PERMISSIONS,
                 "extra-group-roles": EXTRA_GROUP_ROLES,
             },
         )
@@ -1781,6 +1795,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_index_role_requested.call_args[0][0]
         assert event.index == INDEX
         assert event.role_type == ROLE_GROUP
+        assert event.role_permissions == ROLE_PERMISSIONS
         assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
