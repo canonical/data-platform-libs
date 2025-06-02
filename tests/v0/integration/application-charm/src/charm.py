@@ -9,6 +9,7 @@ of the libraries in this repository.
 """
 
 import logging
+import subprocess
 from typing import Optional, Tuple
 
 from ops import Relation
@@ -183,6 +184,7 @@ class ApplicationCharm(CharmBase):
         # actions
 
         self.framework.observe(self.on.reset_unit_status_action, self._on_reset_unit_status)
+        self.framework.observe(self.on.set_mtls_cert_action, self._on_set_mtls_cert)
 
         # Get/set/delete fields on second-database relations
         self.framework.observe(self.on.get_relation_field_action, self._on_get_relation_field)
@@ -347,6 +349,19 @@ class ApplicationCharm(CharmBase):
     def _on_reset_unit_status(self, _: ActionEvent):
         """Handle the reset of status message for the unit."""
         self.unit.status = ActiveStatus()
+
+    def _on_set_mtls_cert(self, event: ActionEvent):
+        """Sets the MTLS cert for the relation."""
+        if DATA_INTERFACES_VERSION < 47:
+            event.fail("This action is not supported on lib version < 0.47.")
+            return
+
+        cmd = f'openssl req -new -newkey rsa:2048 -days 365 -nodes -subj "/CN={self.unit.name.replace("/", "-")}" -x509 -keyout client.key -out client.pem'
+        subprocess.check_output(cmd, shell=True, universal_newlines=True)
+        cert = open("./client.pem", "r").read()
+        relation = self.model.get_relation("kafka-split-pattern-client")
+        self.kafka_requirer_interface.set_mtls_cert(relation.id, cert)
+        event.set_results({"mtls-cert": cert})
 
 
 if __name__ == "__main__":

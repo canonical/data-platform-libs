@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 import asyncio
 import logging
+import subprocess
 
 import pytest
 from pytest_operator.plugin import OpsTest
@@ -22,6 +23,8 @@ PROV_SECRET_PREFIX = "secret-"
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.log_errors_allowed
+@pytest.mark.skip_if_deployed
 async def test_deploy_charms(ops_test: OpsTest, application_charm, kafka_charm):
     """Deploy both charms (application and the testing kafka app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
@@ -215,3 +218,38 @@ async def test_kafka_bootstrap_server_changed(ops_test: OpsTest):
     # check the bootstrap_server_changed event is NOT triggered
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
         assert unit.workload_status_message == ""
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_kafka_mtls(ops_test: OpsTest):
+    """Tests mtls-cert is set as a secret from the requirer side and proper event triggered on provider side."""
+    # Relate the charms and wait for them exchanging some connection data.
+    await ops_test.model.add_relation(
+        KAFKA_APP_NAME, f"{APPLICATION_APP_NAME_SPLIT}:{RELATION_NAME_SPLIT_PATTERN}"
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    app_unit = ops_test.model.applications[APPLICATION_APP_NAME_SPLIT].units[0]
+    action = await app_unit.run_action(action_name="set-mtls-cert")
+    _ = await action.wait()
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    secret_uri = await get_application_relation_data(
+        ops_test,
+        KAFKA_APP_NAME,
+        RELATION_NAME,
+        f"{PROV_SECRET_PREFIX}mtls",
+        related_endpoint=RELATION_NAME_SPLIT_PATTERN,
+    )
+
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    mtls_cert = secret_content["mtls-cert"]
+
+    kafka_unit = ops_test.model.applications[KAFKA_APP_NAME].units[0]
+    provider_cert_path = kafka_unit.workload_status_message
+    unit_cert = subprocess.check_output(
+        f"juju ssh {kafka_unit.name} cat {provider_cert_path}", shell=True, universal_newlines=True
+    )
+
+    assert unit_cert.strip() == mtls_cert.strip()
