@@ -2930,6 +2930,10 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
 # Kafka Events
 
 
+def is_topic_value_accetpable(topic_value: str) -> bool:
+    return topic_value != "*"
+
+
 class KafkaProvidesEvent(RelationEvent):
     """Base class for Kafka events."""
 
@@ -3122,9 +3126,8 @@ class KafkaRequirerData(RequirerData):
 
     @topic.setter
     def topic(self, value):
-        # Avoid wildcards
-        if value == "*":
-            raise ValueError(f"Error on topic '{value}', cannot be a wildcard.")
+        if not is_topic_value_accetpable(value):
+            raise ValueError(f"Error on topic '{value}', unacceptable value.")
         self._topic = value
 
 
