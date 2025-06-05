@@ -1060,6 +1060,7 @@ class DatabaseRequires(DataRequires):
 
 
 def is_topic_value_accetpable(topic_value: str) -> bool:
+    """Check whether the given Kafka topic value is acceptable."""
     return topic_value != "*"
 
 
