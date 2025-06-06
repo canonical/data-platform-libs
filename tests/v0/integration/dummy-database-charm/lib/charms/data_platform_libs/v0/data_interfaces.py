@@ -2930,7 +2930,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
 # Kafka Events
 
 
-def is_topic_value_accetpable(topic_value: str) -> bool:
+def is_topic_value_acceptable(topic_value: str) -> bool:
     """Check whether the given Kafka topic value is acceptable."""
     return topic_value != "*"
 
@@ -3127,7 +3127,7 @@ class KafkaRequirerData(RequirerData):
 
     @topic.setter
     def topic(self, value):
-        if not is_topic_value_accetpable(value):
+        if not is_topic_value_acceptable(value):
             raise ValueError(f"Error on topic '{value}', unacceptable value.")
         self._topic = value
 
