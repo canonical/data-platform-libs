@@ -1059,6 +1059,11 @@ class DatabaseRequires(DataRequires):
 # Kafka related events
 
 
+def is_topic_value_acceptable(topic_value: str) -> bool:
+    """Check whether the given Kafka topic value is acceptable."""
+    return topic_value != "*"
+
+
 class KafkaProvidesEvent(RelationEvent):
     """Base class for Kafka events."""
 
@@ -1237,9 +1242,8 @@ class KafkaRequires(DataRequires):
 
     @topic.setter
     def topic(self, value):
-        # Avoid wildcards
-        if value == "*":
-            raise ValueError(f"Error on topic '{value}', cannot be a wildcard.")
+        if not is_topic_value_acceptable(value):
+            raise ValueError(f"Error on topic '{value}', unacceptable value.")
         self._topic = value
 
     def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
