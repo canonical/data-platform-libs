@@ -9,16 +9,24 @@ of the libraries in this repository.
 """
 
 import logging
-from typing import Dict, Optional
+import os
+from typing import Dict, Optional, cast
 
-from ops.charm import ActionEvent, CharmBase
+from ops.charm import ActionEvent, CharmBase, EventBase
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
 
 from charms.data_platform_libs.v0.data_interfaces import (
+    LIBPATCH as DATA_INTERFACES_VERSION,
+)
+from charms.data_platform_libs.v0.data_interfaces import (
     KafkaProvides,
     TopicRequestedEvent,
 )
+
+if DATA_INTERFACES_VERSION > 46:
+    from charms.data_platform_libs.v0.data_interfaces import KafkaClientMtlsCertUpdatedEvent
+
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +54,12 @@ class KafkaCharm(CharmBase):
         self.framework.observe(
             self.on.sync_bootstrap_server_action, self._on_sync_bootstrap_server
         )
+
+        # only with juju 3.x and data_interfaces ^0.47
+        if DATA_INTERFACES_VERSION > 46 and self.kafka_provider.secrets_enabled:
+            self.framework.observe(
+                self.kafka_provider.on.mtls_cert_updated, self._on_mtls_cert_updated
+            )
 
     def _on_peer_relation_joined(self, _):
         pass
@@ -156,6 +170,15 @@ class KafkaCharm(CharmBase):
         """Reset the status message of the unit."""
         self.unit.status = ActiveStatus()
         event.set_results({"Status": "Reset unit status message"})
+
+    def _on_mtls_cert_updated(self, event: EventBase):
+        event = cast(KafkaClientMtlsCertUpdatedEvent, event)
+        mtls_cert = event.mtls_cert
+        if not mtls_cert:
+            return
+
+        open("client-cert.pem", "w").write(mtls_cert)
+        self.unit.status = ActiveStatus(f"{os.getcwd()}/client-cert.pem")
 
 
 if __name__ == "__main__":

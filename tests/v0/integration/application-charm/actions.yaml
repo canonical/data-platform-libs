@@ -40,3 +40,7 @@ delete-relation-field:
   field:
     type: string
     description: Relation field
+
+set-mtls-cert:
+  description: Sets the MTLS cert for the requirer application.
+ 
