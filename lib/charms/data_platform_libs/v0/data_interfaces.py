@@ -606,6 +606,7 @@ class SecretGroupsAggregate(str):
         self.USER = SecretGroup("user")
         self.TLS = SecretGroup("tls")
         self.MTLS = SecretGroup("mtls")
+        self.ROLE = SecretGroup("role")
         self.EXTRA = SecretGroup("extra")
 
     def __setattr__(self, name, value):
@@ -972,7 +973,7 @@ class DataDict(UserDict):
 
 
 class Data(ABC):
-    """Base relation data mainpulation (abstract) class."""
+    """Base relation data manipulation (abstract) class."""
 
     SCOPE = Scope.APP
 
@@ -985,6 +986,8 @@ class Data(ABC):
         "tls": SECRET_GROUPS.TLS,
         "tls-ca": SECRET_GROUPS.TLS,
         "mtls-cert": SECRET_GROUPS.MTLS,
+        "role-name": SECRET_GROUPS.ROLE,
+        "role-password": SECRET_GROUPS.ROLE,
     }
 
     SECRET_FIELDS = []
@@ -1748,6 +1751,21 @@ class ProviderData(Data):
         """
         self.update_relation_data(relation_id, {"username": username, "password": password})
 
+    def set_role_credentials(
+        self, relation_id: int, rolename: str, password: Optional[str] = None
+    ) -> None:
+        """Set role credentials.
+
+        This function writes in the application data bag, therefore,
+        only the leader unit can call it.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            rolename: name of the created role
+            password: password of the created role.
+        """
+        self.update_relation_data(relation_id, {"role-name": rolename, "role-password": password})
+
     def set_tls(self, relation_id: int, tls: str) -> None:
         """Set whether TLS is enabled.
 
@@ -1785,7 +1803,16 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
-    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]
+    SECRET_FIELDS = [
+        "username",
+        "password",
+        "tls",
+        "tls-ca",
+        "uris",
+        "read-only-uris",
+        "role-name",
+        "role-password",
+    ]
 
     def __init__(
         self,
@@ -1819,10 +1846,17 @@ class RequirerData(Data):
         if not relation.app:
             return False
 
-        data = self.fetch_relation_data([relation.id], ["username", "password"]).get(
-            relation.id, {}
-        )
-        return bool(data.get("username")) and bool(data.get("password"))
+        data = self.fetch_relation_data(
+            [relation.id],
+            ["username", "password", "role-type", "role-name", "role-password"],
+        ).get(relation.id, {})
+
+        if "role-type" not in data:
+            return all(bool(data.get(field)) for field in ("username", "password"))
+        if "role-type" in data:
+            return all(bool(data.get(field)) for field in ("role-name",))
+
+        return False
 
     def _validate_role_type(self) -> None:
         """Validates the consistency of the provided role-type and its extra roles."""
@@ -1893,12 +1927,24 @@ class RequirerEventHandlers(EventHandlers):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
 
-    def _credentials_shared(self, diff: Diff) -> bool:
+    def _main_credentials_shared(self, diff: Diff) -> bool:
         """Whether the relation data-bag contains username / password keys."""
-        secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
+        user_secret = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
+        return any(
+            [
+                user_secret in diff.added,
+                "username" in diff.added and "password" in diff.added,
+            ]
+        )
 
-        return secret_field_user in diff.added or (
-            "username" in diff.added and "password" in diff.added
+    def _role_credentials_shared(self, diff: Diff) -> bool:
+        """Whether the relation data-bag contains rolename / password keys."""
+        role_secret = self.relation_data._generate_secret_field_name(SECRET_GROUPS.ROLE)
+        return any(
+            [
+                role_secret in diff.added,
+                "role-name" in diff.added,
+            ]
         )
 
     # Event handlers
@@ -2070,6 +2116,7 @@ class DataPeerData(RequirerData, ProviderData):
             SECRET_GROUPS.get_group("user"),
             SECRET_GROUPS.get_group("tls"),
             SECRET_GROUPS.get_group("mtls"),
+            SECRET_GROUPS.get_group("role"),
         ]
         for group in SECRET_GROUPS.groups():
             if group in ignores:
@@ -2651,34 +2698,6 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
 # Generic events
 
 
-class RoleEvent(RelationEvent):
-    """Base class for data events."""
-
-    @property
-    def role_type(self) -> Optional[str]:
-        """Returns the role_type that were requested."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("role-type")
-
-    @property
-    def extra_user_roles(self) -> Optional[str]:
-        """Returns the extra user roles that were requested."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("extra-user-roles")
-
-    @property
-    def extra_group_roles(self) -> Optional[str]:
-        """Returns the extra group roles that were requested."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("extra-group-roles")
-
-
 class RelationEventWithSecret(RelationEvent):
     """Base class for Relation Events that need to handle secrets."""
 
@@ -2708,6 +2727,68 @@ class RelationEventWithSecret(RelationEvent):
     def secrets_enabled(self):
         """Is this Juju version allowing for Secrets usage?"""
         return JujuVersion.from_environ().has_secrets
+
+
+class RoleProvidesEvent(RelationEvent):
+    """Base class for data events."""
+
+    @property
+    def role_type(self) -> Optional[str]:
+        """Returns the role_type that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("role-type")
+
+    @property
+    def extra_user_roles(self) -> Optional[str]:
+        """Returns the extra user roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-user-roles")
+
+    @property
+    def extra_group_roles(self) -> Optional[str]:
+        """Returns the extra group roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-group-roles")
+
+
+class RoleRequiresEvent(RelationEventWithSecret):
+    """Base class for authentication fields for events.
+
+    The amount of logic added here is not ideal -- but this was the only way to preserve
+    the interface when moving to Juju Secrets
+    """
+
+    @property
+    def role_name(self) -> Optional[str]:
+        """Returns the name for the created role."""
+        if not self.relation.app:
+            return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("role")
+            if secret:
+                return secret.get("role-name")
+
+        return self.relation.data[self.relation.app].get("role-name")
+
+    @property
+    def role_password(self) -> Optional[str]:
+        """Returns the password for the created role."""
+        if not self.relation.app:
+            return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("role")
+            if secret:
+                return secret.get("role-password")
+
+        return self.relation.data[self.relation.app].get("role-password")
 
 
 class AuthenticationEvent(RelationEventWithSecret):
@@ -2808,7 +2889,7 @@ class DatabaseRequestedEvent(DatabaseProvidesEvent):
         )
 
 
-class DatabaseRoleRequestedEvent(DatabaseProvidesEvent, RoleEvent):
+class DatabaseRoleRequestedEvent(DatabaseProvidesEvent, RoleProvidesEvent):
     """Event emitted when a new role is requested for use on this relation."""
 
 
@@ -2913,7 +2994,7 @@ class DatabaseCreatedEvent(AuthenticationEvent, DatabaseRequiresEvent):
     """Event emitted when a new database is created for use on this relation."""
 
 
-class DatabaseRoleCreatedEvent(AuthenticationEvent, DatabaseRequiresEvent):
+class DatabaseRoleCreatedEvent(RoleRequiresEvent, DatabaseRequiresEvent):
     """Event emitted when a new role is created for use on this relation."""
 
 
@@ -3333,7 +3414,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
         # Check if the database is created
         # (the database charm shared the credentials).
-        if self._credentials_shared(diff) and "role-type" not in app_databag:
+        if self._main_credentials_shared(diff) and "role-type" not in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("database created at %s", datetime.now())
             getattr(self.on, "database_created").emit(
@@ -3346,7 +3427,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
             # To avoid unnecessary application restarts do not trigger other events.
             return
 
-        if self._credentials_shared(diff) and "role-type" in app_databag:
+        if self._role_credentials_shared(diff) and "role-type" in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("role created at %s", datetime.now())
             getattr(self.on, "database_role_created").emit(
@@ -3490,7 +3571,7 @@ class TopicRequestedEvent(KafkaProvidesEvent):
         return self.relation.data[self.relation.app].get("extra-user-roles")
 
 
-class TopicRoleRequestedEvent(KafkaProvidesEvent, RoleEvent):
+class TopicRoleRequestedEvent(KafkaProvidesEvent, RoleProvidesEvent):
     """Event emitted when a new role is requested for use on this relation."""
 
 
@@ -3545,7 +3626,7 @@ class TopicCreatedEvent(AuthenticationEvent, KafkaRequiresEvent):
     """Event emitted when a new topic is created for use on this relation."""
 
 
-class TopicRoleCreatedEvent(AuthenticationEvent, KafkaRequiresEvent):
+class TopicRoleCreatedEvent(RoleRequiresEvent, KafkaRequiresEvent):
     """Event emitted when a new role is created for use on this relation."""
 
 
@@ -3799,7 +3880,7 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
 
         app_databag = event.relation.data[event.app]
 
-        if self._credentials_shared(diff) and "role-type" not in app_databag:
+        if self._main_credentials_shared(diff) and "role-type" not in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("topic created at %s", datetime.now())
             getattr(self.on, "topic_created").emit(event.relation, app=event.app, unit=event.unit)
@@ -3807,7 +3888,7 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
             # To avoid unnecessary application restarts do not trigger other events.
             return
 
-        if self._credentials_shared(diff) and "role-type" in app_databag:
+        if self._role_credentials_shared(diff) and "role-type" in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("role created at %s", datetime.now())
             getattr(self.on, "topic_role_created").emit(
@@ -3887,7 +3968,7 @@ class IndexRequestedEvent(OpenSearchProvidesEvent):
         return self.relation.data[self.relation.app].get("extra-user-roles")
 
 
-class IndexRoleRequestedEvent(OpenSearchProvidesEvent, RoleEvent):
+class IndexRoleRequestedEvent(OpenSearchProvidesEvent, RoleProvidesEvent):
     """Event emitted when a new role is requested for use on this relation."""
 
 
@@ -3909,7 +3990,7 @@ class IndexCreatedEvent(AuthenticationEvent, OpenSearchRequiresEvent):
     """Event emitted when a new index is created for use on this relation."""
 
 
-class IndexRoleCreatedEvent(AuthenticationEvent, OpenSearchRequiresEvent):
+class IndexRoleCreatedEvent(RoleRequiresEvent, OpenSearchRequiresEvent):
     """Event emitted when a new index is created for use on this relation."""
 
 
@@ -4122,7 +4203,7 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
 
         # Check if the index is created
         # (the OpenSearch charm shares the credentials).
-        if self._credentials_shared(diff) and "role-type" not in app_databag:
+        if self._main_credentials_shared(diff) and "role-type" not in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("index created at: %s", datetime.now())
             getattr(self.on, "index_created").emit(event.relation, app=event.app, unit=event.unit)
@@ -4130,7 +4211,7 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
             # To avoid unnecessary application restarts do not trigger other events.
             return
 
-        if self._credentials_shared(diff) and "role-type" in app_databag:
+        if self._role_credentials_shared(diff) and "role-type" in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("role created at: %s", datetime.now())
             getattr(self.on, "index_role_created").emit(
