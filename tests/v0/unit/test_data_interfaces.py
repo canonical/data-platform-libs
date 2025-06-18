@@ -52,6 +52,9 @@ logger = getLogger(__name__)
 PEER_RELATION_NAME = "database-peers"
 
 DATABASE = "data_platform"
+ENTITY_PERMISSIONS = (
+    '[{"resource_name": "cars", "resource_type": "TABLE", "privileges": ["SELECT"]}]'
+)
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 EXTRA_GROUP_ROLES = "CUSTOM_ROLE_1,CUSTOM_ROLE_2"
 DATABASE_RELATION_INTERFACE = "database_client"
@@ -1015,6 +1018,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 self.DATABASE_FIELD: DATABASE,
                 "entity-type": ENTITY_USER,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-user-roles": EXTRA_USER_ROLES,
             },
         )
@@ -1026,6 +1030,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_database_entity_requested.call_args[0][0]
         assert event.database == DATABASE
         assert event.entity_type == ENTITY_USER
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
         # Reset the relation data keys + mock count
@@ -1039,6 +1044,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 self.DATABASE_FIELD: DATABASE,
                 "entity-type": ENTITY_GROUP,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-group-roles": EXTRA_GROUP_ROLES,
             },
         )
@@ -1050,6 +1056,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_database_entity_requested.call_args[0][0]
         assert event.database == DATABASE
         assert event.entity_type == ENTITY_GROUP
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     def test_set_endpoints(self):
@@ -1598,6 +1605,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "topic": TOPIC,
                 "entity-type": ENTITY_USER,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-user-roles": EXTRA_USER_ROLES,
             },
         )
@@ -1609,6 +1617,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_topic_entity_requested.call_args[0][0]
         assert event.topic == TOPIC
         assert event.entity_type == ENTITY_USER
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
         # Reset the relation data keys + mock count
@@ -1622,6 +1631,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "topic": TOPIC,
                 "entity-type": ENTITY_GROUP,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-group-roles": EXTRA_GROUP_ROLES,
             },
         )
@@ -1633,6 +1643,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_topic_entity_requested.call_args[0][0]
         assert event.topic == TOPIC
         assert event.entity_type == ENTITY_GROUP
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     def test_set_bootstrap_server(self):
@@ -1812,6 +1823,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "index": INDEX,
                 "entity-type": ENTITY_USER,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-user-roles": EXTRA_USER_ROLES,
             },
         )
@@ -1823,6 +1835,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_index_entity_requested.call_args[0][0]
         assert event.index == INDEX
         assert event.entity_type == ENTITY_USER
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
         # Reset the relation data keys + mock count
@@ -1836,6 +1849,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "index": INDEX,
                 "entity-type": ENTITY_GROUP,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-group-roles": EXTRA_GROUP_ROLES,
             },
         )
@@ -1847,6 +1861,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_index_entity_requested.call_args[0][0]
         assert event.index == INDEX
         assert event.entity_type == ENTITY_GROUP
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
