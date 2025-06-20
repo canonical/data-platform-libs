@@ -34,6 +34,7 @@ application charm code:
 from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseCreatedEvent,
     DatabaseRequires,
+    DatabaseRoleCreatedEvent,
 )
 
 class ApplicationCharm(CharmBase):
@@ -45,6 +46,7 @@ class ApplicationCharm(CharmBase):
         # Charm events defined in the database requires charm library.
         self.database = DatabaseRequires(self, relation_name="database", database_name="database")
         self.framework.observe(self.database.on.database_created, self._on_database_created)
+        self.framework.observe(self.database.on.database_role_created, self._on_database_role_created)
 
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
         # Handle the created database
@@ -61,12 +63,17 @@ class ApplicationCharm(CharmBase):
 
         # Set active status
         self.unit.status = ActiveStatus("received database credentials")
+
+    def _on_database_role_created(self, event: DatabaseRoleCreatedEvent) -> None:
+        # Handle the created role
+        ...
 ```
 
 As shown above, the library provides some custom events to handle specific situations,
 which are listed below:
 
 -  database_created: event emitted when the requested database is created.
+-  database_role_created: event emitted when the requested role is created.
 -  endpoints_changed: event emitted when the read/write endpoints of the database have changed.
 -  read_only_endpoints_changed: event emitted when the read-only endpoints of the database
   have changed. Event is not triggered if read/write endpoints changed too.
@@ -141,7 +148,6 @@ class ApplicationCharm(CharmBase):
             event.endpoints,
         )
         ...
-
 ```
 
 When it's needed to check whether a plugin (extension) is enabled on the PostgreSQL
@@ -154,7 +160,6 @@ parts:
   charm:
     charm-binary-python-packages:
       - psycopg[binary]
-
 ```
 
 ### Provider Charm
@@ -187,6 +192,7 @@ class SampleCharm(CharmBase):
         self.provided_database.set_credentials(event.relation.id, username, password)
         # set other variables for the relation event.set_tls("False")
 ```
+
 As shown above, the library provides a custom event (database_requested) to handle
 the situation when an application charm requests a new database to be created.
 It's preferred to subscribe to this event instead of relation changed event to avoid
@@ -207,6 +213,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     BootstrapServerChangedEvent,
     KafkaRequires,
     TopicCreatedEvent,
+    TopicRoleCreatedEvent,
 )
 
 class ApplicationCharm(CharmBase):
@@ -219,6 +226,9 @@ class ApplicationCharm(CharmBase):
         )
         self.framework.observe(
             self.kafka.on.topic_created, self._on_kafka_topic_created
+        )
+        self.framework.observe(
+            self.kafka.on.topic_role_created, self._on_kafka_topic_role_created
         )
 
     def _on_kafka_bootstrap_server_changed(self, event: BootstrapServerChangedEvent):
@@ -238,6 +248,9 @@ class ApplicationCharm(CharmBase):
         zookeeper_uris = event.zookeeper_uris
         ...
 
+    def _on_kafka_topic_role_created(self, event: TopicRoleCreatedEvent):
+        # Event triggered when a role was created for this application
+        ...
 ```
 
 As shown above, the library provides some custom events to handle specific situations,
@@ -268,6 +281,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
         # Charm events defined in the Kafka Provides charm library.
         self.kafka_provider = KafkaProvides(self, relation_name="kafka_client")
         self.framework.observe(self.kafka_provider.on.topic_requested, self._on_topic_requested)
+        self.framework.observe(self.kafka_provider.on.role_requested, self._on_role_requested)
         # Kafka generic helper
         self.kafka = KafkaHelper()
 
@@ -283,6 +297,9 @@ from charms.data_platform_libs.v0.data_interfaces import (
         self.kafka_provider.set_tls(relation_id, "False")
         self.kafka_provider.set_zookeeper_uris(relation_id, ...)
 
+    def _on_role_requested(self, event: RoleRequestedEvent):
+        # Handle the on_topic_role_requested event.
+        ...
 ```
 As shown above, the library provides a custom event (topic_requested) to handle
 the situation when an application charm requests a new topic to be created.
@@ -331,7 +348,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 47
+LIBPATCH = 48
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -349,6 +366,8 @@ added - keys that were added
 changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
+ROLE_USER = "USER"
+ROLE_GROUP = "GROUP"
 
 PROV_SECRET_PREFIX = "secret-"
 PROV_SECRET_FIELDS = "provided-secrets"
@@ -587,6 +606,7 @@ class SecretGroupsAggregate(str):
         self.USER = SecretGroup("user")
         self.TLS = SecretGroup("tls")
         self.MTLS = SecretGroup("mtls")
+        self.ROLE = SecretGroup("role")
         self.EXTRA = SecretGroup("extra")
 
     def __setattr__(self, name, value):
@@ -953,7 +973,7 @@ class DataDict(UserDict):
 
 
 class Data(ABC):
-    """Base relation data mainpulation (abstract) class."""
+    """Base relation data manipulation (abstract) class."""
 
     SCOPE = Scope.APP
 
@@ -966,6 +986,8 @@ class Data(ABC):
         "tls": SECRET_GROUPS.TLS,
         "tls-ca": SECRET_GROUPS.TLS,
         "mtls-cert": SECRET_GROUPS.MTLS,
+        "role-name": SECRET_GROUPS.ROLE,
+        "role-password": SECRET_GROUPS.ROLE,
     }
 
     SECRET_FIELDS = []
@@ -1729,6 +1751,21 @@ class ProviderData(Data):
         """
         self.update_relation_data(relation_id, {"username": username, "password": password})
 
+    def set_role_credentials(
+        self, relation_id: int, rolename: str, password: Optional[str] = None
+    ) -> None:
+        """Set role credentials.
+
+        This function writes in the application data bag, therefore,
+        only the leader unit can call it.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            rolename: name of the created role
+            password: password of the created role.
+        """
+        self.update_relation_data(relation_id, {"role-name": rolename, "role-password": password})
+
     def set_tls(self, relation_id: int, tls: str) -> None:
         """Set whether TLS is enabled.
 
@@ -1766,18 +1803,37 @@ class ProviderData(Data):
 class RequirerData(Data):
     """Requirer-side of the relation."""
 
-    SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]
+    SECRET_FIELDS = [
+        "username",
+        "password",
+        "tls",
+        "tls-ca",
+        "uris",
+        "read-only-uris",
+        "role-name",
+        "role-password",
+    ]
 
     def __init__(
         self,
         model,
         relation_name: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of base client relations."""
         super().__init__(model, relation_name)
+        self.role_type = role_type
+        self.role_permissions = role_permissions
         self.extra_user_roles = extra_user_roles
+        self.extra_group_roles = extra_group_roles
+
+        self._validate_role_type()
+        self._validate_role_permissions()
+
         self._remote_secret_fields = list(self.SECRET_FIELDS)
         self._local_secret_fields = [
             field
@@ -1788,18 +1844,51 @@ class RequirerData(Data):
             self._remote_secret_fields += additional_secret_fields
         self.data_component = self.local_unit
 
-    # Internal helper functions
+    # Internal functions
 
     def _is_resource_created_for_relation(self, relation: Relation) -> bool:
         if not relation.app:
             return False
 
-        data = self.fetch_relation_data([relation.id], ["username", "password"]).get(
-            relation.id, {}
-        )
-        return bool(data.get("username")) and bool(data.get("password"))
+        data = self.fetch_relation_data(
+            [relation.id],
+            ["username", "password", "role-type", "role-name", "role-password"],
+        ).get(relation.id, {})
+
+        if "role-type" not in data:
+            return all(bool(data.get(field)) for field in ("username", "password"))
+        if "role-type" in data:
+            return all(bool(data.get(field)) for field in ("role-name",))
+
+        return False
+
+    def _validate_role_type(self) -> None:
+        """Validates the consistency of the provided role-type and its extra roles."""
+        if self.role_type and self.role_type not in {ROLE_USER, ROLE_GROUP}:
+            raise ValueError("Invalid role-type. Possible values are USER and GROUP")
+
+        if self.role_type == ROLE_USER and self.extra_group_roles:
+            raise ValueError("Inconsistent role information. Use extra_user_roles instead")
+
+        if self.role_type == ROLE_GROUP and self.extra_user_roles:
+            raise ValueError("Inconsistent role information. Use extra_group_roles instead")
+
+    def _validate_role_permissions(self) -> None:
+        """Validates whether the provided role permissions follow the right JSON format."""
+        if not self.role_permissions:
+            return
+
+        accepted_keys = {"resource_name", "resource_type", "privileges"}
+
+        try:
+            permissions = json.loads(self.role_permissions)
+            for permission in permissions:
+                assert permission.keys() == accepted_keys
+        except json.decoder.JSONDecodeError:
+            raise ValueError("Invalid role permissions format. It must be JSON format")
 
     # Public functions
+
     def is_resource_created(self, relation_id: Optional[int] = None) -> bool:
         """Check if the resource has been created.
 
@@ -1856,6 +1945,26 @@ class RequirerEventHandlers(EventHandlers):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
 
+    def _main_credentials_shared(self, diff: Diff) -> bool:
+        """Whether the relation data-bag contains username / password keys."""
+        user_secret = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
+        return any(
+            [
+                user_secret in diff.added,
+                "username" in diff.added and "password" in diff.added,
+            ]
+        )
+
+    def _role_credentials_shared(self, diff: Diff) -> bool:
+        """Whether the relation data-bag contains rolename / password keys."""
+        role_secret = self.relation_data._generate_secret_field_name(SECRET_GROUPS.ROLE)
+        return any(
+            [
+                role_secret in diff.added,
+                "role-name" in diff.added,
+            ]
+        )
+
     # Event handlers
 
     def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
@@ -1902,6 +2011,21 @@ class ProviderEventHandlers(EventHandlers):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
 
+    @staticmethod
+    def _validate_role_consistency(event: RelationEvent, diff: Diff) -> None:
+        """Validates that role information is not changed after relation is established.
+
+        - When role-type changes, backwards compatibility is broken.
+        - When extra-user-roles changes, role membership checks become incredibly complex.
+        - When extra-group-roles changes, role membership checks become incredibly complex.
+        """
+        if not isinstance(event, RelationChangedEvent):
+            return
+
+        for key in ["role-type", "extra-user-roles", "extra-group-roles"]:
+            if key in diff.changed:
+                raise ValueError(f"Cannot change {key} after relation has already been created")
+
     # Event handlers
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
@@ -1931,7 +2055,10 @@ class DataPeerData(RequirerData, ProviderData):
         self,
         model,
         relation_name: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         additional_secret_group_mapping: Dict[str, str] = {},
         secret_field_name: Optional[str] = None,
@@ -1941,7 +2068,10 @@ class DataPeerData(RequirerData, ProviderData):
             self,
             model,
             relation_name,
+            role_type,
+            role_permissions,
             extra_user_roles,
+            extra_group_roles,
             additional_secret_fields,
         )
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
@@ -2006,6 +2136,7 @@ class DataPeerData(RequirerData, ProviderData):
             SECRET_GROUPS.get_group("user"),
             SECRET_GROUPS.get_group("tls"),
             SECRET_GROUPS.get_group("mtls"),
+            SECRET_GROUPS.get_group("role"),
         ]
         for group in SECRET_GROUPS.groups():
             if group in ignores:
@@ -2458,7 +2589,10 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
         self,
         charm,
         relation_name: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         additional_secret_group_mapping: Dict[str, str] = {},
         secret_field_name: Optional[str] = None,
@@ -2469,7 +2603,10 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
             self,
             charm.model,
             relation_name,
+            role_type,
+            role_permissions,
             extra_user_roles,
+            extra_group_roles,
             additional_secret_fields,
             additional_secret_group_mapping,
             secret_field_name,
@@ -2494,7 +2631,10 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
         self,
         charm,
         relation_name: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         additional_secret_group_mapping: Dict[str, str] = {},
         secret_field_name: Optional[str] = None,
@@ -2505,7 +2645,10 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
             self,
             charm.model,
             relation_name,
+            role_type,
+            role_permissions,
             extra_user_roles,
+            extra_group_roles,
             additional_secret_fields,
             additional_secret_group_mapping,
             secret_field_name,
@@ -2548,7 +2691,10 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
         unit: Unit,
         charm: CharmBase,
         relation_name: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         additional_secret_group_mapping: Dict[str, str] = {},
         secret_field_name: Optional[str] = None,
@@ -2559,7 +2705,10 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
             unit,
             charm.model,
             relation_name,
+            role_type,
+            role_permissions,
             extra_user_roles,
+            extra_group_roles,
             additional_secret_fields,
             additional_secret_group_mapping,
             secret_field_name,
@@ -2573,18 +2722,6 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
 ################################################################################
 
 # Generic events
-
-
-class ExtraRoleEvent(RelationEvent):
-    """Base class for data events."""
-
-    @property
-    def extra_user_roles(self) -> Optional[str]:
-        """Returns the extra user roles that were requested."""
-        if not self.relation.app:
-            return None
-
-        return self.relation.data[self.relation.app].get("extra-user-roles")
 
 
 class RelationEventWithSecret(RelationEvent):
@@ -2616,6 +2753,76 @@ class RelationEventWithSecret(RelationEvent):
     def secrets_enabled(self):
         """Is this Juju version allowing for Secrets usage?"""
         return JujuVersion.from_environ().has_secrets
+
+
+class RoleProvidesEvent(RelationEvent):
+    """Base class for data events."""
+
+    @property
+    def role_type(self) -> Optional[str]:
+        """Returns the role_type that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("role-type")
+
+    @property
+    def role_permissions(self) -> Optional[str]:
+        """Returns the role_permissions that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("role-permissions")
+
+    @property
+    def extra_user_roles(self) -> Optional[str]:
+        """Returns the extra user roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-user-roles")
+
+    @property
+    def extra_group_roles(self) -> Optional[str]:
+        """Returns the extra group roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-group-roles")
+
+
+class RoleRequiresEvent(RelationEventWithSecret):
+    """Base class for authentication fields for events.
+
+    The amount of logic added here is not ideal -- but this was the only way to preserve
+    the interface when moving to Juju Secrets
+    """
+
+    @property
+    def role_name(self) -> Optional[str]:
+        """Returns the name for the created role."""
+        if not self.relation.app:
+            return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("role")
+            if secret:
+                return secret.get("role-name")
+
+        return self.relation.data[self.relation.app].get("role-name")
+
+    @property
+    def role_password(self) -> Optional[str]:
+        """Returns the password for the created role."""
+        if not self.relation.app:
+            return None
+
+        if self.secrets_enabled:
+            secret = self._get_secret("role")
+            if secret:
+                return secret.get("role-password")
+
+        return self.relation.data[self.relation.app].get("role-password")
 
 
 class AuthenticationEvent(RelationEventWithSecret):
@@ -2693,8 +2900,16 @@ class DatabaseProvidesEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("database")
 
 
-class DatabaseRequestedEvent(DatabaseProvidesEvent, ExtraRoleEvent):
+class DatabaseRequestedEvent(DatabaseProvidesEvent):
     """Event emitted when a new database is requested for use on this relation."""
+
+    @property
+    def extra_user_roles(self) -> Optional[str]:
+        """Returns the extra user roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-user-roles")
 
     @property
     def external_node_connectivity(self) -> bool:
@@ -2708,6 +2923,14 @@ class DatabaseRequestedEvent(DatabaseProvidesEvent, ExtraRoleEvent):
         )
 
 
+class DatabaseRoleRequestedEvent(DatabaseProvidesEvent, RoleProvidesEvent):
+    """Event emitted when a new role is requested for use on this relation."""
+
+
+class DatabaseRolePermissionsChangedEvent(DatabaseProvidesEvent, RoleProvidesEvent):
+    """Event emitted when existing role permissions are changed on this relation."""
+
+
 class DatabaseProvidesEvents(CharmEvents):
     """Database events.
 
@@ -2715,6 +2938,8 @@ class DatabaseProvidesEvents(CharmEvents):
     """
 
     database_requested = EventSource(DatabaseRequestedEvent)
+    database_role_requested = EventSource(DatabaseRoleRequestedEvent)
+    database_role_permissions_changed = EventSource(DatabaseRolePermissionsChangedEvent)
 
 
 class DatabaseRequiresEvent(RelationEventWithSecret):
@@ -2808,6 +3033,10 @@ class DatabaseCreatedEvent(AuthenticationEvent, DatabaseRequiresEvent):
     """Event emitted when a new database is created for use on this relation."""
 
 
+class DatabaseRoleCreatedEvent(RoleRequiresEvent, DatabaseRequiresEvent):
+    """Event emitted when a new role is created for use on this relation."""
+
+
 class DatabaseEndpointsChangedEvent(AuthenticationEvent, DatabaseRequiresEvent):
     """Event emitted when the read/write endpoints are changed."""
 
@@ -2823,6 +3052,7 @@ class DatabaseRequiresEvents(CharmEvents):
     """
 
     database_created = EventSource(DatabaseCreatedEvent)
+    database_role_created = EventSource(DatabaseRoleCreatedEvent)
     endpoints_changed = EventSource(DatabaseEndpointsChangedEvent)
     read_only_endpoints_changed = EventSource(DatabaseReadOnlyEndpointsChangedEvent)
 
@@ -2944,13 +3174,35 @@ class DatabaseProviderEventHandlers(ProviderEventHandlers):
         # Leader only
         if not self.relation_data.local_unit.is_leader():
             return
+
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
-        # Emit a database requested event if the setup key (database name and optional
-        # extra user roles) was added to the relation databag by the application.
-        if "database" in diff.added:
+        # Validate role information is not dynamically changed
+        self._validate_role_consistency(event, diff)
+
+        # Emit a database requested event if the setup key (database name)
+        # was added to the relation databag, but the role-type key was not.
+        if "database" in diff.added and "role-type" not in diff.added:
             getattr(self.on, "database_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a role requested event if the setup key (database name)
+        # was added to the relation databag, in addition to the role-type key.
+        if "database" in diff.added and "role-type" in diff.added:
+            getattr(self.on, "database_role_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a permissions changed event if the setup key (database name)
+        # was added to the relation databag, and the role-permissions key changed.
+        if (
+            "database" not in diff.added
+            and "role-type" not in diff.added
+            and ("role-permissions" in diff.added or "role-permissions" in diff.changed)
+        ):
+            getattr(self.on, "database_role_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -2975,13 +3227,24 @@ class DatabaseRequirerData(RequirerData):
         model: Model,
         relation_name: str,
         database_name: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
         additional_secret_fields: Optional[List[str]] = [],
         external_node_connectivity: bool = False,
     ):
         """Manager of database client relations."""
-        super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
+        super().__init__(
+            model,
+            relation_name,
+            role_type,
+            role_permissions,
+            extra_user_roles,
+            extra_group_roles,
+            additional_secret_fields,
+        )
         self.database = database_name
         self.relations_aliases = relations_aliases
         self.external_node_connectivity = external_node_connectivity
@@ -3064,9 +3327,17 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
         if self.relation_data.relations_aliases:
             for relation_alias in self.relation_data.relations_aliases:
-                self.on.define_event(f"{relation_alias}_database_created", DatabaseCreatedEvent)
                 self.on.define_event(
-                    f"{relation_alias}_endpoints_changed", DatabaseEndpointsChangedEvent
+                    f"{relation_alias}_database_created",
+                    DatabaseCreatedEvent,
+                )
+                self.on.define_event(
+                    f"{relation_alias}_database_role_created",
+                    DatabaseRoleCreatedEvent,
+                )
+                self.on.define_event(
+                    f"{relation_alias}_endpoints_changed",
+                    DatabaseEndpointsChangedEvent,
                 )
                 self.on.define_event(
                     f"{relation_alias}_read_only_endpoints_changed",
@@ -3154,8 +3425,14 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
         event_data = {"database": self.relation_data.database}
 
+        if self.relation_data.role_type:
+            event_data["role-type"] = self.relation_data.role_type
+        if self.relation_data.role_permissions:
+            event_data["role-permissions"] = self.relation_data.role_permissions
         if self.relation_data.extra_user_roles:
             event_data["extra-user-roles"] = self.relation_data.extra_user_roles
+        if self.relation_data.extra_group_roles:
+            event_data["extra-group-roles"] = self.relation_data.extra_group_roles
 
         # set external-node-connectivity field
         if self.relation_data.external_node_connectivity:
@@ -3187,12 +3464,11 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
 
+        app_databag = event.relation.data[event.app]
+
         # Check if the database is created
         # (the database charm shared the credentials).
-        secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
-        if (
-            "username" in diff.added and "password" in diff.added
-        ) or secret_field_user in diff.added:
+        if self._main_credentials_shared(diff) and "role-type" not in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("database created at %s", datetime.now())
             getattr(self.on, "database_created").emit(
@@ -3202,8 +3478,20 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "database_created")
 
-            # To avoid unnecessary application restarts do not trigger
-            # “endpoints_changed“ event if “database_created“ is triggered.
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        if self._role_credentials_shared(diff) and "role-type" in app_databag:
+            # Emit the default event (the one without an alias).
+            logger.info("role created at %s", datetime.now())
+            getattr(self.on, "database_role_created").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # Emit the aliased event (if any).
+            self._emit_aliased_event(event, "database_role_created")
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
         # Emit an endpoints changed event if the database
@@ -3218,8 +3506,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "endpoints_changed")
 
-            # To avoid unnecessary application restarts do not trigger
-            # “read_only_endpoints_changed“ event if “endpoints_changed“ is triggered.
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
         # Emit a read only endpoints changed event if the database
@@ -3243,7 +3530,10 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
         charm: CharmBase,
         relation_name: str,
         database_name: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         relations_aliases: Optional[List[str]] = None,
         additional_secret_fields: Optional[List[str]] = [],
         external_node_connectivity: bool = False,
@@ -3253,7 +3543,10 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
             charm.model,
             relation_name,
             database_name,
+            role_type,
+            role_permissions,
             extra_user_roles,
+            extra_group_roles,
             relations_aliases,
             additional_secret_fields,
             external_node_connectivity,
@@ -3322,8 +3615,24 @@ class KafkaClientMtlsCertUpdatedEvent(KafkaProvidesEvent):
         self.old_mtls_cert = snapshot["old_mtls_cert"]
 
 
-class TopicRequestedEvent(KafkaProvidesEvent, ExtraRoleEvent):
+class TopicRequestedEvent(KafkaProvidesEvent):
     """Event emitted when a new topic is requested for use on this relation."""
+
+    @property
+    def extra_user_roles(self) -> Optional[str]:
+        """Returns the extra user roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-user-roles")
+
+
+class TopicRoleRequestedEvent(KafkaProvidesEvent, RoleProvidesEvent):
+    """Event emitted when a new role is requested for use on this relation."""
+
+
+class TopicRolePermissionsChangedEvent(KafkaProvidesEvent, RoleProvidesEvent):
+    """Event emitted when existing role permissions are changed on this relation."""
 
 
 class KafkaProvidesEvents(CharmEvents):
@@ -3333,6 +3642,8 @@ class KafkaProvidesEvents(CharmEvents):
     """
 
     topic_requested = EventSource(TopicRequestedEvent)
+    topic_role_requested = EventSource(TopicRoleRequestedEvent)
+    topic_role_permissions_changed = EventSource(TopicRolePermissionsChangedEvent)
     mtls_cert_updated = EventSource(KafkaClientMtlsCertUpdatedEvent)
 
 
@@ -3376,6 +3687,10 @@ class TopicCreatedEvent(AuthenticationEvent, KafkaRequiresEvent):
     """Event emitted when a new topic is created for use on this relation."""
 
 
+class TopicRoleCreatedEvent(RoleRequiresEvent, KafkaRequiresEvent):
+    """Event emitted when a new role is created for use on this relation."""
+
+
 class BootstrapServerChangedEvent(AuthenticationEvent, KafkaRequiresEvent):
     """Event emitted when the bootstrap server is changed."""
 
@@ -3387,6 +3702,7 @@ class KafkaRequiresEvents(CharmEvents):
     """
 
     topic_created = EventSource(TopicCreatedEvent)
+    topic_role_created = EventSource(TopicRoleCreatedEvent)
     bootstrap_server_changed = EventSource(BootstrapServerChangedEvent)
 
 
@@ -3465,10 +3781,31 @@ class KafkaProviderEventHandlers(ProviderEventHandlers):
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
-        # Emit a topic requested event if the setup key (topic name and optional
-        # extra user roles) was added to the relation databag by the application.
-        if "topic" in diff.added:
+        # Validate role information is not dynamically changed
+        self._validate_role_consistency(event, diff)
+
+        # Emit a topic requested event if the setup key (topic name)
+        # was added to the relation databag, but the role-type key was not.
+        if "topic" in diff.added and "role-type" not in diff.added:
             getattr(self.on, "topic_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a role requested event if the setup key (topic name)
+        # was added to the relation databag, in addition to the role-type key.
+        if "topic" in diff.added and "role-type" in diff.added:
+            getattr(self.on, "topic_role_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a permissions changed event if the setup key (topic name)
+        # was added to the relation databag, and the role-permissions key changed.
+        if (
+            "topic" not in diff.added
+            and "role-type" not in diff.added
+            and ("role-permissions" in diff.added or "role-permissions" in diff.changed)
+        ):
+            getattr(self.on, "topic_role_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -3516,13 +3853,24 @@ class KafkaRequirerData(RequirerData):
         model: Model,
         relation_name: str,
         topic: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         consumer_group_prefix: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         mtls_cert: Optional[str] = None,
     ):
         """Manager of Kafka client relations."""
-        super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
+        super().__init__(
+            model,
+            relation_name,
+            role_type,
+            role_permissions,
+            extra_user_roles,
+            extra_group_roles,
+            additional_secret_fields,
+        )
         self.topic = topic
         self.consumer_group_prefix = consumer_group_prefix or ""
         self.mtls_cert = mtls_cert
@@ -3572,8 +3920,14 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
         if self.relation_data.mtls_cert:
             relation_data["mtls-cert"] = self.relation_data.mtls_cert
 
+        if self.relation_data.role_type:
+            relation_data["role-type"] = self.relation_data.role_type
+        if self.relation_data.role_permissions:
+            relation_data["role-permissions"] = self.relation_data.role_permissions
         if self.relation_data.extra_user_roles:
             relation_data["extra-user-roles"] = self.relation_data.extra_user_roles
+        if self.relation_data.extra_group_roles:
+            relation_data["extra-group-roles"] = self.relation_data.extra_group_roles
 
         if self.relation_data.consumer_group_prefix:
             relation_data["consumer-group-prefix"] = self.relation_data.consumer_group_prefix
@@ -3596,16 +3950,24 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
 
-        secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
-        if (
-            "username" in diff.added and "password" in diff.added
-        ) or secret_field_user in diff.added:
+        app_databag = event.relation.data[event.app]
+
+        if self._main_credentials_shared(diff) and "role-type" not in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("topic created at %s", datetime.now())
             getattr(self.on, "topic_created").emit(event.relation, app=event.app, unit=event.unit)
 
-            # To avoid unnecessary application restarts do not trigger
-            # “endpoints_changed“ event if “topic_created“ is triggered.
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        if self._role_credentials_shared(diff) and "role-type" in app_databag:
+            # Emit the default event (the one without an alias).
+            logger.info("role created at %s", datetime.now())
+            getattr(self.on, "topic_role_created").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
         # Emit an endpoints (bootstrap-server) changed event if the Kafka endpoints
@@ -3616,6 +3978,8 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
             getattr(self.on, "bootstrap_server_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )  # here check if this is the right design
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
 
@@ -3627,7 +3991,10 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
         charm: CharmBase,
         relation_name: str,
         topic: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         consumer_group_prefix: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         mtls_cert: Optional[str] = None,
@@ -3637,7 +4004,10 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
             charm.model,
             relation_name,
             topic,
+            role_type,
+            role_permissions,
             extra_user_roles=extra_user_roles,
+            extra_group_roles=extra_group_roles,
             consumer_group_prefix=consumer_group_prefix,
             additional_secret_fields=additional_secret_fields,
             mtls_cert=mtls_cert,
@@ -3660,8 +4030,24 @@ class OpenSearchProvidesEvent(RelationEvent):
         return self.relation.data[self.relation.app].get("index")
 
 
-class IndexRequestedEvent(OpenSearchProvidesEvent, ExtraRoleEvent):
+class IndexRequestedEvent(OpenSearchProvidesEvent):
     """Event emitted when a new index is requested for use on this relation."""
+
+    @property
+    def extra_user_roles(self) -> Optional[str]:
+        """Returns the extra user roles that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("extra-user-roles")
+
+
+class IndexRoleRequestedEvent(OpenSearchProvidesEvent, RoleProvidesEvent):
+    """Event emitted when a new role is requested for use on this relation."""
+
+
+class IndexRolePermissionsChangedEvent(OpenSearchProvidesEvent, RoleProvidesEvent):
+    """Event emitted when existing role permissions are changed on this relation."""
 
 
 class OpenSearchProvidesEvents(CharmEvents):
@@ -3671,6 +4057,8 @@ class OpenSearchProvidesEvents(CharmEvents):
     """
 
     index_requested = EventSource(IndexRequestedEvent)
+    index_role_requested = EventSource(IndexRoleRequestedEvent)
+    index_role_permissions_changed = EventSource(IndexRolePermissionsChangedEvent)
 
 
 class OpenSearchRequiresEvent(DatabaseRequiresEvent):
@@ -3681,6 +4069,10 @@ class IndexCreatedEvent(AuthenticationEvent, OpenSearchRequiresEvent):
     """Event emitted when a new index is created for use on this relation."""
 
 
+class IndexRoleCreatedEvent(RoleRequiresEvent, OpenSearchRequiresEvent):
+    """Event emitted when a new index is created for use on this relation."""
+
+
 class OpenSearchRequiresEvents(CharmEvents):
     """OpenSearch events.
 
@@ -3688,6 +4080,7 @@ class OpenSearchRequiresEvents(CharmEvents):
     """
 
     index_created = EventSource(IndexCreatedEvent)
+    index_role_created = EventSource(IndexRoleCreatedEvent)
     endpoints_changed = EventSource(DatabaseEndpointsChangedEvent)
     authentication_updated = EventSource(AuthenticationEvent)
 
@@ -3750,13 +4143,35 @@ class OpenSearchProvidesEventHandlers(ProviderEventHandlers):
         # Leader only
         if not self.relation_data.local_unit.is_leader():
             return
+
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
-        # Emit an index requested event if the setup key (index name and optional extra user roles)
-        # have been added to the relation databag by the application.
-        if "index" in diff.added:
+        # Validate role information is not dynamically changed
+        self._validate_role_consistency(event, diff)
+
+        # Emit an index requested event if the setup key (index name)
+        # was added to the relation databag, but the role-type key was not.
+        if "index" in diff.added and "role-type" not in diff.added:
             getattr(self.on, "index_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit an role requested event if the setup key (index name)
+        # was added to the relation databag, in addition to the role-type key.
+        if "index" in diff.added and "role-type" in diff.added:
+            getattr(self.on, "index_role_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+        # Emit a permissions changed event if the setup key (index name)
+        # was added to the relation databag, and the role-permissions key changed.
+        if (
+            "index" not in diff.added
+            and "role-type" not in diff.added
+            and ("role-permissions" in diff.added or "role-permissions" in diff.changed)
+        ):
+            getattr(self.on, "index_role_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -3777,11 +4192,22 @@ class OpenSearchRequiresData(RequirerData):
         model: Model,
         relation_name: str,
         index: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of OpenSearch client relations."""
-        super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
+        super().__init__(
+            model,
+            relation_name,
+            role_type,
+            role_permissions,
+            extra_user_roles,
+            extra_group_roles,
+            additional_secret_fields,
+        )
         self.index = index
 
 
@@ -3805,8 +4231,15 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
         # Sets both index and extra user roles in the relation if the roles are provided.
         # Otherwise, sets only the index.
         data = {"index": self.relation_data.index}
+
+        if self.relation_data.role_type:
+            data["role-type"] = self.relation_data.role_type
+        if self.relation_data.role_permissions:
+            data["role-permissions"] = self.relation_data.role_permissions
         if self.relation_data.extra_user_roles:
             data["extra-user-roles"] = self.relation_data.extra_user_roles
+        if self.relation_data.extra_group_roles:
+            data["extra-group-roles"] = self.relation_data.extra_group_roles
 
         self.relation_data.update_relation_data(event.relation.id, data)
 
@@ -3856,27 +4289,38 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
+        app_databag = event.relation.data[event.app]
+
         # Check if the index is created
         # (the OpenSearch charm shares the credentials).
-        if (
-            "username" in diff.added and "password" in diff.added
-        ) or secret_field_user in diff.added:
+        if self._main_credentials_shared(diff) and "role-type" not in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("index created at: %s", datetime.now())
             getattr(self.on, "index_created").emit(event.relation, app=event.app, unit=event.unit)
 
-            # To avoid unnecessary application restarts do not trigger
-            # “endpoints_changed“ event if “index_created“ is triggered.
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
-        # Emit a endpoints changed event if the OpenSearch application added or changed this info
-        # in the relation databag.
+        if self._role_credentials_shared(diff) and "role-type" in app_databag:
+            # Emit the default event (the one without an alias).
+            logger.info("role created at: %s", datetime.now())
+            getattr(self.on, "index_role_created").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        # Emit a endpoints changed event if the OpenSearch application
+        # added or changed this info in the relation databag.
         if "endpoints" in diff.added or "endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("endpoints changed on %s", datetime.now())
             getattr(self.on, "endpoints_changed").emit(
                 event.relation, app=event.app, unit=event.unit
-            )  # here check if this is the right design
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
 
@@ -3888,7 +4332,10 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
         charm: CharmBase,
         relation_name: str,
         index: str,
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
         OpenSearchRequiresData.__init__(
@@ -3896,7 +4343,10 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
             charm.model,
             relation_name,
             index,
+            role_type,
+            role_permissions,
             extra_user_roles,
+            extra_group_roles,
             additional_secret_fields,
         )
         OpenSearchRequiresEventHandlers.__init__(self, charm, self)
@@ -4040,6 +4490,12 @@ class EtcdProviderEventHandlers(ProviderEventHandlers):
         if any(newval for newval in new_data_keys if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, new_data_keys)
 
+        # Check which data has changed to emit customs events.
+        diff = self._diff(event)
+
+        # Validate role information is not dynamically changed
+        self._validate_role_consistency(event, diff)
+
         getattr(self.on, "mtls_cert_updated").emit(event.relation, app=event.app, unit=event.unit)
         return
 
@@ -4090,11 +4546,22 @@ class EtcdRequirerData(RequirerData):
         relation_name: str,
         prefix: str,
         mtls_cert: Optional[str],
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ):
         """Manager of Etcd client relations."""
-        super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
+        super().__init__(
+            model,
+            relation_name,
+            role_type,
+            role_permissions,
+            extra_user_roles,
+            extra_group_roles,
+            additional_secret_fields,
+        )
         self.prefix = prefix
         self.mtls_cert = mtls_cert
 
@@ -4202,7 +4669,10 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
         relation_name: str,
         prefix: str,
         mtls_cert: Optional[str],
+        role_type: Optional[str] = None,
+        role_permissions: Optional[str] = None,
         extra_user_roles: Optional[str] = None,
+        extra_group_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
     ) -> None:
         EtcdRequirerData.__init__(
@@ -4211,7 +4681,10 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
             relation_name,
             prefix,
             mtls_cert,
+            role_type,
+            role_permissions,
             extra_user_roles,
+            extra_group_roles,
             additional_secret_fields,
         )
         EtcdRequirerEventHandlers.__init__(self, charm, self)
