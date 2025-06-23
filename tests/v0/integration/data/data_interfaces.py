@@ -316,7 +316,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 48
+LIBPATCH = 17
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -1230,11 +1230,6 @@ class KafkaRequires(DataRequires):
         self.topic = topic
         self.consumer_group_prefix = consumer_group_prefix or ""
 
-    @staticmethod
-    def is_topic_value_acceptable(topic_value: str) -> bool:
-        """Check whether the given Kafka topic value is acceptable."""
-        return "*" not in topic_value[:3]
-
     @property
     def topic(self):
         """Topic to use in Kafka."""
@@ -1242,8 +1237,9 @@ class KafkaRequires(DataRequires):
 
     @topic.setter
     def topic(self, value):
-        if not self.is_topic_value_acceptable(value):
-            raise ValueError(f"Error on topic '{value}', unacceptable value.")
+        # Avoid wildcards
+        if value == "*":
+            raise ValueError(f"Error on topic '{value}', cannot be a wildcard.")
         self._topic = value
 
     def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
