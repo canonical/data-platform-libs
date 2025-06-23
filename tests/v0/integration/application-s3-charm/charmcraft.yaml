@@ -21,4 +21,4 @@ bases:
 parts:
   charm:
     charm-binary-python-packages:
-      - opentelemetry-api
+      - opentelemetry-api==1.33.1
