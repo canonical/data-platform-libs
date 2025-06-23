@@ -3530,7 +3530,7 @@ class KafkaRequirerData(RequirerData):
     @staticmethod
     def is_topic_value_acceptable(topic_value: str) -> bool:
         """Check whether the given Kafka topic value is acceptable."""
-        return topic_value != "*"
+        return "*" not in topic_value[:3]
 
     @property
     def topic(self):
