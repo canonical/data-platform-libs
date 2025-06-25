@@ -1848,15 +1848,15 @@ class RequirerData(Data):
 
         data = self.fetch_relation_data(
             [relation.id],
-            ["username", "password", "role-type", "role-name", "role-password"],
+            ["username", "password", "role-name", "role-password"],
         ).get(relation.id, {})
 
-        if "role-type" not in data:
-            return all(bool(data.get(field)) for field in ("username", "password"))
-        if "role-type" in data:
-            return all(bool(data.get(field)) for field in ("role-name",))
-
-        return False
+        return any(
+            [
+                all(bool(data.get(field)) for field in ("username", "password")),
+                all(bool(data.get(field)) for field in ("role-name",)),
+            ]
+        )
 
     def _validate_role_type(self) -> None:
         """Validates the consistency of the provided role-type and its extra roles."""
@@ -3397,10 +3397,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
                 is_subordinate = event.relation.data[key].get("subordinated") == "true"
 
         if is_subordinate:
-            if not remote_unit_data:
-                return
-
-            if remote_unit_data.get("state") != "ready":
+            if not remote_unit_data or remote_unit_data.get("state") != "ready":
                 return
 
         # Check which data has changed to emit customs events.
@@ -3410,7 +3407,9 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
 
-        app_databag = event.relation.data[event.app]
+        app_databag = get_encoded_dict(event.relation, event.app, "data")
+        if app_databag is None:
+            app_databag = {}
 
         # Check if the database is created
         # (the database charm shared the credentials).
@@ -3878,7 +3877,9 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
 
-        app_databag = event.relation.data[event.app]
+        app_databag = get_encoded_dict(event.relation, event.app, "data")
+        if app_databag is None:
+            app_databag = {}
 
         if self._main_credentials_shared(diff) and "role-type" not in app_databag:
             # Emit the default event (the one without an alias).
@@ -4199,7 +4200,9 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
-        app_databag = event.relation.data[event.app]
+        app_databag = get_encoded_dict(event.relation, event.app, "data")
+        if app_databag is None:
+            app_databag = {}
 
         # Check if the index is created
         # (the OpenSearch charm shares the credentials).

@@ -2452,7 +2452,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             self.rel_id,
             self.provider,
             {
-                "role-type": ROLE_USER,
+                "data": json.dumps({"role-type": ROLE_USER}),
                 "role-name": "test-username",
                 "role-password": "test-password",
             },
@@ -2478,7 +2478,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             rel_id,
             self.provider,
             {
-                "role-type": ROLE_GROUP,
+                "data": json.dumps({"role-type": ROLE_GROUP}),
                 "role-name": "test-groupname",
             },
         )
@@ -2506,7 +2506,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.update_relation_data(
             self.rel_id,
             self.provider,
-            {"role-type": ROLE_USER, f"{PROV_SECRET_PREFIX}role": secret.id},
+            {"data": json.dumps({"role-type": ROLE_USER}), "secret-role": secret.id},
         )
 
         # Assert the correct hook is called.
@@ -2531,7 +2531,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             self.provider,
-            {"role-type": ROLE_GROUP, f"{PROV_SECRET_PREFIX}role": secret2.id},
+            {"data": json.dumps({"role-type": ROLE_GROUP}), "secret-role": secret2.id},
         )
 
         # Assert the correct hook is called.
@@ -3222,7 +3222,7 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
             self.rel_id,
             self.provider,
             {
-                "role-type": ROLE_USER,
+                "data": json.dumps({"role-type": ROLE_USER}),
                 "role-name": "test-username",
                 "role-password": "test-password",
             },
@@ -3248,7 +3248,7 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
             rel_id,
             self.provider,
             {
-                "role-type": ROLE_GROUP,
+                "data": json.dumps({"role-type": ROLE_GROUP}),
                 "role-name": "test-groupname",
             },
         )
@@ -3276,7 +3276,7 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.update_relation_data(
             self.rel_id,
             self.provider,
-            {"role-type": ROLE_USER, f"{PROV_SECRET_PREFIX}role": secret.id},
+            {"data": json.dumps({"role-type": ROLE_USER}), "secret-role": secret.id},
         )
 
         # Assert the correct hook is called.
@@ -3301,7 +3301,7 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             self.provider,
-            {"role-type": ROLE_GROUP, f"{PROV_SECRET_PREFIX}role": secret2.id},
+            {"data": json.dumps({"role-type": ROLE_GROUP}), "secret-role": secret2.id},
         )
 
         # Assert the correct hook is called.
@@ -3535,7 +3535,7 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
             self.rel_id,
             self.provider,
             {
-                "role-type": ROLE_USER,
+                "data": json.dumps({"role-type": ROLE_USER}),
                 "role-name": "test-username",
                 "role-password": "test-password",
             },
@@ -3561,7 +3561,7 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
             rel_id,
             self.provider,
             {
-                "role-type": ROLE_GROUP,
+                "data": json.dumps({"role-type": ROLE_GROUP}),
                 "role-name": "test-groupname",
             },
         )
@@ -3589,7 +3589,7 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.update_relation_data(
             self.rel_id,
             self.provider,
-            {"role-type": ROLE_USER, f"{PROV_SECRET_PREFIX}role": secret.id},
+            {"data": json.dumps({"role-type": ROLE_USER}), "secret-role": secret.id},
         )
 
         # Assert the correct hook is called.
@@ -3614,7 +3614,7 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             self.provider,
-            {"role-type": ROLE_GROUP, f"{PROV_SECRET_PREFIX}role": secret2.id},
+            {"data": json.dumps({"role-type": ROLE_GROUP}), "secret-role": secret2.id},
         )
 
         # Assert the correct hook is called.
