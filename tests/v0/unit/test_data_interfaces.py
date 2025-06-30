@@ -2188,16 +2188,16 @@ class DataRequirerBaseTests(ABC):
                 charm=self.harness.charm,
                 relation_name=DATABASE_RELATION_NAME,
                 database_name=DATABASE,
-                role_type=ROLE_USER,
                 extra_group_roles=EXTRA_GROUP_ROLES,
+                role_type=ROLE_USER,
             )
         with pytest.raises(ValueError):
             DatabaseRequires(
                 charm=self.harness.charm,
                 relation_name=DATABASE_RELATION_NAME,
                 database_name=DATABASE,
-                role_type=ROLE_GROUP,
                 extra_user_roles=EXTRA_USER_ROLES,
+                role_type=ROLE_GROUP,
             )
 
 
