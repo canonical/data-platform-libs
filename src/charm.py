@@ -7,6 +7,8 @@
 from ops.charm import CharmBase
 from ops.main import main
 
+# TEST
+
 
 class DataPlatformLibsCharm(CharmBase):
     """Placeholder charm for Data Platform libs."""
