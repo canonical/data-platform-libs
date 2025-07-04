@@ -118,6 +118,8 @@ jobs:
           sudo concierge prepare -p microk8s \
             --juju-channel ${{ matrix.juju-version.juju-snap-channel }} \
             --charmcraft-channel "2.x/stable"
+      - name: Install tox
+        run: python3 -m pip install tox
       - name: Download packed charm(s)
         uses: actions/download-artifact@v4
         with:
