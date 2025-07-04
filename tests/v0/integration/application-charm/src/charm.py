@@ -37,6 +37,14 @@ if DATA_INTERFACES_VERSION > 34:
         KafkaRequirerEventHandlers,
     )
 
+if DATA_INTERFACES_VERSION > 49:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        ROLE_USER,
+        DatabaseRoleCreatedEvent,
+        IndexRoleCreatedEvent,
+        TopicRoleCreatedEvent,
+    )
+
 logger = logging.getLogger(__name__)
 
 # Extra roles that this application needs when interacting with the database.
@@ -58,10 +66,10 @@ class ApplicationCharm(CharmBase):
 
         # Events related to the first database that is requested
         # (these events are defined in the database requires charm library).
-        database_name = f'{self.app.name.replace("-", "_")}_first_database'
+        database_name = f'{self.app.name.replace("-", "_")}_first_database_db'
         self.first_database = DatabaseRequires(
             charm=self,
-            relation_name="first-database",
+            relation_name="first-database-db",
             database_name=database_name,
             extra_user_roles=EXTRA_USER_ROLES,
         )
@@ -72,15 +80,28 @@ class ApplicationCharm(CharmBase):
             self.first_database.on.endpoints_changed, self._on_first_database_endpoints_changed
         )
 
+        if DATA_INTERFACES_VERSION > 49:
+            self.first_database_roles = DatabaseRequires(
+                charm=self,
+                relation_name="first-database-roles",
+                database_name=database_name,
+                role_type=ROLE_USER,
+                extra_user_roles=EXTRA_USER_ROLES,
+            )
+            self.framework.observe(
+                self.first_database_roles.on.database_role_created,
+                self._on_first_database_roles_role_created,
+            )
+
         # Events related to the second database that is requested
         # (these events are defined in the database requires charm library).
-        database_name = f'{self.app.name.replace("-", "_")}_second_database'
+        database_name = f'{self.app.name.replace("-", "_")}_second_database_db'
 
         # Keeping the charm backwards compatible, for upgrades testing
         if DATA_INTERFACES_VERSION > 17:
             self.second_database = DatabaseRequires(
                 charm=self,
-                relation_name="second-database",
+                relation_name="second-database-db",
                 database_name=database_name,
                 extra_user_roles=EXTRA_USER_ROLES,
                 additional_secret_fields=["topsecret", "donttellanyone"],
@@ -89,7 +110,7 @@ class ApplicationCharm(CharmBase):
         else:
             self.second_database = DatabaseRequires(
                 charm=self,
-                relation_name="second-database",
+                relation_name="second-database-db",
                 database_name=database_name,
                 extra_user_roles=EXTRA_USER_ROLES,
             )
@@ -151,7 +172,7 @@ class ApplicationCharm(CharmBase):
 
         self.kafka = KafkaRequires(
             charm=self,
-            relation_name="kafka-client",
+            relation_name="kafka-client-topic",
             topic="test-topic",
             extra_user_roles=EXTRA_USER_ROLES_KAFKA,
             consumer_group_prefix=CONSUMER_GROUP_PREFIX,
@@ -176,6 +197,20 @@ class ApplicationCharm(CharmBase):
                 self.kafka_split_pattern.on.topic_created, self._on_kafka_topic_created
             )
 
+        if DATA_INTERFACES_VERSION > 49:
+            self.kafka_roles = KafkaRequires(
+                charm=self,
+                relation_name="kafka-client-roles",
+                topic="test-topic",
+                role_type=ROLE_USER,
+                extra_user_roles=EXTRA_USER_ROLES_KAFKA,
+                consumer_group_prefix=CONSUMER_GROUP_PREFIX,
+            )
+            self.framework.observe(
+                self.kafka_roles.on.topic_role_created,
+                self._on_kafka_roles_role_created,
+            )
+
         self.framework.observe(
             self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
         )
@@ -185,7 +220,7 @@ class ApplicationCharm(CharmBase):
 
         self.opensearch = OpenSearchRequires(
             charm=self,
-            relation_name="opensearch-client",
+            relation_name="opensearch-client-index",
             index="test-index",
             extra_user_roles=EXTRA_USER_ROLES_OPENSEARCH,
         )
@@ -193,6 +228,18 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(
             self.opensearch.on.authentication_updated, self._on_opensearch_authentication_updated
         )
+
+        if DATA_INTERFACES_VERSION > 49:
+            self.opensearch_roles = OpenSearchRequires(
+                charm=self,
+                relation_name="opensearch-client-roles",
+                index="test-index",
+                role_type=ROLE_USER,
+                extra_user_roles=EXTRA_USER_ROLES_OPENSEARCH,
+            )
+            self.framework.observe(
+                self.opensearch_roles.on.index_role_created, self._on_opensearch_roles_role_created
+            )
 
         # actions
 
@@ -276,6 +323,14 @@ class ApplicationCharm(CharmBase):
         """Event triggered when the read/write endpoints of the database change."""
         logger.info(f"first database endpoints have been changed to: {event.endpoints}")
 
+    if DATA_INTERFACES_VERSION > 49:
+
+        def _on_first_database_roles_role_created(self, event: DatabaseRoleCreatedEvent) -> None:
+            """Event triggered when a database role was created for this application."""
+            # Retrieve the credentials using the charm library.
+            logger.info(f"first database role credentials: {event.role_name}")
+            self.unit.status = ActiveStatus("received role credentials of the first database")
+
     # Second database events observers.
     def _on_second_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Event triggered when a database was created for this application."""
@@ -349,10 +404,24 @@ class ApplicationCharm(CharmBase):
         logger.info("On kafka topic created")
         self.unit.status = ActiveStatus("kafka_topic_created")
 
+    if DATA_INTERFACES_VERSION > 49:
+
+        def _on_kafka_roles_role_created(self, _: TopicRoleCreatedEvent) -> None:
+            """Event triggered when a topic role was created for this application."""
+            logger.info("On kafka role created")
+            self.unit.status = ActiveStatus("kafka_role_created")
+
     def _on_opensearch_index_created(self, _: IndexCreatedEvent):
         """Event triggered when an index was created for this application."""
         logger.info("On opensearch index created event fired")
         self.unit.status = ActiveStatus("opensearch_index_created")
+
+    if DATA_INTERFACES_VERSION > 49:
+
+        def _on_opensearch_roles_role_created(self, _: IndexRoleCreatedEvent):
+            """Event triggered when an index role was created for this application."""
+            logger.info("On opensearch role created event fired")
+            self.unit.status = ActiveStatus("opensearch_role_created")
 
     def _on_opensearch_authentication_updated(self, _: IndexCreatedEvent):
         """Event triggered when an index was created for this application."""

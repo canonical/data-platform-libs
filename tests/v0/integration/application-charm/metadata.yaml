@@ -8,18 +8,24 @@ summary: |
   only for testing of the libs in this repository.
 
 requires:
-  first-database:
+  first-database-db:
     interface: database_client
-  second-database:
+  first-database-roles:
+    interface: database_client
+  second-database-db:
     interface: database_client
   multiple-database-clusters:
     interface: database_client
   aliased-multiple-database-clusters:
     interface: database_client
     limit: 2
-  kafka-client:
+  kafka-client-topic:
+    interface: kafka_client
+  kafka-client-roles:
     interface: kafka_client
   kafka-split-pattern-client:
     interface: kafka_client
-  opensearch-client:
+  opensearch-client-index:
+    interface: opensearch_client
+  opensearch-client-roles:
     interface: opensearch_client

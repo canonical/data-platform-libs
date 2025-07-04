@@ -18,6 +18,7 @@ from ops.model import ActiveStatus, MaintenanceStatus
 
 from charms.data_platform_libs.v0.data_interfaces import (
     IndexRequestedEvent,
+    IndexRoleRequestedEvent,
     OpenSearchProvides,
 )
 
@@ -39,7 +40,12 @@ class OpenSearchCharm(CharmBase):
         # Charm events defined in the OpenSearchProvides charm library.
         self.opensearch_provider = OpenSearchProvides(self, relation_name=REL)
         self.framework.observe(
-            self.opensearch_provider.on.index_requested, self._on_index_requested
+            self.opensearch_provider.on.index_requested,
+            self._on_index_requested,
+        )
+        self.framework.observe(
+            self.opensearch_provider.on.index_role_requested,
+            self._on_index_role_requested,
         )
         self.framework.observe(self.on[PEER].relation_joined, self._on_peer_relation_joined)
         self.framework.observe(
@@ -105,6 +111,18 @@ class OpenSearchCharm(CharmBase):
         self.opensearch_provider.set_tls_ca(relation_id, "Canonical")
         self.opensearch_provider.set_index(relation_id, index)
         self.unit.status = ActiveStatus(f"index: {index} granted!")
+
+    def _on_index_role_requested(self, event: IndexRoleRequestedEvent):
+        """Handle the on_index_role_requested event."""
+        self.unit.status = MaintenanceStatus("Creating role")
+
+        rolename = "admin"
+        password = "password"
+        self.set_secret("app", "role-name", rolename)
+        self.set_secret("app", "role-password", password)
+        # set connection info in the databag relation
+        self.opensearch_provider.set_role_credentials(event.relation.id, rolename, password)
+        self.unit.status = ActiveStatus(f"role: {rolename} created!")
 
     def _on_reset_unit_status(self, event: ActionEvent):
         """Reset the status message of the unit."""
