@@ -113,14 +113,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup operator environment
-        # TODO: Replace with custom image on self-hosted runner
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: "1.27-strict/stable"
-          bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
-          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
-          charmcraft-channel: "2.x/stable"
+        run: |
+          snap install concierge --classic
+          concierge prepare -p microk8s \
+            --juju-channel ${{ matrix.juju-version.juju-snap-channel }} \
+            --charmcraft-channel "2.x/stable"
       - name: Download packed charm(s)
         uses: actions/download-artifact@v4
         with:
