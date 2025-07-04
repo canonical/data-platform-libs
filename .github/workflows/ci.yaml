@@ -114,8 +114,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup operator environment
         run: |
-          snap install concierge --classic
-          concierge prepare -p microk8s \
+          sudo snap install concierge --classic
+          sudo concierge prepare -p microk8s \
             --juju-channel ${{ matrix.juju-version.juju-snap-channel }} \
             --charmcraft-channel "2.x/stable"
       - name: Download packed charm(s)
