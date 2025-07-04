@@ -22,8 +22,8 @@ APP_NAMES = [APPLICATION_APP_NAME, DATABASE_APP_NAME]
 DATABASE_APP_METADATA = yaml.safe_load(
     Path("./tests/v0/integration/database-charm/metadata.yaml").read_text()
 )
-FIRST_DATABASE_RELATION_NAME = "first-database"
-SECOND_DATABASE_RELATION_NAME = "second-database"
+DB_FIRST_DATABASE_RELATION_NAME = "first-database-db"
+DB_SECOND_DATABASE_RELATION_NAME = "second-database-db"
 
 SECRET_REF_PREFIX = "secret-"
 
@@ -226,7 +226,7 @@ async def test_unbalanced_versions_req_old_vs_prov_new(
 
     # Storing Relation object in 'pytest' global namespace for the session
     pytest.first_database_relation = await ops_test.model.add_relation(
-        f"{APPLICATION_APP_NAME}:{FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+        f"{APPLICATION_APP_NAME}:{DB_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
@@ -410,7 +410,7 @@ async def test_unbalanced_versions_req_new_vs_prov_old(
 
     # Storing Relation object in 'pytest' global namespace for the session
     pytest.second_database_relation = await ops_test.model.add_relation(
-        f"{APPLICATION_APP_NAME}:{SECOND_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+        f"{APPLICATION_APP_NAME}:{DB_SECOND_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 

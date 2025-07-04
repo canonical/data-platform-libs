@@ -37,11 +37,13 @@ DATABASE_APP_METADATA = yaml.safe_load(
 DATABASE_DUMMY_APP_METADATA = yaml.safe_load(
     Path("./tests/v0/integration/dummy-database-charm/metadata.yaml").read_text()
 )
-FIRST_DATABASE_RELATION_NAME = "first-database"
-SECOND_DATABASE_RELATION_NAME = "second-database"
+
+DB_FIRST_DATABASE_RELATION_NAME = "first-database-db"
+DB_SECOND_DATABASE_RELATION_NAME = "second-database-db"
+ROLES_FIRST_DATABASE_RELATION_NAME = "first-database-roles"
+
 MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "multiple-database-clusters"
 ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "aliased-multiple-database-clusters"
-DATABASE_DUMMY_RELATION_NAME = "dummy-database"
 
 SECRET_REF_PREFIX = "secret-"
 
@@ -662,13 +664,13 @@ async def test_database_relation_with_charm_libraries(ops_test: OpsTest):
     # Relate the charms and wait for them exchanging some connection data.
 
     pytest.first_database_relation = await ops_test.model.add_relation(
-        f"{APPLICATION_APP_NAME}:{FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+        f"{APPLICATION_APP_NAME}:{DB_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # Get the connection string to connect to the database.
     connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME
     )
 
     # Connect to the database.
@@ -690,7 +692,7 @@ async def test_database_relation_with_charm_libraries(ops_test: OpsTest):
         # Get the version of the database and compare with the information that
         # was retrieved directly from the database.
         version = await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "version"
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "version"
         )
         assert version == data[0]
 
@@ -699,7 +701,7 @@ async def test_user_with_extra_roles(ops_test: OpsTest):
     """Test superuser actions and the request for more permissions."""
     # Get the connection string to connect to the database.
     connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME
     )
 
     # Connect to the database.
@@ -728,7 +730,7 @@ async def test_postgresql_plugin(ops_test: OpsTest):
 
     # Connect to the database and enable the plugin (PostgreSQL extension).
     connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME
     )
     with psycopg2.connect(connection_string) as connection, connection.cursor() as cursor:
         connection.autocommit = True
@@ -761,16 +763,16 @@ async def test_two_applications_dont_share_the_same_relation_data(
     # Relate the new application with the database
     # and wait for them exchanging some connection data.
     await ops_test.model.add_relation(
-        f"{another_application_app_name}:{FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+        f"{another_application_app_name}:{DB_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
     await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
 
     # Assert the two application have different relation (connection) data.
     application_connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME
     )
     another_application_connection_string = await build_connection_string(
-        ops_test, another_application_app_name, FIRST_DATABASE_RELATION_NAME
+        ops_test, another_application_app_name, DB_FIRST_DATABASE_RELATION_NAME
     )
     assert application_connection_string != another_application_connection_string
 
@@ -779,7 +781,7 @@ async def test_two_applications_dont_share_the_same_relation_data(
 async def test_databag_usage_correct(ops_test: OpsTest, application_charm):
     for field in ["username", "password"]:
         assert await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, field
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, field
         )
 
 
@@ -788,13 +790,61 @@ async def test_secrets_usage_correct_secrets(ops_test: OpsTest, application_char
     for field in ["username", "password", "uris"]:
         assert (
             await get_application_relation_data(
-                ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, field
+                ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, field
             )
             is None
         )
     assert await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "secret-user"
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
     )
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_without_juju_secrets")
+async def test_database_roles_relation_with_charm_libraries(ops_test: OpsTest):
+    """Test basic functionality of database-roles relation interface."""
+    # Relate the charms and wait for them exchanging some connection data.
+
+    pytest.first_database_relation = await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{ROLES_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    rolename = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, ROLES_FIRST_DATABASE_RELATION_NAME, "role-name"
+    )
+    password = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, ROLES_FIRST_DATABASE_RELATION_NAME, "role-password"
+    )
+
+    assert rolename is not None
+    assert password is not None
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_database_roles_relation_with_charm_libraries_secrets(ops_test: OpsTest):
+    """Test basic functionality of database-roles relation interface."""
+    # Relate the charms and wait for them exchanging some connection data.
+
+    pytest.first_database_relation = await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{ROLES_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    secret_uri = await get_application_relation_data(
+        ops_test,
+        APPLICATION_APP_NAME,
+        ROLES_FIRST_DATABASE_RELATION_NAME,
+        f"{SECRET_REF_PREFIX}role",
+    )
+
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    rolename = secret_content["role-name"]
+    password = secret_content["role-password"]
+
+    assert rolename is not None
+    assert password is not None
 
 
 async def test_an_application_can_connect_to_multiple_database_clusters(
@@ -873,16 +923,16 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
     # Relate the charms using another relation and wait for them exchanging some connection data.
     sleep(5)
     pytest.second_database_relation = await ops_test.model.add_relation(
-        f"{APPLICATION_APP_NAME}:{SECOND_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+        f"{APPLICATION_APP_NAME}:{DB_SECOND_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # Get the connection strings to connect to both databases.
     first_database_connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME
     )
     second_database_connection_string = await build_connection_string(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME
+        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME
     )
 
     # Assert the two application have different relation (connection) data.
@@ -897,7 +947,7 @@ async def test_external_node_connectivity_field(ops_test: OpsTest, application_c
             DATABASE_APP_NAME,
             "database",
             "external-node-connectivity",
-            related_endpoint=FIRST_DATABASE_RELATION_NAME,
+            related_endpoint=DB_FIRST_DATABASE_RELATION_NAME,
         )
     ) is None
 
@@ -908,7 +958,7 @@ async def test_external_node_connectivity_field(ops_test: OpsTest, application_c
             DATABASE_APP_NAME,
             "database",
             "external-node-connectivity",
-            related_endpoint=SECOND_DATABASE_RELATION_NAME,
+            related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
         )
     ) == "true"
 
@@ -921,7 +971,7 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
         DATABASE_APP_NAME,
         DATABASE_APP_NAME,
         "requested-secrets",
-        related_endpoint=SECOND_DATABASE_RELATION_NAME,
+        related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
     )
     assert {"topsecret", "donttellanyone"} <= set(json.loads(secret_fields))
 
@@ -935,7 +985,10 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
 
     # Get secret original value
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}extra"
+        ops_test,
+        APPLICATION_APP_NAME,
+        DB_SECOND_DATABASE_RELATION_NAME,
+        f"{SECRET_REF_PREFIX}extra",
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
@@ -949,7 +1002,10 @@ async def test_provider_with_additional_secrets(ops_test: OpsTest, database_char
 
     # Get secret after change
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, f"{SECRET_REF_PREFIX}extra"
+        ops_test,
+        APPLICATION_APP_NAME,
+        DB_SECOND_DATABASE_RELATION_NAME,
+        f"{SECRET_REF_PREFIX}extra",
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
@@ -1031,7 +1087,7 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, field
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, field
         )
         == value
     )
@@ -1069,7 +1125,7 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, field
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, field
         )
         is None
     )
@@ -1116,7 +1172,7 @@ async def test_provider_get_set_delete_fields_secrets(
     await action.wait()
 
     assert await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, relation_field
+        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, relation_field
     )
 
     # Check all application units can read remote relation data
@@ -1152,7 +1208,7 @@ async def test_provider_get_set_delete_fields_secrets(
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, relation_field
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, relation_field
         )
         is None
     )
@@ -1201,7 +1257,7 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     secret_uri = await get_application_relation_data(
         ops_test,
         APPLICATION_APP_NAME,
-        SECOND_DATABASE_RELATION_NAME,
+        DB_SECOND_DATABASE_RELATION_NAME,
         f"{SECRET_REF_PREFIX}{field}",
     )
 
@@ -1233,7 +1289,7 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
         await get_application_relation_data(
             ops_test,
             APPLICATION_APP_NAME,
-            SECOND_DATABASE_RELATION_NAME,
+            DB_SECOND_DATABASE_RELATION_NAME,
             f"{SECRET_REF_PREFIX}{field}",
         )
         is None
@@ -1263,9 +1319,9 @@ async def test_requires_get_set_delete_fields(ops_test: OpsTest):
         await get_application_relation_data(
             ops_test,
             DATABASE_APP_NAME,
-            SECOND_DATABASE_RELATION_NAME,
+            DB_SECOND_DATABASE_RELATION_NAME,
             "new_field",
-            related_endpoint="second-database",
+            related_endpoint="second-database-db",
         )
         == "blah"
     )
@@ -1305,9 +1361,9 @@ async def test_requires_get_set_delete_fields(ops_test: OpsTest):
         await get_application_relation_data(
             ops_test,
             DATABASE_APP_NAME,
-            SECOND_DATABASE_RELATION_NAME,
+            DB_SECOND_DATABASE_RELATION_NAME,
             "new_field",
-            related_endpoint="second-database",
+            related_endpoint="second-database-db",
         )
         is None
     )
@@ -1352,7 +1408,7 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "new_field2"
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "new_field2"
         )
         is None
     )
@@ -1371,7 +1427,7 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "new_field"
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "new_field"
         )
         == "blah"
     )
@@ -1397,7 +1453,7 @@ async def test_requires_set_delete_fields(ops_test: OpsTest):
             DATABASE_APP_NAME,
             DATABASE_APP_NAME,
             "new_field_req",
-            related_endpoint=SECOND_DATABASE_RELATION_NAME,
+            related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
         )
         == "blah-req"
     )
@@ -1415,7 +1471,7 @@ async def test_requires_set_delete_fields(ops_test: OpsTest):
             DATABASE_APP_NAME,
             DATABASE_APP_NAME,
             "new_field_req",
-            related_endpoint=SECOND_DATABASE_RELATION_NAME,
+            related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
         )
         is None
     )
@@ -1464,7 +1520,7 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
             DATABASE_APP_NAME,
             DATABASE_APP_NAME,
             "new_field2-req",
-            related_endpoint=SECOND_DATABASE_RELATION_NAME,
+            related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
         )
         is None
     )
@@ -1487,7 +1543,7 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
             DATABASE_APP_NAME,
             DATABASE_APP_NAME,
             "new_field-req",
-            related_endpoint=SECOND_DATABASE_RELATION_NAME,
+            related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
         )
         == "blah-req"
     )

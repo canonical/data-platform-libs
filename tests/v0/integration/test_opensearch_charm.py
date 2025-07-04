@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 APPLICATION_APP_NAME = "requirer-app"
 OPENSEARCH_APP_NAME = "opensearch-test"
 APP_NAMES = [APPLICATION_APP_NAME, OPENSEARCH_APP_NAME]
-RELATION_NAME = "opensearch-client"
+INDEX_RELATION_NAME = "opensearch-client-index"
+ROLES_RELATION_NAME = "opensearch-client-roles"
 
 PROV_SECRET_PREFIX = "secret-"
 
@@ -47,10 +48,12 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, opensearch_ch
 async def test_opensearch_relation_with_charm_libraries(ops_test: OpsTest):
     """Test basic functionality of opensearch relation interface."""
     # Relate the charms and wait for them exchanging some connection data.
-    await ops_test.model.add_relation(OPENSEARCH_APP_NAME, APPLICATION_APP_NAME)
+    await ops_test.model.add_relation(
+        OPENSEARCH_APP_NAME, f"{APPLICATION_APP_NAME}:{INDEX_RELATION_NAME}"
+    )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
-    # check unit messagge to check if the index_created_event is triggered
+    # check unit message to check if the index_created_event is triggered
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
         assert unit.workload_status_message == "opensearch_index_created"
     # check if index access is granted
@@ -58,16 +61,16 @@ async def test_opensearch_relation_with_charm_libraries(ops_test: OpsTest):
         assert "granted" in unit.workload_status_message
 
     username = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "username"
+        ops_test, APPLICATION_APP_NAME, INDEX_RELATION_NAME, "username"
     )
     password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "password"
+        ops_test, APPLICATION_APP_NAME, INDEX_RELATION_NAME, "password"
     )
     endpoints = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "endpoints"
+        ops_test, APPLICATION_APP_NAME, INDEX_RELATION_NAME, "endpoints"
     )
     index = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "index"
+        ops_test, APPLICATION_APP_NAME, INDEX_RELATION_NAME, "index"
     )
 
     assert username == "admin"
@@ -81,7 +84,9 @@ async def test_opensearch_relation_with_charm_libraries(ops_test: OpsTest):
 async def test_opensearch_relation_with_charm_libraries_secrets(ops_test: OpsTest):
     """Test basic functionality of opensearch relation interface."""
     # Relate the charms and wait for them exchanging some connection data.
-    await ops_test.model.add_relation(OPENSEARCH_APP_NAME, APPLICATION_APP_NAME)
+    await ops_test.model.add_relation(
+        OPENSEARCH_APP_NAME, f"{APPLICATION_APP_NAME}:{INDEX_RELATION_NAME}"
+    )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # check unit message to check if the index_created_event is triggered
@@ -92,7 +97,7 @@ async def test_opensearch_relation_with_charm_libraries_secrets(ops_test: OpsTes
         assert "granted" in unit.workload_status_message
 
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
+        ops_test, APPLICATION_APP_NAME, INDEX_RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
@@ -100,10 +105,10 @@ async def test_opensearch_relation_with_charm_libraries_secrets(ops_test: OpsTes
     password = secret_content["password"]
 
     endpoints = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "endpoints"
+        ops_test, APPLICATION_APP_NAME, INDEX_RELATION_NAME, "endpoints"
     )
     index = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "index"
+        ops_test, APPLICATION_APP_NAME, INDEX_RELATION_NAME, "index"
     )
 
     assert username == "admin"
@@ -118,7 +123,7 @@ async def test_opensearch_relation_secret_changed(ops_test: OpsTest):
     """Test basic functionality of opensearch relation interface."""
     # Get current password
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
+        ops_test, APPLICATION_APP_NAME, INDEX_RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
@@ -129,13 +134,70 @@ async def test_opensearch_relation_secret_changed(ops_test: OpsTest):
     await action.wait()
 
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
+        ops_test, APPLICATION_APP_NAME, INDEX_RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
     new_password = secret_content["password"]
     assert password != new_password
 
-    # check unit messagge to check if the index_created_event is triggered
+    # check unit message to check if the index_created_event is triggered
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
         assert unit.workload_status_message == "opensearch_authentication_updated"
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_without_juju_secrets")
+async def test_opensearch_roles_relation_with_charm_libraries(ops_test: OpsTest):
+    """Test basic functionality of opensearch-roles relation interface."""
+    # Relate the charms and wait for them exchanging some connection data.
+    await ops_test.model.add_relation(
+        OPENSEARCH_APP_NAME, f"{APPLICATION_APP_NAME}:{ROLES_RELATION_NAME}"
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    # check unit message to check if the index_role_created_event is triggered
+    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
+        assert unit.workload_status_message == "opensearch_role_created"
+    # check if index role is created
+    for unit in ops_test.model.applications[OPENSEARCH_APP_NAME].units:
+        assert "created" in unit.workload_status_message
+
+    rolename = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, ROLES_RELATION_NAME, "role-name"
+    )
+    password = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, ROLES_RELATION_NAME, "role-password"
+    )
+
+    assert rolename == "admin"
+    assert password == "password"
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_opensearch_roles_relation_with_charm_libraries_secrets(ops_test: OpsTest):
+    """Test basic functionality of opensearch relation interface."""
+    # Relate the charms and wait for them exchanging some connection data.
+    await ops_test.model.add_relation(
+        OPENSEARCH_APP_NAME, f"{APPLICATION_APP_NAME}:{ROLES_RELATION_NAME}"
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    # check unit message to check if the index_role_created_event is triggered
+    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
+        assert unit.workload_status_message == "opensearch_role_created"
+    # check if index role is created
+    for unit in ops_test.model.applications[OPENSEARCH_APP_NAME].units:
+        assert "created" in unit.workload_status_message
+
+    secret_uri = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, ROLES_RELATION_NAME, f"{PROV_SECRET_PREFIX}role"
+    )
+
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    rolename = secret_content["role-name"]
+    password = secret_content["role-password"]
+
+    assert rolename == "admin"
+    assert password == "password"
