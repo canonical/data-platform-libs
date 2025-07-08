@@ -3149,12 +3149,18 @@ class DatabaseProviderEventHandlers(ProviderEventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
         # Emit a role requested event if the setup key (database name)
         # was added to the relation databag, in addition to the role-type key.
         if "database" in diff.added and "role-type" in diff.added:
             getattr(self.on, "database_role_requested").emit(
                 event.relation, app=event.app, unit=event.unit
             )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
 
     def _on_secret_changed_event(self, event: SecretChangedEvent) -> None:
         """Event emitted when the secret has changed."""
@@ -3729,12 +3735,18 @@ class KafkaProviderEventHandlers(ProviderEventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
         # Emit a role requested event if the setup key (topic name)
         # was added to the relation databag, in addition to the role-type key.
         if "topic" in diff.added and "role-type" in diff.added:
             getattr(self.on, "topic_role_requested").emit(
                 event.relation, app=event.app, unit=event.unit
             )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
         """Event notifying about a new value of a secret."""
@@ -3846,18 +3858,18 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
         # Sets topic, extra user roles, and "consumer-group-prefix" in the relation
         relation_data = {"topic": self.relation_data.topic}
 
+        if self.relation_data.mtls_cert:
+            relation_data["mtls-cert"] = self.relation_data.mtls_cert
+
+        if self.relation_data.consumer_group_prefix:
+            relation_data["consumer-group-prefix"] = self.relation_data.consumer_group_prefix
+
         if self.relation_data.extra_user_roles:
             relation_data["extra-user-roles"] = self.relation_data.extra_user_roles
         if self.relation_data.extra_group_roles:
             relation_data["extra-group-roles"] = self.relation_data.extra_group_roles
         if self.relation_data.role_type:
             relation_data["role-type"] = self.relation_data.role_type
-
-        if self.relation_data.consumer_group_prefix:
-            relation_data["consumer-group-prefix"] = self.relation_data.consumer_group_prefix
-
-        if self.relation_data.mtls_cert:
-            relation_data["mtls-cert"] = self.relation_data.mtls_cert
 
         self.relation_data.update_relation_data(event.relation.id, relation_data)
 
@@ -4079,12 +4091,18 @@ class OpenSearchProvidesEventHandlers(ProviderEventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
         # Emit a role requested event if the setup key (index name)
         # was added to the relation databag, in addition to the role-type key.
         if "index" in diff.added and "role-type" in diff.added:
             getattr(self.on, "index_role_requested").emit(
                 event.relation, app=event.app, unit=event.unit
             )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
 
     def _on_secret_changed_event(self, event: SecretChangedEvent) -> None:
         """Event emitted when the relation data has changed."""
