@@ -275,20 +275,20 @@ async def test_kafka_roles_relation_with_charm_libraries(ops_test: OpsTest):
 
     # check unit message to check if the topic_created_event is triggered
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
-        assert unit.workload_status_message == "kafka_role_created"
+        assert unit.workload_status_message == "kafka_entity_created"
     # check if the topic role was granted
     for unit in ops_test.model.applications[KAFKA_APP_NAME].units:
         assert "created" in unit.workload_status_message
 
-    rolename = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, ROLES_RELATION_NAME, "role-name"
+    entity_name = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, ROLES_RELATION_NAME, "entity-name"
     )
-    password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, ROLES_RELATION_NAME, "role-password"
+    entity_pass = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, ROLES_RELATION_NAME, "entity-password"
     )
 
-    assert rolename == "admin"
-    assert password == "password"
+    assert entity_name == "admin"
+    assert entity_pass == "password"
 
 
 @pytest.mark.abort_on_fail
@@ -303,18 +303,18 @@ async def test_kafka_roles_relation_with_charm_libraries_secrets(ops_test: OpsTe
 
     # check unit message to check if the topic_created_event is triggered
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
-        assert unit.workload_status_message == "kafka_role_created"
+        assert unit.workload_status_message == "kafka_entity_created"
     # check if the topic was granted
     for unit in ops_test.model.applications[KAFKA_APP_NAME].units:
         assert "created" in unit.workload_status_message
 
     secret_uri = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, ROLES_RELATION_NAME, f"{PROV_SECRET_PREFIX}role"
+        ops_test, APPLICATION_APP_NAME, ROLES_RELATION_NAME, f"{PROV_SECRET_PREFIX}entity"
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
-    rolename = secret_content["role-name"]
-    password = secret_content["role-password"]
+    entity_name = secret_content["entity-name"]
+    entity_pass = secret_content["entity-password"]
 
-    assert rolename == "admin"
-    assert password == "password"
+    assert entity_name == "admin"
+    assert entity_pass == "password"

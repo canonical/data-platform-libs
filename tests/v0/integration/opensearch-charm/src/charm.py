@@ -17,8 +17,8 @@ from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
 
 from charms.data_platform_libs.v0.data_interfaces import (
+    IndexEntityRequestedEvent,
     IndexRequestedEvent,
-    IndexRoleRequestedEvent,
     OpenSearchProvides,
 )
 
@@ -44,8 +44,8 @@ class OpenSearchCharm(CharmBase):
             self._on_index_requested,
         )
         self.framework.observe(
-            self.opensearch_provider.on.index_role_requested,
-            self._on_index_role_requested,
+            self.opensearch_provider.on.index_entity_requested,
+            self._on_index_entity_requested,
         )
         self.framework.observe(self.on[PEER].relation_joined, self._on_peer_relation_joined)
         self.framework.observe(
@@ -112,17 +112,17 @@ class OpenSearchCharm(CharmBase):
         self.opensearch_provider.set_index(relation_id, index)
         self.unit.status = ActiveStatus(f"index: {index} granted!")
 
-    def _on_index_role_requested(self, event: IndexRoleRequestedEvent):
-        """Handle the on_index_role_requested event."""
-        self.unit.status = MaintenanceStatus("Creating role")
+    def _on_index_entity_requested(self, event: IndexEntityRequestedEvent):
+        """Handle the on_index_entity_requested event."""
+        self.unit.status = MaintenanceStatus("Creating entity")
 
         rolename = "admin"
         password = "password"
-        self.set_secret("app", "role-name", rolename)
-        self.set_secret("app", "role-password", password)
+        self.set_secret("app", "entity-name", rolename)
+        self.set_secret("app", "entity-password", password)
         # set connection info in the databag relation
-        self.opensearch_provider.set_role_credentials(event.relation.id, rolename, password)
-        self.unit.status = ActiveStatus(f"role: {rolename} created!")
+        self.opensearch_provider.set_entity_credentials(event.relation.id, rolename, password)
+        self.unit.status = ActiveStatus(f"entity: {rolename} created!")
 
     def _on_reset_unit_status(self, event: ActionEvent):
         """Reset the status message of the unit."""

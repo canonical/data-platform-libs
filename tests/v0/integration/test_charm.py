@@ -810,15 +810,15 @@ async def test_database_roles_relation_with_charm_libraries(ops_test: OpsTest):
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
-    rolename = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, ROLES_FIRST_DATABASE_RELATION_NAME, "role-name"
+    entity_name = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, ROLES_FIRST_DATABASE_RELATION_NAME, "entity-name"
     )
-    password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, ROLES_FIRST_DATABASE_RELATION_NAME, "role-password"
+    entity_pass = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, ROLES_FIRST_DATABASE_RELATION_NAME, "entity-password"
     )
 
-    assert rolename is not None
-    assert password is not None
+    assert entity_name is not None
+    assert entity_pass is not None
 
 
 @pytest.mark.abort_on_fail
@@ -836,15 +836,15 @@ async def test_database_roles_relation_with_charm_libraries_secrets(ops_test: Op
         ops_test,
         APPLICATION_APP_NAME,
         ROLES_FIRST_DATABASE_RELATION_NAME,
-        f"{SECRET_REF_PREFIX}role",
+        f"{SECRET_REF_PREFIX}entity",
     )
 
     secret_content = await get_juju_secret(ops_test, secret_uri)
-    rolename = secret_content["role-name"]
-    password = secret_content["role-password"]
+    entity_name = secret_content["entity-name"]
+    entity_pass = secret_content["entity-password"]
 
-    assert rolename is not None
-    assert password is not None
+    assert entity_name is not None
+    assert entity_pass is not None
 
 
 async def test_an_application_can_connect_to_multiple_database_clusters(

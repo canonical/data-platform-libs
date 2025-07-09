@@ -38,9 +38,9 @@ if DATA_INTERFACES_VERSION > 17:
     )
 if DATA_INTERFACES_VERSION > 49:
     from charms.data_platform_libs.v0.data_interfaces import (
-        ROLE_GROUP,
-        ROLE_USER,
-        DatabaseRoleRequestedEvent,
+        ENTITY_GROUP,
+        ENTITY_USER,
+        DatabaseEntityRequestedEvent,
     )
 
 
@@ -88,8 +88,8 @@ class DatabaseCharm(CharmBase):
 
         if DATA_INTERFACES_VERSION > 49:
             self.framework.observe(
-                self.database.on.database_role_requested,
-                self._on_database_role_requested,
+                self.database.on.database_entity_requested,
+                self._on_database_entity_requested,
             )
 
         # Stored state is used to track the password of the database superuser.
@@ -254,14 +254,14 @@ class DatabaseCharm(CharmBase):
 
     if DATA_INTERFACES_VERSION > 49:
 
-        def _on_database_role_requested(self, event: DatabaseRoleRequestedEvent) -> None:
-            """Event triggered when a new database role is requested."""
-            self.unit.status = MaintenanceStatus("creating role")
+        def _on_database_entity_requested(self, event: DatabaseEntityRequestedEvent) -> None:
+            """Event triggered when a new database entity is requested."""
+            self.unit.status = MaintenanceStatus("creating entity")
 
-            # Retrieve the role-type using the charm library.
-            role_type = event.role_type
+            # Retrieve the entity-type using the charm library.
+            entity_type = event.entity_type
 
-            # Generate a role-name and a role-password for the application.
+            # Generate a entity-name and a entity-password for the application.
             rolename = self._new_rolename()
             password = self._new_password()
 
@@ -275,17 +275,17 @@ class DatabaseCharm(CharmBase):
             cursor = connection.cursor()
 
             # Create the role
-            if role_type == ROLE_USER:
+            if entity_type == ENTITY_USER:
                 extra_roles = event.extra_user_roles
                 cursor.execute(f"CREATE ROLE {rolename} WITH ENCRYPTED PASSWORD '{password}';")
                 cursor.execute(f'ALTER ROLE {rolename} {extra_roles.replace(",", " ")};')
-            if role_type == ROLE_GROUP:
+            if entity_type == ENTITY_GROUP:
                 extra_roles = event.extra_group_roles
                 cursor.execute(f"CREATE ROLE {rolename};")
                 cursor.execute(f'ALTER ROLE {rolename} {extra_roles.replace(",", " ")};')
 
             # Share the credentials with the application.
-            self.database.set_role_credentials(event.relation.id, rolename, password)
+            self.database.set_entity_credentials(event.relation.id, rolename, password)
             self.unit.status = ActiveStatus()
 
     def _get_relation(self, relation_id: int) -> Relation:

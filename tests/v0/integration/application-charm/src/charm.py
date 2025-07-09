@@ -39,10 +39,10 @@ if DATA_INTERFACES_VERSION > 34:
 
 if DATA_INTERFACES_VERSION > 49:
     from charms.data_platform_libs.v0.data_interfaces import (
-        ROLE_USER,
-        DatabaseRoleCreatedEvent,
-        IndexRoleCreatedEvent,
-        TopicRoleCreatedEvent,
+        ENTITY_USER,
+        DatabaseEntityCreatedEvent,
+        IndexEntityCreatedEvent,
+        TopicEntityCreatedEvent,
     )
 
 logger = logging.getLogger(__name__)
@@ -85,12 +85,12 @@ class ApplicationCharm(CharmBase):
                 charm=self,
                 relation_name="first-database-roles",
                 database_name=database_name,
-                role_type=ROLE_USER,
+                entity_type=ENTITY_USER,
                 extra_user_roles=EXTRA_USER_ROLES,
             )
             self.framework.observe(
-                self.first_database_roles.on.database_role_created,
-                self._on_first_database_roles_role_created,
+                self.first_database_roles.on.database_entity_created,
+                self._on_first_database_entity_created,
             )
 
         # Events related to the second database that is requested
@@ -202,13 +202,13 @@ class ApplicationCharm(CharmBase):
                 charm=self,
                 relation_name="kafka-client-roles",
                 topic="test-topic",
-                role_type=ROLE_USER,
+                entity_type=ENTITY_USER,
                 extra_user_roles=EXTRA_USER_ROLES_KAFKA,
                 consumer_group_prefix=CONSUMER_GROUP_PREFIX,
             )
             self.framework.observe(
-                self.kafka_roles.on.topic_role_created,
-                self._on_kafka_roles_role_created,
+                self.kafka_roles.on.topic_entity_created,
+                self._on_kafka_entity_created,
             )
 
         self.framework.observe(
@@ -234,11 +234,12 @@ class ApplicationCharm(CharmBase):
                 charm=self,
                 relation_name="opensearch-client-roles",
                 index="test-index",
-                role_type=ROLE_USER,
+                entity_type=ENTITY_USER,
                 extra_user_roles=EXTRA_USER_ROLES_OPENSEARCH,
             )
             self.framework.observe(
-                self.opensearch_roles.on.index_role_created, self._on_opensearch_roles_role_created
+                self.opensearch_roles.on.index_entity_created,
+                self._on_opensearch_entity_created,
             )
 
         # actions
@@ -325,11 +326,11 @@ class ApplicationCharm(CharmBase):
 
     if DATA_INTERFACES_VERSION > 49:
 
-        def _on_first_database_roles_role_created(self, event: DatabaseRoleCreatedEvent) -> None:
-            """Event triggered when a database role was created for this application."""
+        def _on_first_database_entity_created(self, event: DatabaseEntityCreatedEvent) -> None:
+            """Event triggered when a database entity was created for this application."""
             # Retrieve the credentials using the charm library.
-            logger.info(f"first database role credentials: {event.role_name}")
-            self.unit.status = ActiveStatus("received role credentials of the first database")
+            logger.info(f"first database entity credentials: {event.entity_name}")
+            self.unit.status = ActiveStatus("received entity credentials of the first database")
 
     # Second database events observers.
     def _on_second_database_created(self, event: DatabaseCreatedEvent) -> None:
@@ -406,10 +407,10 @@ class ApplicationCharm(CharmBase):
 
     if DATA_INTERFACES_VERSION > 49:
 
-        def _on_kafka_roles_role_created(self, _: TopicRoleCreatedEvent) -> None:
-            """Event triggered when a topic role was created for this application."""
-            logger.info("On kafka role created")
-            self.unit.status = ActiveStatus("kafka_role_created")
+        def _on_kafka_entity_created(self, _: TopicEntityCreatedEvent) -> None:
+            """Event triggered when a topic entity was created for this application."""
+            logger.info("On kafka entity created")
+            self.unit.status = ActiveStatus("kafka_entity_created")
 
     def _on_opensearch_index_created(self, _: IndexCreatedEvent):
         """Event triggered when an index was created for this application."""
@@ -418,10 +419,10 @@ class ApplicationCharm(CharmBase):
 
     if DATA_INTERFACES_VERSION > 49:
 
-        def _on_opensearch_roles_role_created(self, _: IndexRoleCreatedEvent):
-            """Event triggered when an index role was created for this application."""
-            logger.info("On opensearch role created event fired")
-            self.unit.status = ActiveStatus("opensearch_role_created")
+        def _on_opensearch_entity_created(self, _: IndexEntityCreatedEvent):
+            """Event triggered when an index entity was created for this application."""
+            logger.info("On opensearch entity created event fired")
+            self.unit.status = ActiveStatus("opensearch_entity_created")
 
     def _on_opensearch_authentication_updated(self, _: IndexCreatedEvent):
         """Event triggered when an index was created for this application."""
