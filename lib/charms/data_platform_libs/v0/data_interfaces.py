@@ -1825,13 +1825,17 @@ class RequirerData(Data):
         additional_secret_fields: Optional[List[str]] = [],
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         """Manager of base client relations."""
         super().__init__(model, relation_name)
         self.extra_user_roles = extra_user_roles
         self.extra_group_roles = extra_group_roles
         self.entity_type = entity_type
+        self.entity_permissions = entity_permissions
+
         self._validate_entity_type()
+        self._validate_entity_permissions()
 
         self._remote_secret_fields = list(self.SECRET_FIELDS)
         self._local_secret_fields = [
@@ -1871,6 +1875,20 @@ class RequirerData(Data):
 
         if self.entity_type == ENTITY_GROUP and self.extra_user_roles:
             raise ValueError("Inconsistent entity information. Use extra_group_roles instead")
+
+    def _validate_entity_permissions(self) -> None:
+        """Validates whether the provided entity permissions follow the right JSON format."""
+        if not self.entity_permissions:
+            return
+
+        accepted_keys = {"resource_name", "resource_type", "privileges"}
+
+        try:
+            permissions = json.loads(self.entity_permissions)
+            for permission in permissions:
+                assert permission.keys() == accepted_keys
+        except json.decoder.JSONDecodeError:
+            raise ValueError("Invalid entity permissions format. It must be JSON format")
 
     # Public functions
 
@@ -2047,6 +2065,7 @@ class DataPeerData(RequirerData, ProviderData):
         deleted_label: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         RequirerData.__init__(
             self,
@@ -2056,6 +2075,7 @@ class DataPeerData(RequirerData, ProviderData):
             additional_secret_fields,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
         self.deleted_label = deleted_label
@@ -2580,6 +2600,7 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
         unique_key: str = "",
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         DataPeerData.__init__(
             self,
@@ -2592,6 +2613,7 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
             deleted_label,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         DataPeerEventHandlers.__init__(self, charm, self, unique_key)
 
@@ -2620,6 +2642,7 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
         unique_key: str = "",
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         DataPeerData.__init__(
             self,
@@ -2632,6 +2655,7 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
             deleted_label,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         DataPeerEventHandlers.__init__(self, charm, self, unique_key)
 
@@ -2677,6 +2701,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
         deleted_label: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         DataPeerOtherUnitData.__init__(
             self,
@@ -2690,6 +2715,7 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
             deleted_label,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         DataPeerOtherUnitEventHandlers.__init__(self, charm, self)
 
@@ -2758,6 +2784,14 @@ class EntityProvidesEvent(RelationEvent):
             return None
 
         return self.relation.data[self.relation.app].get("entity-type")
+
+    @property
+    def entity_permissions(self) -> Optional[str]:
+        """Returns the entity_permissions that were requested."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("entity-permissions")
 
 
 class EntityRequiresEvent(RelationEventWithSecret):
@@ -3192,6 +3226,7 @@ class DatabaseRequirerData(RequirerData):
         external_node_connectivity: bool = False,
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         """Manager of database client relations."""
         super().__init__(
@@ -3201,6 +3236,7 @@ class DatabaseRequirerData(RequirerData):
             additional_secret_fields,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         self.database = database_name
         self.relations_aliases = relations_aliases
@@ -3388,6 +3424,8 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
             event_data["extra-group-roles"] = self.relation_data.extra_group_roles
         if self.relation_data.entity_type:
             event_data["entity-type"] = self.relation_data.entity_type
+        if self.relation_data.entity_permissions:
+            event_data["entity-permissions"] = self.relation_data.entity_permissions
 
         # set external-node-connectivity field
         if self.relation_data.external_node_connectivity:
@@ -3490,6 +3528,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
         external_node_connectivity: bool = False,
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         DatabaseRequirerData.__init__(
             self,
@@ -3502,6 +3541,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
             external_node_connectivity,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         DatabaseRequirerEventHandlers.__init__(self, charm, self)
 
@@ -3801,6 +3841,7 @@ class KafkaRequirerData(RequirerData):
         mtls_cert: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         """Manager of Kafka client relations."""
         super().__init__(
@@ -3810,6 +3851,7 @@ class KafkaRequirerData(RequirerData):
             additional_secret_fields,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         self.topic = topic
         self.consumer_group_prefix = consumer_group_prefix or ""
@@ -3873,6 +3915,8 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
             relation_data["extra-group-roles"] = self.relation_data.extra_group_roles
         if self.relation_data.entity_type:
             relation_data["entity-type"] = self.relation_data.entity_type
+        if self.relation_data.entity_permissions:
+            relation_data["entity-permissions"] = self.relation_data.entity_permissions
 
         self.relation_data.update_relation_data(event.relation.id, relation_data)
 
@@ -3941,6 +3985,7 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
         mtls_cert: Optional[str] = None,
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ) -> None:
         KafkaRequirerData.__init__(
             self,
@@ -3953,6 +3998,7 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
             mtls_cert=mtls_cert,
             extra_group_roles=extra_group_roles,
             entity_type=entity_type,
+            entity_permissions=entity_permissions,
         )
         KafkaRequirerEventHandlers.__init__(self, charm, self)
 
@@ -4132,6 +4178,7 @@ class OpenSearchRequiresData(RequirerData):
         additional_secret_fields: Optional[List[str]] = [],
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         """Manager of OpenSearch client relations."""
         super().__init__(
@@ -4141,6 +4188,7 @@ class OpenSearchRequiresData(RequirerData):
             additional_secret_fields,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         self.index = index
 
@@ -4172,6 +4220,8 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
             data["extra-group-roles"] = self.relation_data.extra_group_roles
         if self.relation_data.entity_type:
             data["entity-type"] = self.relation_data.entity_type
+        if self.relation_data.entity_permissions:
+            data["entity-permissions"] = self.relation_data.entity_permissions
 
         self.relation_data.update_relation_data(event.relation.id, data)
 
@@ -4270,6 +4320,7 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
         additional_secret_fields: Optional[List[str]] = [],
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ) -> None:
         OpenSearchRequiresData.__init__(
             self,
@@ -4280,6 +4331,7 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
             additional_secret_fields,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         OpenSearchRequiresEventHandlers.__init__(self, charm, self)
 
@@ -4482,6 +4534,7 @@ class EtcdRequirerData(RequirerData):
         additional_secret_fields: Optional[List[str]] = [],
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         """Manager of Etcd client relations."""
         super().__init__(
@@ -4491,6 +4544,7 @@ class EtcdRequirerData(RequirerData):
             additional_secret_fields,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         self.prefix = prefix
         self.mtls_cert = mtls_cert
@@ -4603,6 +4657,7 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
         additional_secret_fields: Optional[List[str]] = [],
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ) -> None:
         EtcdRequirerData.__init__(
             self,
@@ -4614,6 +4669,7 @@ class EtcdRequires(EtcdRequirerData, EtcdRequirerEventHandlers):
             additional_secret_fields,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         EtcdRequirerEventHandlers.__init__(self, charm, self)
         if not self.secrets_enabled:
