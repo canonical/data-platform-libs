@@ -23,8 +23,8 @@ APP_NAMES = [APPLICATION_APP_NAME, DATABASE_APP_NAME]
 DATABASE_APP_METADATA = yaml.safe_load(
     Path("./tests/v0/integration/database-charm/metadata.yaml").read_text()
 )
-FIRST_DATABASE_RELATION_NAME = "first-database"
-SECOND_DATABASE_RELATION_NAME = "second-database"
+DB_FIRST_DATABASE_RELATION_NAME = "first-database-db"
+DB_SECOND_DATABASE_RELATION_NAME = "second-database-db"
 
 SECRET_REF_PREFIX = "secret-"
 
@@ -232,16 +232,16 @@ async def test_unbalanced_versions_falling_back_to_databag_req_databag_vs_prov_s
 
     # Storing Relation object in 'pytest' global namespace for the session
     pytest.first_database_relation = await ops_test.model.add_relation(
-        f"{APPLICATION_APP_NAME}:{FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+        f"{APPLICATION_APP_NAME}:{DB_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # Secrest are correctly set in databag
     username = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "username"
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "username"
     )
     password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "password"
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "password"
     )
 
     assert username
@@ -249,7 +249,7 @@ async def test_unbalanced_versions_falling_back_to_databag_req_databag_vs_prov_s
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "secret-user"
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
@@ -304,11 +304,11 @@ async def test_transparent_upgrade_requires_databag_vs_provides_secrets(ops_test
 
     # Relation data is correct
     assert uris_new_val == await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "uris"
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "uris"
     )
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "secret-user"
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
@@ -337,14 +337,14 @@ async def test_transparent_upgrade_requires_databag_vs_provides_secrets(ops_test
     # Relation data is correct
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "uris"
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "uris"
         )
         is None
     )
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "secret-user"
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
@@ -385,12 +385,12 @@ async def test_transparent_upgrade_requires_databag_vs_provides_secrets_upgrade_
 
     # We stay on the databag
     assert await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "tls-ca"
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "tls-ca"
     )
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "secret-tls"
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-tls"
         )
         is None
     )
@@ -425,13 +425,13 @@ async def test_transparent_upgrade_requires_databag_vs_provides_secrets_upgrade_
 
     # Previously existing sensitive data stays where it was
     password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "password"
+        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "password"
     )
     assert password
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, FIRST_DATABASE_RELATION_NAME, "secret-user"
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
@@ -468,21 +468,21 @@ async def test_unbalanced_versions_falling_back_to_databag_req_secrets_vs_prov_d
 
     # Storing Relation object in 'pytest' global namespace for the session
     pytest.second_database_relation = await ops_test.model.add_relation(
-        f"{APPLICATION_APP_NAME}:{SECOND_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+        f"{APPLICATION_APP_NAME}:{DB_SECOND_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # Relation data is correct
     username = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "username"
+        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "username"
     )
     password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "password"
+        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "password"
     )
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "secret-user"
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
@@ -539,11 +539,11 @@ async def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_
 
     # Relation data is correct
     assert uris_new_val == await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "uris"
+        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "uris"
     )
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "secret-user"
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
@@ -572,14 +572,14 @@ async def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_
     # Relation data is correct
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "uris"
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "uris"
         )
         is None
     )
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "secret-user"
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
@@ -619,12 +619,12 @@ async def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_
     await action.wait()
 
     tls_ca_val = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "tls-ca"
+        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "tls-ca"
     )
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "secret-tls"
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-tls"
         )
         is None
     )
@@ -659,13 +659,13 @@ async def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_
 
     # Previously existing sensitive data stays where it was
     password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "password"
+        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "password"
     )
     assert password
 
     assert (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, SECOND_DATABASE_RELATION_NAME, "secret-user"
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )

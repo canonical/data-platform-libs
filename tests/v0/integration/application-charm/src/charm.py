@@ -37,6 +37,14 @@ if DATA_INTERFACES_VERSION > 34:
         KafkaRequirerEventHandlers,
     )
 
+if DATA_INTERFACES_VERSION > 49:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        ENTITY_USER,
+        DatabaseEntityCreatedEvent,
+        IndexEntityCreatedEvent,
+        TopicEntityCreatedEvent,
+    )
+
 logger = logging.getLogger(__name__)
 
 # Extra roles that this application needs when interacting with the database.
@@ -58,9 +66,12 @@ class ApplicationCharm(CharmBase):
 
         # Events related to the first database that is requested
         # (these events are defined in the database requires charm library).
-        database_name = f'{self.app.name.replace("-", "_")}_first_database'
+        database_name = f'{self.app.name.replace("-", "_")}_first_database_db'
         self.first_database = DatabaseRequires(
-            self, "first-database", database_name, EXTRA_USER_ROLES
+            charm=self,
+            relation_name="first-database-db",
+            database_name=database_name,
+            extra_user_roles=EXTRA_USER_ROLES,
         )
         self.framework.observe(
             self.first_database.on.database_created, self._on_first_database_created
@@ -69,26 +80,39 @@ class ApplicationCharm(CharmBase):
             self.first_database.on.endpoints_changed, self._on_first_database_endpoints_changed
         )
 
+        if DATA_INTERFACES_VERSION > 49:
+            self.first_database_roles = DatabaseRequires(
+                charm=self,
+                relation_name="first-database-roles",
+                database_name=database_name,
+                entity_type=ENTITY_USER,
+                extra_user_roles=EXTRA_USER_ROLES,
+            )
+            self.framework.observe(
+                self.first_database_roles.on.database_entity_created,
+                self._on_first_database_entity_created,
+            )
+
         # Events related to the second database that is requested
         # (these events are defined in the database requires charm library).
-        database_name = f'{self.app.name.replace("-", "_")}_second_database'
+        database_name = f'{self.app.name.replace("-", "_")}_second_database_db'
 
         # Keeping the charm backwards compatible, for upgrades testing
         if DATA_INTERFACES_VERSION > 17:
             self.second_database = DatabaseRequires(
-                self,
-                "second-database",
-                database_name,
-                EXTRA_USER_ROLES,
+                charm=self,
+                relation_name="second-database-db",
+                database_name=database_name,
+                extra_user_roles=EXTRA_USER_ROLES,
                 additional_secret_fields=["topsecret", "donttellanyone"],
                 external_node_connectivity=True,
             )
         else:
             self.second_database = DatabaseRequires(
-                self,
-                "second-database",
-                database_name,
-                EXTRA_USER_ROLES,
+                charm=self,
+                relation_name="second-database-db",
+                database_name=database_name,
+                extra_user_roles=EXTRA_USER_ROLES,
             )
 
         self.framework.observe(
@@ -101,7 +125,10 @@ class ApplicationCharm(CharmBase):
         # Multiple database clusters charm events (clusters/relations without alias).
         database_name = f'{self.app.name.replace("-", "_")}_multiple_database_clusters'
         self.database_clusters = DatabaseRequires(
-            self, "multiple-database-clusters", database_name, EXTRA_USER_ROLES
+            charm=self,
+            relation_name="multiple-database-clusters",
+            database_name=database_name,
+            extra_user_roles=EXTRA_USER_ROLES,
         )
         self.framework.observe(
             self.database_clusters.on.database_created, self._on_cluster_database_created
@@ -116,11 +143,11 @@ class ApplicationCharm(CharmBase):
         database_name = f'{self.app.name.replace("-", "_")}_aliased_multiple_database_clusters'
         cluster_aliases = ["cluster1", "cluster2"]  # Aliases for the multiple clusters/relations.
         self.aliased_database_clusters = DatabaseRequires(
-            self,
-            "aliased-multiple-database-clusters",
-            database_name,
-            EXTRA_USER_ROLES,
-            cluster_aliases,
+            charm=self,
+            relation_name="aliased-multiple-database-clusters",
+            database_name=database_name,
+            extra_user_roles=EXTRA_USER_ROLES,
+            relations_aliases=cluster_aliases,
         )
         # Each database cluster will have its own events
         # with the name having the cluster/relation alias as the prefix.
@@ -144,7 +171,11 @@ class ApplicationCharm(CharmBase):
         # Kafka events
 
         self.kafka = KafkaRequires(
-            self, "kafka-client", "test-topic", EXTRA_USER_ROLES_KAFKA, CONSUMER_GROUP_PREFIX
+            charm=self,
+            relation_name="kafka-client-topic",
+            topic="test-topic",
+            extra_user_roles=EXTRA_USER_ROLES_KAFKA,
+            consumer_group_prefix=CONSUMER_GROUP_PREFIX,
         )
 
         if DATA_INTERFACES_VERSION > 34:
@@ -152,7 +183,7 @@ class ApplicationCharm(CharmBase):
                 model=self.model,
                 relation_name="kafka-split-pattern-client",
                 topic="test-topic-split-pattern",
-                extra_user_roles=EXTRA_USER_ROLES,
+                extra_user_roles=EXTRA_USER_ROLES_KAFKA,
                 consumer_group_prefix=CONSUMER_GROUP_PREFIX,
             )
             self.kafka_split_pattern = KafkaRequirerEventHandlers(
@@ -166,6 +197,20 @@ class ApplicationCharm(CharmBase):
                 self.kafka_split_pattern.on.topic_created, self._on_kafka_topic_created
             )
 
+        if DATA_INTERFACES_VERSION > 49:
+            self.kafka_roles = KafkaRequires(
+                charm=self,
+                relation_name="kafka-client-roles",
+                topic="test-topic",
+                entity_type=ENTITY_USER,
+                extra_user_roles=EXTRA_USER_ROLES_KAFKA,
+                consumer_group_prefix=CONSUMER_GROUP_PREFIX,
+            )
+            self.framework.observe(
+                self.kafka_roles.on.topic_entity_created,
+                self._on_kafka_entity_created,
+            )
+
         self.framework.observe(
             self.kafka.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
         )
@@ -174,12 +219,28 @@ class ApplicationCharm(CharmBase):
         # OpenSearch events
 
         self.opensearch = OpenSearchRequires(
-            self, "opensearch-client", "test-index", EXTRA_USER_ROLES_OPENSEARCH
+            charm=self,
+            relation_name="opensearch-client-index",
+            index="test-index",
+            extra_user_roles=EXTRA_USER_ROLES_OPENSEARCH,
         )
         self.framework.observe(self.opensearch.on.index_created, self._on_opensearch_index_created)
         self.framework.observe(
             self.opensearch.on.authentication_updated, self._on_opensearch_authentication_updated
         )
+
+        if DATA_INTERFACES_VERSION > 49:
+            self.opensearch_roles = OpenSearchRequires(
+                charm=self,
+                relation_name="opensearch-client-roles",
+                index="test-index",
+                entity_type=ENTITY_USER,
+                extra_user_roles=EXTRA_USER_ROLES_OPENSEARCH,
+            )
+            self.framework.observe(
+                self.opensearch_roles.on.index_entity_created,
+                self._on_opensearch_entity_created,
+            )
 
         # actions
 
@@ -263,6 +324,14 @@ class ApplicationCharm(CharmBase):
         """Event triggered when the read/write endpoints of the database change."""
         logger.info(f"first database endpoints have been changed to: {event.endpoints}")
 
+    if DATA_INTERFACES_VERSION > 49:
+
+        def _on_first_database_entity_created(self, event: DatabaseEntityCreatedEvent) -> None:
+            """Event triggered when a database entity was created for this application."""
+            # Retrieve the credentials using the charm library.
+            logger.info(f"first database entity credentials: {event.entity_name}")
+            self.unit.status = ActiveStatus("received entity credentials of the first database")
+
     # Second database events observers.
     def _on_second_database_created(self, event: DatabaseCreatedEvent) -> None:
         """Event triggered when a database was created for this application."""
@@ -336,10 +405,24 @@ class ApplicationCharm(CharmBase):
         logger.info("On kafka topic created")
         self.unit.status = ActiveStatus("kafka_topic_created")
 
+    if DATA_INTERFACES_VERSION > 49:
+
+        def _on_kafka_entity_created(self, _: TopicEntityCreatedEvent) -> None:
+            """Event triggered when a topic entity was created for this application."""
+            logger.info("On kafka entity created")
+            self.unit.status = ActiveStatus("kafka_entity_created")
+
     def _on_opensearch_index_created(self, _: IndexCreatedEvent):
         """Event triggered when an index was created for this application."""
         logger.info("On opensearch index created event fired")
         self.unit.status = ActiveStatus("opensearch_index_created")
+
+    if DATA_INTERFACES_VERSION > 49:
+
+        def _on_opensearch_entity_created(self, _: IndexEntityCreatedEvent):
+            """Event triggered when an index entity was created for this application."""
+            logger.info("On opensearch entity created event fired")
+            self.unit.status = ActiveStatus("opensearch_entity_created")
 
     def _on_opensearch_authentication_updated(self, _: IndexCreatedEvent):
         """Event triggered when an index was created for this application."""

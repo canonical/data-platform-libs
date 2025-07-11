@@ -21,6 +21,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
 )
 from charms.data_platform_libs.v0.data_interfaces import (
     KafkaProvides,
+    TopicEntityRequestedEvent,
     TopicRequestedEvent,
 )
 
@@ -45,7 +46,15 @@ class KafkaCharm(CharmBase):
 
         # Charm events defined in the Kafka Provides charm library.
         self.kafka_provider = KafkaProvides(self, relation_name=REL)
-        self.framework.observe(self.kafka_provider.on.topic_requested, self._on_topic_requested)
+        self.framework.observe(
+            self.kafka_provider.on.topic_requested,
+            self._on_topic_requested,
+        )
+        self.framework.observe(
+            self.kafka_provider.on.topic_entity_requested,
+            self._on_topic_entity_requested,
+        )
+
         self.framework.observe(self.on[PEER].relation_joined, self._on_peer_relation_joined)
 
         # actions
@@ -118,6 +127,18 @@ class KafkaCharm(CharmBase):
         self.kafka_provider.set_zookeeper_uris(relation_id, "protocol.z1:port/,protocol.z2:port/")
         self.kafka_provider.set_topic(relation_id, topic)
         self.unit.status = ActiveStatus(f"Topic: {topic} granted!")
+
+    def _on_topic_entity_requested(self, event: TopicEntityRequestedEvent):
+        """Handle the on_topic_entity_requested event."""
+        self.unit.status = MaintenanceStatus("Creating entity")
+
+        rolename = "admin"
+        password = "password"
+        self.set_secret("app", "entity-name", rolename)
+        self.set_secret("app", "entity-password", password)
+        # set connection info in the databag relation
+        self.kafka_provider.set_entity_credentials(event.relation.id, rolename, password)
+        self.unit.status = ActiveStatus(f"Entity: {rolename} created!")
 
     def _on_sync_password(self, event: ActionEvent):
         """Set the password in the data relation databag."""

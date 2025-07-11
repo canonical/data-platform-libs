@@ -18,6 +18,8 @@ from ops.testing import Harness
 from parameterized import parameterized
 
 from charms.data_platform_libs.v0.data_interfaces import (
+    ENTITY_GROUP,
+    ENTITY_USER,
     PROV_SECRET_FIELDS,
     PROV_SECRET_PREFIX,
     REQ_SECRET_FIELDS,
@@ -40,6 +42,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     OpenSearchProvides,
     OpenSearchRequires,
     PrematureDataAccessError,
+    RequirerData,
     TopicRequestedEvent,
 )
 from charms.harness_extensions.v0.capture_events import capture, capture_events
@@ -50,6 +53,7 @@ PEER_RELATION_NAME = "database-peers"
 
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
+EXTRA_GROUP_ROLES = "CUSTOM_ROLE_1,CUSTOM_ROLE_2"
 DATABASE_RELATION_INTERFACE = "database_client"
 DATABASE_RELATION_NAME = "database"
 DATABASE_METADATA = f"""
@@ -85,7 +89,6 @@ provides:
     interface: {OPENSEARCH_RELATION_INTERFACE}
 """
 
-SECRET_FIELDS = ["username", "password", "tls", "tls-ca", "uris", "read-only-uris"]
 #
 # Helper functions
 #
@@ -274,7 +277,14 @@ class DatabaseCharm(CharmBase):
             DATABASE_RELATION_NAME,
         )
         self._servers_data = {}
-        self.framework.observe(self.provider.on.database_requested, self._on_database_requested)
+        self.framework.observe(
+            self.provider.on.database_requested,
+            self._on_database_requested,
+        )
+        self.framework.observe(
+            self.provider.on.database_entity_requested,
+            self._on_database_entity_requested,
+        )
 
     @property
     def peer_relation(self) -> Relation | None:
@@ -295,6 +305,9 @@ class DatabaseCharm(CharmBase):
         return self._servers_data
 
     def _on_database_requested(self, _) -> None:
+        pass
+
+    def _on_database_entity_requested(self, _) -> None:
         pass
 
 
@@ -321,9 +334,19 @@ class KafkaCharm(CharmBase):
             self,
             KAFKA_RELATION_NAME,
         )
-        self.framework.observe(self.provider.on.topic_requested, self._on_topic_requested)
+        self.framework.observe(
+            self.provider.on.topic_requested,
+            self._on_topic_requested,
+        )
+        self.framework.observe(
+            self.provider.on.topic_entity_requested,
+            self._on_topic_entity_requested,
+        )
 
     def _on_topic_requested(self, _) -> None:
+        pass
+
+    def _on_topic_entity_requested(self, _) -> None:
         pass
 
 
@@ -336,9 +359,19 @@ class OpenSearchCharm(CharmBase):
             self,
             OPENSEARCH_RELATION_NAME,
         )
-        self.framework.observe(self.provider.on.index_requested, self._on_index_requested)
+        self.framework.observe(
+            self.provider.on.index_requested,
+            self._on_index_requested,
+        )
+        self.framework.observe(
+            self.provider.on.index_entity_requested,
+            self._on_index_entity_requested,
+        )
 
     def _on_index_requested(self, _) -> None:
+        pass
+
+    def _on_index_entity_requested(self, _) -> None:
         pass
 
 
@@ -348,7 +381,7 @@ class OpenSearchCharm(CharmBase):
 
 
 class DataProvidesBaseTests(ABC):
-    SECRET_FIELDS = SECRET_FIELDS
+    SECRET_FIELDS = RequirerData.SECRET_FIELDS
     DATABASE_FIELD = "database"
 
     @pytest.fixture
@@ -456,9 +489,7 @@ class DataProvidesBaseTests(ABC):
 
         # Check that the credentials are present in the relation.
         assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
-            "data": json.dumps(
-                {self.DATABASE_FIELD: DATABASE}
-            ),  # Data is the diff stored between multiple relation changed events.
+            "data": json.dumps({self.DATABASE_FIELD: DATABASE}),
             "username": "test-username",
             "password": "test-password",
         }
@@ -475,17 +506,15 @@ class DataProvidesBaseTests(ABC):
         self.harness.charm.provider.set_credentials(self.rel_id, "test-username", "test-password")
 
         # Check that the credentials are present in the relation.
-        assert json.loads(self.harness.get_relation_data(self.rel_id, self.app_name)["data"]) == (
+        relation = self.harness.get_relation_data(self.rel_id, self.app_name)
+        assert json.loads(relation["data"]) == (
             {
                 REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS),
                 self.DATABASE_FIELD: DATABASE,
-            }  # Data is the diff stored between multiple relation changed events.   # noqa
+            }
         )
-        secret_id = self.harness.get_relation_data(self.rel_id, self.app_name)[
-            f"{PROV_SECRET_PREFIX}user"
-        ]
-        assert secret_id
 
+        secret_id = relation[f"{PROV_SECRET_PREFIX}user"]
         secret = self.harness.charm.model.get_secret(id=secret_id)
         assert secret.get_content() == {"username": "test-username", "password": "test-password"}
 
@@ -505,11 +534,81 @@ class DataProvidesBaseTests(ABC):
 
         # Check that the credentials are present in the relation.
         assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
-            "data": json.dumps(
-                {self.DATABASE_FIELD: DATABASE}
-            ),  # Data is the diff stored between multiple relation changed events.
+            "data": json.dumps({self.DATABASE_FIELD: DATABASE}),
             "username": "test-username",
             "password": "test-password",
+        }
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_set_entity_credentials(self):
+        """Asserts that the database name is in the relation databag when it's requested."""
+        # Set some data in the relation.
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
+        # Set the entity credentials in the relation using the provides charm library.
+        self.harness.charm.provider.set_entity_credentials(
+            self.rel_id, "test-name", "test-password"
+        )
+
+        # Check that the entity credentials are present in the relation.
+        assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
+            "data": json.dumps({self.DATABASE_FIELD: DATABASE}),
+            "entity-name": "test-name",
+            "entity-password": "test-password",
+        }
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_set_entity_credentials_secrets(self):
+        """Asserts that credentials are set up as secrets if possible."""
+        # Set some data in the relation.
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
+        # Set the entity credentials in the relation using the provides charm library.
+        self.harness.charm.provider.set_entity_credentials(
+            self.rel_id, "test-name", "test-password"
+        )
+
+        # Check that the entity credentials are present in the relation.
+        relation = self.harness.get_relation_data(self.rel_id, self.app_name)
+        assert json.loads(relation["data"]) == (
+            {
+                REQ_SECRET_FIELDS: json.dumps(self.SECRET_FIELDS),
+                self.DATABASE_FIELD: DATABASE,
+            }
+        )
+
+        secret_id = relation[f"{PROV_SECRET_PREFIX}entity"]
+        secret = self.harness.charm.model.get_secret(id=secret_id)
+        assert secret.get_content() == {
+            "entity-name": "test-name",
+            "entity-password": "test-password",
+        }
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_set_entity_credentials_secrets_provides_juju3_requires_juju2(self):
+        """Asserts that the databag is used if one side of the relation is on Juju2."""
+        # remove requested fields from requirer side (emulation of juju2)
+        self.harness.update_relation_data(self.rel_id, "application", {REQ_SECRET_FIELDS: ""})
+        self.harness._emit_relation_changed(self.rel_id, self.app_name)
+
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+        # Set the entity credentials in the relation using the provides charm library.
+        self.harness.charm.provider.set_entity_credentials(
+            self.rel_id, "test-name", "test-password"
+        )
+
+        # Check that the entity credentials are present in the relation.
+        assert self.harness.get_relation_data(self.rel_id, self.app_name) == {
+            "data": json.dumps({self.DATABASE_FIELD: DATABASE}),
+            "entity-name": "test-name",
+            "entity-password": "test-password",
         }
 
 
@@ -534,14 +633,6 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         harness.set_leader(True)
         harness.begin_with_initial_hooks()
         return harness, rel_id
-
-    @patch.object(DatabaseCharm, "_on_database_requested")
-    def emit_database_requested_event(self, _on_database_requested):
-        # Emit the database requested event.
-        relation = self.harness.charm.model.get_relation(DATABASE_RELATION_NAME, self.rel_id)
-        application = self.harness.charm.model.get_app("database")
-        self.harness.charm.provider.on.database_requested.emit(relation, application)
-        return _on_database_requested.call_args[0][0]
 
     #
     # Peer Data tests
@@ -885,8 +976,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         # Assert the correct hook is called.
         _on_database_requested.assert_called_once()
 
-        # Assert the database name and the extra user roles
-        # are accessible in the providers charm library event.
+        # Assert the database name and the entity info are accessible in the providers charm library event.
         event = _on_database_requested.call_args[0][0]
         assert event.database == DATABASE
         assert event.extra_user_roles == EXTRA_USER_ROLES
@@ -898,8 +988,69 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             "application",
             {self.DATABASE_FIELD: DATABASE, "external-node-connectivity": "true"},
         )
+
         event = _on_database_requested.call_args[0][0]
         assert event.external_node_connectivity is True
+
+        # Reset the mock call count.
+        _on_database_requested.reset_mock()
+
+        # Simulate the request of a new database entity.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {self.DATABASE_FIELD: DATABASE, "entity-type": ENTITY_USER},
+        )
+
+        # Assert the correct hook is called.
+        _on_database_requested.assert_not_called()
+
+    @patch.object(DatabaseCharm, "_on_database_entity_requested")
+    def test_on_database_entity_requested(self, _on_database_entity_requested):
+        """Asserts that the correct hook is called when a new database entity is requested."""
+        # Simulate the request of a new user plus extra roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                self.DATABASE_FIELD: DATABASE,
+                "entity-type": ENTITY_USER,
+                "extra-user-roles": EXTRA_USER_ROLES,
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_database_entity_requested.assert_called_once()
+
+        # Assert the database name and the entity info are accessible in the providers charm library event.
+        event = _on_database_entity_requested.call_args[0][0]
+        assert event.database == DATABASE
+        assert event.entity_type == ENTITY_USER
+        assert event.extra_user_roles == EXTRA_USER_ROLES
+
+        # Reset the relation data keys + mock count
+        self.harness.update_relation_data(self.rel_id, self.app_name, {"data": "{}"})
+        _on_database_entity_requested.reset_mock()
+
+        # Simulate the request of a new group plus extra roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                self.DATABASE_FIELD: DATABASE,
+                "entity-type": ENTITY_GROUP,
+                "extra-group-roles": EXTRA_GROUP_ROLES,
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_database_entity_requested.assert_called_once()
+
+        # Assert the database name and the entity info are accessible in the providers charm library event.
+        event = _on_database_entity_requested.call_args[0][0]
+        assert event.database == DATABASE
+        assert event.entity_type == ENTITY_GROUP
+        assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     def test_set_endpoints(self):
         """Asserts that the endpoints are in the relation databag when they change."""
@@ -1419,11 +1570,70 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         # Assert the correct hook is called.
         _on_topic_requested.assert_called_once()
 
-        # Assert the topic name and the extra user roles
-        # are accessible in the providers charm library event.
+        # Assert the topic name and entity info are accessible in the providers charm library event.
         event = _on_topic_requested.call_args[0][0]
         assert event.topic == TOPIC
         assert event.extra_user_roles == EXTRA_USER_ROLES
+
+        # Reset the mock call count.
+        _on_topic_requested.reset_mock()
+
+        # Simulate the request of a new topic entity.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {"topic": TOPIC, "entity-type": ENTITY_USER},
+        )
+
+        # Assert the correct hook is called.
+        _on_topic_requested.assert_not_called()
+
+    @patch.object(KafkaCharm, "_on_topic_entity_requested")
+    def test_on_topic_entity_requested(self, _on_topic_entity_requested):
+        """Asserts that the correct hook is called when a new topic entity is requested."""
+        # Simulate the request of a new user plus extra roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                "topic": TOPIC,
+                "entity-type": ENTITY_USER,
+                "extra-user-roles": EXTRA_USER_ROLES,
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_topic_entity_requested.assert_called_once()
+
+        # Assert the topic name and entity info are accessible in the providers charm library event.
+        event = _on_topic_entity_requested.call_args[0][0]
+        assert event.topic == TOPIC
+        assert event.entity_type == ENTITY_USER
+        assert event.extra_user_roles == EXTRA_USER_ROLES
+
+        # Reset the relation data keys + mock count
+        self.harness.update_relation_data(self.rel_id, self.app_name, {"data": "{}"})
+        _on_topic_entity_requested.reset_mock()
+
+        # Simulate the request of a new group plus extra-roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                "topic": TOPIC,
+                "entity-type": ENTITY_GROUP,
+                "extra-group-roles": EXTRA_GROUP_ROLES,
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_topic_entity_requested.assert_called_once()
+
+        # Assert the topic name and entity info are accessible in the providers charm library event.
+        event = _on_topic_entity_requested.call_args[0][0]
+        assert event.topic == TOPIC
+        assert event.entity_type == ENTITY_GROUP
+        assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     def test_set_bootstrap_server(self):
         """Asserts that the bootstrap-server are in the relation databag when they change."""
@@ -1563,8 +1773,8 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
 
     @patch.object(OpenSearchCharm, "_on_index_requested")
     def test_on_index_requested(self, _on_index_requested):
-        """Asserts that the correct hook is called when a new topic is requested."""
-        # Simulate the request of a new topic plus extra user roles.
+        """Asserts that the correct hook is called when a new index is requested."""
+        # Simulate the request of a new index plus extra user roles.
         self.harness.update_relation_data(
             self.rel_id,
             "application",
@@ -1574,11 +1784,70 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         # Assert the correct hook is called.
         _on_index_requested.assert_called_once()
 
-        # Assert the topic name and the extra user roles
-        # are accessible in the providers charm library event.
+        # Assert the index name and the entity info are accessible in the providers charm library event.
         event = _on_index_requested.call_args[0][0]
         assert event.index == INDEX
         assert event.extra_user_roles == EXTRA_USER_ROLES
+
+        # Reset the mock call count.
+        _on_index_requested.reset_mock()
+
+        # Simulate the request of a new index entity.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {"index": INDEX, "entity-type": ENTITY_USER},
+        )
+
+        # Assert the correct hook is called.
+        _on_index_requested.assert_not_called()
+
+    @patch.object(OpenSearchCharm, "_on_index_entity_requested")
+    def test_on_index_entity_requested(self, _on_index_entity_requested):
+        """Asserts that the correct hook is called when a new index entity is requested."""
+        # Simulate the request of a new user plus extra roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                "index": INDEX,
+                "entity-type": ENTITY_USER,
+                "extra-user-roles": EXTRA_USER_ROLES,
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_index_entity_requested.assert_called_once()
+
+        # Assert the index name and the entity info are accessible in the providers charm library event.
+        event = _on_index_entity_requested.call_args[0][0]
+        assert event.index == INDEX
+        assert event.entity_type == ENTITY_USER
+        assert event.extra_user_roles == EXTRA_USER_ROLES
+
+        # Reset the relation data keys + mock count
+        self.harness.update_relation_data(self.rel_id, self.app_name, {"data": "{}"})
+        _on_index_entity_requested.reset_mock()
+
+        # Simulate the request of a new group plus extra roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                "index": INDEX,
+                "entity-type": ENTITY_GROUP,
+                "extra-group-roles": EXTRA_GROUP_ROLES,
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_index_entity_requested.assert_called_once()
+
+        # Assert the index name and the entity info are accessible in the providers charm library event.
+        event = _on_index_entity_requested.call_args[0][0]
+        assert event.index == INDEX
+        assert event.entity_type == ENTITY_GROUP
+        assert event.extra_group_roles == EXTRA_GROUP_ROLES
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_additional_fields(self):
@@ -1665,6 +1934,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
 CLUSTER_ALIASES = ["cluster1", "cluster2"]
 DATABASE = "data_platform"
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
+EXTRA_GROUP_ROLES = "CUSTOM_ROLE_1,CUSTOM_ROLE_2"
 DATABASE_RELATION_INTERFACE = "database_client"
 DATABASE_RELATION_NAME = "database"
 KAFKA_RELATION_INTERFACE = "kafka_client"
@@ -1689,9 +1959,20 @@ class ApplicationCharmDatabase(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.requirer = DatabaseRequires(
-            self, DATABASE_RELATION_NAME, DATABASE, EXTRA_USER_ROLES, CLUSTER_ALIASES[:]
+            charm=self,
+            relation_name=DATABASE_RELATION_NAME,
+            database_name=DATABASE,
+            extra_user_roles=EXTRA_USER_ROLES,
+            relations_aliases=CLUSTER_ALIASES[:],
         )
-        self.framework.observe(self.requirer.on.database_created, self._on_database_created)
+        self.framework.observe(
+            self.requirer.on.database_created,
+            self._on_database_created,
+        )
+        self.framework.observe(
+            self.requirer.on.database_entity_created,
+            self._on_database_entity_created,
+        )
         self.framework.observe(
             self.on[DATABASE_RELATION_NAME].relation_broken, self._on_relation_broken
         )
@@ -1732,6 +2013,9 @@ class ApplicationCharmDatabase(CharmBase):
     def _on_database_created(self, _) -> None:
         self.log_relation_size("on_database_created")
 
+    def _on_database_entity_created(self, _) -> None:
+        self.log_relation_size("on_database_entity_created")
+
     def _on_relation_broken(self, _) -> None:
         # This should not raise errors
         self.requirer.fetch_relation_data()
@@ -1753,13 +2037,29 @@ class ApplicationCharmKafka(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.requirer = KafkaRequires(self, KAFKA_RELATION_NAME, TOPIC, EXTRA_USER_ROLES)
-        self.framework.observe(self.requirer.on.topic_created, self._on_topic_created)
+        self.requirer = KafkaRequires(
+            charm=self,
+            relation_name=KAFKA_RELATION_NAME,
+            topic=TOPIC,
+            extra_user_roles=EXTRA_USER_ROLES,
+        )
         self.framework.observe(
-            self.requirer.on.bootstrap_server_changed, self._on_bootstrap_server_changed
+            self.requirer.on.topic_created,
+            self._on_topic_created,
+        )
+        self.framework.observe(
+            self.requirer.on.topic_entity_created,
+            self._on_topic_entity_created,
+        )
+        self.framework.observe(
+            self.requirer.on.bootstrap_server_changed,
+            self._on_bootstrap_server_changed,
         )
 
     def _on_topic_created(self, _) -> None:
+        pass
+
+    def _on_topic_entity_created(self, _) -> None:
         pass
 
     def _on_bootstrap_server_changed(self, _) -> None:
@@ -1771,10 +2071,25 @@ class ApplicationCharmOpenSearch(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.requirer = OpenSearchRequires(self, OPENSEARCH_RELATION_NAME, INDEX, EXTRA_USER_ROLES)
-        self.framework.observe(self.requirer.on.index_created, self._on_index_created)
+        self.requirer = OpenSearchRequires(
+            charm=self,
+            relation_name=OPENSEARCH_RELATION_NAME,
+            index=INDEX,
+            extra_user_roles=EXTRA_USER_ROLES,
+        )
+        self.framework.observe(
+            self.requirer.on.index_created,
+            self._on_index_created,
+        )
+        self.framework.observe(
+            self.requirer.on.index_entity_created,
+            self._on_index_entity_created,
+        )
 
     def _on_index_created(self, _) -> None:
+        pass
+
+    def _on_index_entity_created(self, _) -> None:
         pass
 
 
@@ -1788,6 +2103,7 @@ def reset_aliases():
     for cluster_alias in CLUSTER_ALIASES:
         try:
             delattr(DatabaseRequiresEvents, f"{cluster_alias}_database_created")
+            delattr(DatabaseRequiresEvents, f"{cluster_alias}_database_entity_created")
             delattr(DatabaseRequiresEvents, f"{cluster_alias}_endpoints_changed")
             delattr(DatabaseRequiresEvents, f"{cluster_alias}_read_only_endpoints_changed")
         except AttributeError:
@@ -1870,6 +2186,32 @@ class DataRequirerBaseTests(ABC):
         interface = self.harness.charm.requirer
         verify_relation_interface_dict(interface, self.rel_id)
         verify_relation_interface_dict_external_relation(interface, self.rel_id)
+
+    def test_relation_interface_consistency(self):
+        """Check the consistency of the public interface init function."""
+        with pytest.raises(ValueError):
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                entity_type="INVALID_ROLE_TYPE",
+            )
+        with pytest.raises(ValueError):
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                extra_group_roles=EXTRA_GROUP_ROLES,
+                entity_type=ENTITY_USER,
+            )
+        with pytest.raises(ValueError):
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                extra_user_roles=EXTRA_USER_ROLES,
+                entity_type=ENTITY_GROUP,
+            )
 
 
 class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
@@ -1970,7 +2312,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 "alias": "cluster1",
                 "database": "data_platform",
                 "extra-user-roles": "CREATEDB,CREATEROLE",
-                "requested-secrets": json.dumps(SECRET_FIELDS),
+                "requested-secrets": json.dumps(RequirerData.SECRET_FIELDS),
                 "provided-secrets": '["mtls-cert"]',
             }
         }
@@ -1999,7 +2341,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
             "alias": "cluster1",
             "database": "data_platform",
             "extra-user-roles": "CREATEDB,CREATEROLE",
-            "requested-secrets": json.dumps(SECRET_FIELDS),
+            "requested-secrets": json.dumps(RequirerData.SECRET_FIELDS),
             "provided-secrets": '["mtls-cert"]',
         }
 
@@ -2111,6 +2453,108 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.password == "test-password-2"
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
+        assert self.harness.charm.requirer.is_resource_created()
+
+    @patch.object(charm, "_on_database_entity_created")
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_on_database_entity_created(self, _on_database_entity_created):
+        """Asserts on_database_entity_created is called when the credentials are set in the relation."""
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "data": json.dumps({"entity-type": ENTITY_USER}),
+                "entity-name": "test-username",
+                "entity-password": "test-password",
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_database_entity_created.assert_called_once()
+
+        # Check that the entity-type, entity-name and entity-password are present in the relation.
+        event = _on_database_entity_created.call_args[0][0]
+        assert event.entity_name == "test-username"
+        assert event.entity_password == "test-password"
+        assert self.harness.charm.requirer.is_resource_created()
+
+        # Reset the mock call count.
+        _on_database_entity_created.reset_mock()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        self.harness.update_relation_data(
+            rel_id,
+            self.provider,
+            {
+                "data": json.dumps({"entity-type": ENTITY_GROUP}),
+                "entity-name": "test-groupname",
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_database_entity_created.assert_called_once()
+
+        # Check that the entity-type and entity-name are present in the relation.
+        event = _on_database_entity_created.call_args[0][0]
+        assert event.entity_name == "test-groupname"
+        assert event.entity_password is None
+        assert self.harness.charm.requirer.is_resource_created()
+
+    @patch.object(charm, "_on_database_entity_created")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_on_database_entity_created_secrets(self, _on_database_entity_created):
+        """Asserts on_database_entity_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created entity.
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        secret = self.harness.charm.app.add_secret(
+            {"entity-name": "test-username", "entity-password": "test-password"}
+        )
+
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {"data": json.dumps({"entity-type": ENTITY_USER}), "secret-entity": secret.id},
+        )
+
+        # Assert the correct hook is called.
+        _on_database_entity_created.assert_called_once()
+
+        # Check that the entity-type, entity-name and entity-password are present in the relation.
+        event = _on_database_entity_created.call_args[0][0]
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}entity"] == secret.id
+        assert event.entity_name == "test-username"
+        assert event.entity_password == "test-password"
+        assert self.harness.charm.requirer.is_resource_created()
+
+        # Reset the mock call count.
+        _on_database_entity_created.reset_mock()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        secret2 = self.harness.charm.app.add_secret({"entity-name": "test-groupname"})
+
+        self.harness.update_relation_data(
+            rel_id,
+            self.provider,
+            {"data": json.dumps({"entity-type": ENTITY_GROUP}), "secret-entity": secret2.id},
+        )
+
+        # Assert the correct hook is called.
+        _on_database_entity_created.assert_called_once()
+
+        # Check that the entity-type and entity-name are present in the relation.
+        event = _on_database_entity_created.call_args[0][0]
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}entity"] == secret2.id
+        assert event.entity_name == "test-groupname"
+        assert event.entity_password is None
         assert self.harness.charm.requirer.is_resource_created()
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
@@ -2686,13 +3130,9 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
 
     @patch.object(charm, "_on_topic_created")
     @pytest.mark.usefixtures("only_without_juju_secrets")
-    def test_on_topic_created(
-        self,
-        _on_topic_created,
-    ):
+    def test_on_topic_created(self, _on_topic_created):
         """Asserts on_topic_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created topic.
-
         assert not self.harness.charm.requirer.is_resource_created()
 
         self.harness.update_relation_data(
@@ -2737,13 +3177,9 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
 
     @patch.object(charm, "_on_topic_created")
     @pytest.mark.usefixtures("only_with_juju_secrets")
-    def test_on_topic_created_secret(
-        self,
-        _on_topic_created,
-    ):
+    def test_on_topic_created_secret(self, _on_topic_created):
         """Asserts on_topic_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created topic.
-
         assert not self.harness.charm.requirer.is_resource_created()
 
         secret = self.harness.charm.app.add_secret(
@@ -2786,6 +3222,109 @@ class TestKafkaRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret2.id
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
+        assert self.harness.charm.requirer.is_resource_created()
+
+    @patch.object(charm, "_on_topic_entity_created")
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_on_topic_entity_created(self, _on_topic_entity_created):
+        """Asserts on_topic_entity_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created entity.
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "data": json.dumps({"entity-type": ENTITY_USER}),
+                "entity-name": "test-username",
+                "entity-password": "test-password",
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_topic_entity_created.assert_called_once()
+
+        # Check that the entity-type, entity-name and entity-password are present in the relation.
+        event = _on_topic_entity_created.call_args[0][0]
+        assert event.entity_name == "test-username"
+        assert event.entity_password == "test-password"
+        assert self.harness.charm.requirer.is_resource_created()
+
+        # Reset the mock call count.
+        _on_topic_entity_created.reset_mock()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        self.harness.update_relation_data(
+            rel_id,
+            self.provider,
+            {
+                "data": json.dumps({"entity-type": ENTITY_GROUP}),
+                "entity-name": "test-groupname",
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_topic_entity_created.assert_called_once()
+
+        # Check that the entity-type and entity-name are present in the relation.
+        event = _on_topic_entity_created.call_args[0][0]
+        assert event.entity_name == "test-groupname"
+        assert event.entity_password is None
+        assert self.harness.charm.requirer.is_resource_created()
+
+    @patch.object(charm, "_on_topic_entity_created")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_on_topic_entity_created_secret(self, _on_topic_entity_created):
+        """Asserts on_topic_entity_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created entity.
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        secret = self.harness.charm.app.add_secret(
+            {"entity-name": "test-username", "entity-password": "test-password"}
+        )
+
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {"data": json.dumps({"entity-type": ENTITY_USER}), "secret-entity": secret.id},
+        )
+
+        # Assert the correct hook is called.
+        _on_topic_entity_created.assert_called_once()
+
+        # Check that the entity-type, entity-name and entity-password are present in the relation.
+        event = _on_topic_entity_created.call_args[0][0]
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}entity"] == secret.id
+        assert event.entity_name == "test-username"
+        assert event.entity_password == "test-password"
+        assert self.harness.charm.requirer.is_resource_created()
+
+        # Reset the mock call count.
+        _on_topic_entity_created.reset_mock()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        secret2 = self.harness.charm.app.add_secret({"entity-name": "test-groupname"})
+
+        self.harness.update_relation_data(
+            rel_id,
+            self.provider,
+            {"data": json.dumps({"entity-type": ENTITY_GROUP}), "secret-entity": secret2.id},
+        )
+
+        # Assert the correct hook is called.
+        _on_topic_entity_created.assert_called_once()
+
+        # Check that the entity-type, entity-name and entity-password are present in the relation.
+        event = _on_topic_entity_created.call_args[0][0]
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}entity"] == secret2.id
+        assert event.entity_name == "test-groupname"
+        assert event.entity_password is None
         assert self.harness.charm.requirer.is_resource_created()
 
     @patch.object(charm, "_on_bootstrap_server_changed")
@@ -2905,13 +3444,9 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
 
     @patch.object(charm, "_on_index_created")
     @pytest.mark.usefixtures("only_without_juju_secrets")
-    def test_on_index_created(
-        self,
-        _on_index_created,
-    ):
+    def test_on_index_created(self, _on_index_created):
         """Asserts on_index_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created topic.
-
         assert not self.harness.charm.requirer.is_resource_created()
 
         self.harness.update_relation_data(
@@ -2955,13 +3490,9 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
 
     @patch.object(charm, "_on_index_created")
     @pytest.mark.usefixtures("only_with_juju_secrets")
-    def test_on_index_created_secret(
-        self,
-        _on_index_created,
-    ):
+    def test_on_index_created_secret(self, _on_index_created):
         """Asserts on_index_created is called when the credentials are set in the relation."""
         # Simulate sharing the credentials of a new created topic.
-
         assert not self.harness.charm.requirer.is_resource_created()
 
         secret = self.harness.charm.app.add_secret(
@@ -3004,6 +3535,109 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}user"] == secret2.id
 
         assert self.harness.charm.requirer.is_resource_created(rel_id)
+        assert self.harness.charm.requirer.is_resource_created()
+
+    @patch.object(charm, "_on_index_entity_created")
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_on_index_entity_created(self, _on_index_entity_created):
+        """Asserts on_index_entity_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created entity.
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "data": json.dumps({"entity-type": ENTITY_USER}),
+                "entity-name": "test-username",
+                "entity-password": "test-password",
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_index_entity_created.assert_called_once()
+
+        # Check that the entity-type, entity-name and entity-password are present in the relation.
+        event = _on_index_entity_created.call_args[0][0]
+        assert event.entity_name == "test-username"
+        assert event.entity_password == "test-password"
+        assert self.harness.charm.requirer.is_resource_created()
+
+        # Reset the mock call count.
+        _on_index_entity_created.reset_mock()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        self.harness.update_relation_data(
+            rel_id,
+            self.provider,
+            {
+                "data": json.dumps({"entity-type": ENTITY_GROUP}),
+                "entity-name": "test-groupname",
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_index_entity_created.assert_called_once()
+
+        # Check that the entity-type, entity-name and entity-password are present in the relation.
+        event = _on_index_entity_created.call_args[0][0]
+        assert event.entity_name == "test-groupname"
+        assert event.entity_password is None
+        assert self.harness.charm.requirer.is_resource_created()
+
+    @patch.object(charm, "_on_index_entity_created")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_on_index_entity_created_secret(self, _on_index_entity_created):
+        """Asserts on_index_entity_created is called when the credentials are set in the relation."""
+        # Simulate sharing the credentials of a new created entity.
+        assert not self.harness.charm.requirer.is_resource_created()
+
+        secret = self.harness.charm.app.add_secret(
+            {"entity-name": "test-username", "entity-password": "test-password"}
+        )
+
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {"data": json.dumps({"entity-type": ENTITY_USER}), "secret-entity": secret.id},
+        )
+
+        # Assert the correct hook is called.
+        _on_index_entity_created.assert_called_once()
+
+        # Check that the entity-type, entity-name and entity-password are present in the relation.
+        event = _on_index_entity_created.call_args[0][0]
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}entity"] == secret.id
+        assert event.entity_name == "test-username"
+        assert event.entity_password == "test-password"
+        assert self.harness.charm.requirer.is_resource_created()
+
+        # Reset the mock call count.
+        _on_index_entity_created.reset_mock()
+
+        rel_id = self.add_relation(self.harness, self.provider)
+        assert not self.harness.charm.requirer.is_resource_created()
+        assert not self.harness.charm.requirer.is_resource_created(rel_id)
+
+        secret2 = self.harness.charm.app.add_secret({"entity-name": "test-groupname"})
+
+        self.harness.update_relation_data(
+            rel_id,
+            self.provider,
+            {"data": json.dumps({"entity-type": ENTITY_GROUP}), "secret-entity": secret2.id},
+        )
+
+        # Assert the correct hook is called.
+        _on_index_entity_created.assert_called_once()
+
+        # Check that the entity-type, entity-name and entity-password are present in the relation.
+        event = _on_index_entity_created.call_args[0][0]
+        assert event.relation.data[event.relation.app][f"{PROV_SECRET_PREFIX}entity"] == secret2.id
+        assert event.entity_name == "test-groupname"
+        assert event.entity_password is None
         assert self.harness.charm.requirer.is_resource_created()
 
     def test_additional_fields_are_accessible(self):

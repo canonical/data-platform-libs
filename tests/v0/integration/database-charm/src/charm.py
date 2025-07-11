@@ -36,6 +36,12 @@ if DATA_INTERFACES_VERSION > 17:
         DataPeerOtherUnit,
         DataPeerUnit,
     )
+if DATA_INTERFACES_VERSION > 49:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        ENTITY_GROUP,
+        ENTITY_USER,
+        DatabaseEntityRequestedEvent,
+    )
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +85,12 @@ class DatabaseCharm(CharmBase):
         # Charm events defined in the database provides charm library.
         self.database = DatabaseProvides(self, relation_name="database")
         self.framework.observe(self.database.on.database_requested, self._on_database_requested)
+
+        if DATA_INTERFACES_VERSION > 49:
+            self.framework.observe(
+                self.database.on.database_entity_requested,
+                self._on_database_entity_requested,
+            )
 
         # Stored state is used to track the password of the database superuser.
         self._stored.set_default(password=self._new_password())
@@ -240,6 +252,42 @@ class DatabaseCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
+    if DATA_INTERFACES_VERSION > 49:
+
+        def _on_database_entity_requested(self, event: DatabaseEntityRequestedEvent) -> None:
+            """Event triggered when a new database entity is requested."""
+            self.unit.status = MaintenanceStatus("creating entity")
+
+            # Retrieve the entity-type using the charm library.
+            entity_type = event.entity_type
+
+            # Generate a entity-name and a entity-password for the application.
+            rolename = self._new_rolename()
+            password = self._new_password()
+
+            # Connect to the database.
+            connection_string = (
+                "dbname='postgres' user='postgres' host='localhost' "
+                f"password='{self._stored.password}' connect_timeout=10"
+            )
+            connection = psycopg2.connect(connection_string)
+            connection.autocommit = True
+            cursor = connection.cursor()
+
+            # Create the role
+            if entity_type == ENTITY_USER:
+                extra_roles = event.extra_user_roles
+                cursor.execute(f"CREATE ROLE {rolename} WITH ENCRYPTED PASSWORD '{password}';")
+                cursor.execute(f'ALTER ROLE {rolename} {extra_roles.replace(",", " ")};')
+            if entity_type == ENTITY_GROUP:
+                extra_roles = event.extra_group_roles
+                cursor.execute(f"CREATE ROLE {rolename};")
+                cursor.execute(f'ALTER ROLE {rolename} {extra_roles.replace(",", " ")};')
+
+            # Share the credentials with the application.
+            self.database.set_entity_credentials(event.relation.id, rolename, password)
+            self.unit.status = ActiveStatus()
+
     def _get_relation(self, relation_id: int) -> Relation:
         for relation in self.database.relations:
             if relation.id == relation_id:
@@ -287,6 +335,15 @@ class DatabaseCharm(CharmBase):
             self.database.delete_relation_data(relation.id, [event.params["field"]])
         else:
             relation.data[self.database.local_app].pop(event.params["field"])
+
+    def _new_rolename(self) -> str:
+        """Generate a random rolename string.
+
+        Returns:
+           A random rolename string.
+        """
+        choices = string.ascii_letters
+        return "".join([secrets.choice(choices) for i in range(8)])
 
     def _new_password(self) -> str:
         """Generate a random password string.
