@@ -52,6 +52,9 @@ logger = getLogger(__name__)
 PEER_RELATION_NAME = "database-peers"
 
 DATABASE = "data_platform"
+ENTITY_PERMISSIONS = (
+    '[{"resource_name": "cars", "resource_type": "TABLE", "privileges": ["SELECT"]}]'
+)
 EXTRA_USER_ROLES = "CREATEDB,CREATEROLE"
 EXTRA_GROUP_ROLES = "CUSTOM_ROLE_1,CUSTOM_ROLE_2"
 DATABASE_RELATION_INTERFACE = "database_client"
@@ -285,6 +288,10 @@ class DatabaseCharm(CharmBase):
             self.provider.on.database_entity_requested,
             self._on_database_entity_requested,
         )
+        self.framework.observe(
+            self.provider.on.database_entity_permissions_changed,
+            self._on_database_entity_permissions_changed,
+        )
 
     @property
     def peer_relation(self) -> Relation | None:
@@ -308,6 +315,9 @@ class DatabaseCharm(CharmBase):
         pass
 
     def _on_database_entity_requested(self, _) -> None:
+        pass
+
+    def _on_database_entity_permissions_changed(self, _) -> None:
         pass
 
 
@@ -342,11 +352,18 @@ class KafkaCharm(CharmBase):
             self.provider.on.topic_entity_requested,
             self._on_topic_entity_requested,
         )
+        self.framework.observe(
+            self.provider.on.topic_entity_permissions_changed,
+            self._on_topic_entity_permissions_changed,
+        )
 
     def _on_topic_requested(self, _) -> None:
         pass
 
     def _on_topic_entity_requested(self, _) -> None:
+        pass
+
+    def _on_topic_entity_permissions_changed(self, _) -> None:
         pass
 
 
@@ -367,11 +384,18 @@ class OpenSearchCharm(CharmBase):
             self.provider.on.index_entity_requested,
             self._on_index_entity_requested,
         )
+        self.framework.observe(
+            self.provider.on.index_entity_permissions_changed,
+            self._on_index_entity_permissions_changed,
+        )
 
     def _on_index_requested(self, _) -> None:
         pass
 
     def _on_index_entity_requested(self, _) -> None:
+        pass
+
+    def _on_index_entity_permissions_changed(self, _) -> None:
         pass
 
 
@@ -1015,6 +1039,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 self.DATABASE_FIELD: DATABASE,
                 "entity-type": ENTITY_USER,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-user-roles": EXTRA_USER_ROLES,
             },
         )
@@ -1026,6 +1051,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_database_entity_requested.call_args[0][0]
         assert event.database == DATABASE
         assert event.entity_type == ENTITY_USER
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
         # Reset the relation data keys + mock count
@@ -1039,6 +1065,7 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 self.DATABASE_FIELD: DATABASE,
                 "entity-type": ENTITY_GROUP,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-group-roles": EXTRA_GROUP_ROLES,
             },
         )
@@ -1050,7 +1077,45 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_database_entity_requested.call_args[0][0]
         assert event.database == DATABASE
         assert event.entity_type == ENTITY_GROUP
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_group_roles == EXTRA_GROUP_ROLES
+
+    @patch.object(DatabaseCharm, "_on_database_entity_permissions_changed")
+    def test_on_entity_permissions_changed(self, _on_database_entity_permissions_changed):
+        """Asserts that the correct hook is called when entity permissions are changed."""
+        # Simulate the request of a new user plus extra roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                self.DATABASE_FIELD: DATABASE,
+                "entity-type": ENTITY_USER,
+                "entity-permissions": "",
+                "extra-user-roles": EXTRA_USER_ROLES,
+            },
+        )
+
+        # Simulate the request to update user permissions.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                self.DATABASE_FIELD: DATABASE,
+                "entity-type": ENTITY_USER,
+                "entity-permissions": ENTITY_PERMISSIONS,
+                "extra-user-roles": EXTRA_USER_ROLES,
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_database_entity_permissions_changed.assert_called_once()
+
+        # Assert the database name and the entity info are accessible in the providers charm library event.
+        event = _on_database_entity_permissions_changed.call_args[0][0]
+        assert event.database == DATABASE
+        assert event.entity_type == ENTITY_USER
+        assert event.entity_permissions == ENTITY_PERMISSIONS
+        assert event.extra_user_roles == EXTRA_USER_ROLES
 
     def test_set_endpoints(self):
         """Asserts that the endpoints are in the relation databag when they change."""
@@ -1598,6 +1663,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "topic": TOPIC,
                 "entity-type": ENTITY_USER,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-user-roles": EXTRA_USER_ROLES,
             },
         )
@@ -1609,6 +1675,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_topic_entity_requested.call_args[0][0]
         assert event.topic == TOPIC
         assert event.entity_type == ENTITY_USER
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
         # Reset the relation data keys + mock count
@@ -1622,6 +1689,7 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "topic": TOPIC,
                 "entity-type": ENTITY_GROUP,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-group-roles": EXTRA_GROUP_ROLES,
             },
         )
@@ -1633,7 +1701,45 @@ class TestKafkaProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_topic_entity_requested.call_args[0][0]
         assert event.topic == TOPIC
         assert event.entity_type == ENTITY_GROUP
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_group_roles == EXTRA_GROUP_ROLES
+
+    @patch.object(KafkaCharm, "_on_topic_entity_permissions_changed")
+    def test_on_entity_permissions_changed(self, _on_topic_entity_permissions_changed):
+        """Asserts that the correct hook is called when entity permissions are changed."""
+        # Simulate the request of a new user plus extra roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                "topic": TOPIC,
+                "entity-type": ENTITY_USER,
+                "entity-permissions": "",
+                "extra-user-roles": EXTRA_USER_ROLES,
+            },
+        )
+
+        # Simulate the request to update user permissions.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                "topic": TOPIC,
+                "entity-type": ENTITY_USER,
+                "entity-permissions": ENTITY_PERMISSIONS,
+                "extra-user-roles": EXTRA_USER_ROLES,
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_topic_entity_permissions_changed.assert_called_once()
+
+        # Assert the topic name and entity info are accessible in the providers charm library event.
+        event = _on_topic_entity_permissions_changed.call_args[0][0]
+        assert event.topic == TOPIC
+        assert event.entity_type == ENTITY_USER
+        assert event.entity_permissions == ENTITY_PERMISSIONS
+        assert event.extra_user_roles == EXTRA_USER_ROLES
 
     def test_set_bootstrap_server(self):
         """Asserts that the bootstrap-server are in the relation databag when they change."""
@@ -1812,6 +1918,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "index": INDEX,
                 "entity-type": ENTITY_USER,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-user-roles": EXTRA_USER_ROLES,
             },
         )
@@ -1823,6 +1930,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_index_entity_requested.call_args[0][0]
         assert event.index == INDEX
         assert event.entity_type == ENTITY_USER
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_user_roles == EXTRA_USER_ROLES
 
         # Reset the relation data keys + mock count
@@ -1836,6 +1944,7 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
             {
                 "index": INDEX,
                 "entity-type": ENTITY_GROUP,
+                "entity-permissions": ENTITY_PERMISSIONS,
                 "extra-group-roles": EXTRA_GROUP_ROLES,
             },
         )
@@ -1847,7 +1956,45 @@ class TestOpenSearchProvides(DataProvidesBaseTests, unittest.TestCase):
         event = _on_index_entity_requested.call_args[0][0]
         assert event.index == INDEX
         assert event.entity_type == ENTITY_GROUP
+        assert event.entity_permissions == ENTITY_PERMISSIONS
         assert event.extra_group_roles == EXTRA_GROUP_ROLES
+
+    @patch.object(OpenSearchCharm, "_on_index_entity_permissions_changed")
+    def test_on_entity_permissions_changed(self, _on_index_entity_permissions_changed):
+        """Asserts that the correct hook is called when entity permissions are changed."""
+        # Simulate the request of a new user plus extra roles.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                "index": INDEX,
+                "entity-type": ENTITY_USER,
+                "entity-permissions": "",
+                "extra-user-roles": EXTRA_USER_ROLES,
+            },
+        )
+
+        # Simulate the request to update user permissions.
+        self.harness.update_relation_data(
+            self.rel_id,
+            "application",
+            {
+                "index": INDEX,
+                "entity-type": ENTITY_USER,
+                "entity-permissions": ENTITY_PERMISSIONS,
+                "extra-user-roles": EXTRA_USER_ROLES,
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_index_entity_permissions_changed.assert_called_once()
+
+        # Assert the index name and the entity info are accessible in the providers charm library event.
+        event = _on_index_entity_permissions_changed.call_args[0][0]
+        assert event.index == INDEX
+        assert event.entity_type == ENTITY_USER
+        assert event.entity_permissions == ENTITY_PERMISSIONS
+        assert event.extra_user_roles == EXTRA_USER_ROLES
 
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_additional_fields(self):
