@@ -4048,6 +4048,7 @@ class KafkaRequires(KafkaRequirerData, KafkaRequirerEventHandlers):
 
 # Karapace related events
 
+
 class KarapaceProvidesEvent(RelationEvent):
     """Base class for Karapace events."""
 
