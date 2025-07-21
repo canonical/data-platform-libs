@@ -4173,6 +4173,10 @@ class KarapaceProviderEventHandlers(ProviderEventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
+    def _on_secret_changed_event(self, event: SecretChangedEvent):
+        """Event notifying about a new value of a secret."""
+        pass
+
 
 class KarapaceProvides(KarapaceProviderData, KarapaceProviderEventHandlers):
     """Provider-side of the Karapace relation."""
