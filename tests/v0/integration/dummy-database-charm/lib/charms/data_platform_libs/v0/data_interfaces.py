@@ -1886,7 +1886,8 @@ class RequirerData(Data):
         try:
             permissions = json.loads(self.entity_permissions)
             for permission in permissions:
-                assert permission.keys() == accepted_keys
+                if permission.keys() != accepted_keys:
+                    raise ValueError("Invalid entity permissions format. See accepted keys")
         except json.decoder.JSONDecodeError:
             raise ValueError("Invalid entity permissions format. It must be JSON format")
 
