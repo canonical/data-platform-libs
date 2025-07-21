@@ -4126,6 +4126,8 @@ class KarapaceRequiresEvents(CharmEvents):
 class KarapaceProviderData(ProviderData):
     """Provider-side of the Karapace relation."""
 
+    RESOURCE_FIELD = "subject"
+
     def __init__(self, model: Model, relation_name: str) -> None:
         super().__init__(model, relation_name)
 
@@ -4160,12 +4162,17 @@ class KarapaceProviderEventHandlers(ProviderEventHandlers):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation has changed."""
+        super()._on_relation_changed_event(event)
+
         # Leader only
         if not self.relation_data.local_unit.is_leader():
             return
 
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
+
+        # Validate entity information is not dynamically changed
+        self._validate_entity_consistency(event, diff)
 
         # Emit a subject requested event if the setup key (subject name and optional
         # extra user roles) was added to the relation databag by the application.
