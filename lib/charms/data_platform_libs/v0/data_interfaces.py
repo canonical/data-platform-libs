@@ -4136,6 +4136,14 @@ class SubjectRequestedEvent(KarapaceProvidesEvent):
         return self.relation.data[self.relation.app].get("extra-user-roles")
 
 
+class SubjectEntityRequestedEvent(KarapaceProvidesEvent, EntityProvidesEvent):
+    """Event emitted when a new entity is requested for use on this relation."""
+
+
+class SubjectEntityPermissionsChangedEvent(KarapaceProvidesEvent, EntityProvidesEvent):
+    """Event emitted when existing entity permissions are changed on this relation."""
+
+
 class KarapaceProvidesEvents(CharmEvents):
     """Karapace events.
 
@@ -4143,6 +4151,8 @@ class KarapaceProvidesEvents(CharmEvents):
     """
 
     subject_requested = EventSource(SubjectRequestedEvent)
+    subject_entity_requested = EventSource(SubjectEntityRequestedEvent)
+    subject_entity_permissions_changed = EventSource(SubjectEntityPermissionsChangedEvent)
 
 
 class KarapaceRequiresEvent(RelationEvent):
@@ -4245,9 +4255,9 @@ class KarapaceProviderEventHandlers(ProviderEventHandlers):
         # Validate entity information is not dynamically changed
         self._validate_entity_consistency(event, diff)
 
-        # Emit a subject requested event if the setup key (topic name)
+        # Emit a subject requested event if the setup key (subject name)
         # was added to the relation databag, but the entity-type key was not.
-        if "topic" in diff.added and "entity-type" not in diff.added:
+        if "subject" in diff.added and "entity-type" not in diff.added:
             getattr(self.on, "subject_requested").emit(
                 event.relation, app=event.app, unit=event.unit
             )
@@ -4255,10 +4265,24 @@ class KarapaceProviderEventHandlers(ProviderEventHandlers):
             # To avoid unnecessary application restarts do not trigger other events.
             return
 
-        # Emit an entity requested event if the setup key (topic name)
+        # Emit an entity requested event if the setup key (subject name)
         # was added to the relation databag, in addition to the entity-type key.
-        if "topic" in diff.added and "entity-type" in diff.added:
-            getattr(self.on, "topic_entity_requested").emit(
+        if "subject" in diff.added and "entity-type" in diff.added:
+            getattr(self.on, "subject_entity_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        # Emit a permissions changed event if the setup key (subject name)
+        # was added to the relation databag, and the entity-permissions key changed.
+        if (
+            "subject" not in diff.added
+            and "entity-type" not in diff.added
+            and ("entity-permissions" in diff.added or "entity-permissions" in diff.changed)
+        ):
+            getattr(self.on, "subject_entity_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
@@ -4290,6 +4314,7 @@ class KarapaceRequirerData(RequirerData):
         additional_secret_fields: Optional[List[str]] = [],
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         """Manager of Karapace client relations."""
         super().__init__(
@@ -4299,6 +4324,7 @@ class KarapaceRequirerData(RequirerData):
             additional_secret_fields,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         self.subject = subject
 
@@ -4341,6 +4367,8 @@ class KarapaceRequirerEventHandlers(RequirerEventHandlers):
             relation_data["extra-group-roles"] = self.relation_data.extra_group_roles
         if self.relation_data.entity_type:
             relation_data["entity-type"] = self.relation_data.entity_type
+        if self.relation_data.entity_permissions:
+            relation_data["entity-permissions"] = self.relation_data.entity_permissions
 
         self.relation_data.update_relation_data(event.relation.id, relation_data)
 
@@ -4410,6 +4438,7 @@ class KarapaceRequires(KarapaceRequirerData, KarapaceRequirerEventHandlers):
         additional_secret_fields: Optional[List[str]] = [],
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ) -> None:
         KarapaceRequirerData.__init__(
             self,
@@ -4420,6 +4449,7 @@ class KarapaceRequires(KarapaceRequirerData, KarapaceRequirerEventHandlers):
             additional_secret_fields,
             extra_group_roles,
             entity_type,
+            entity_permissions,
         )
         KarapaceRequirerEventHandlers.__init__(self, charm, self)
 
