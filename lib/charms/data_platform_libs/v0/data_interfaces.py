@@ -335,7 +335,7 @@ class ApplicationCharm(CharmBase):
             self.karapace.on.subject_allowed, self._on_karapace_subject_allowed
         )
         self.framework.observe(
-            self.karapace.on.karapace_entity_created, self._on_karapace_entity_created
+            self.karapace.on.subject_entity_created, self._on_subject_entity_created
         )
 
 
@@ -352,7 +352,7 @@ class ApplicationCharm(CharmBase):
         endpoints = event.endpoints
         ...
 
-    def _on_karapace_entity_created(self, event: SubjectEntityCreatedEvent):
+    def _on_subject_entity_created(self, event: SubjectEntityCreatedEvent):
         # Event triggered when a subject entity was created this application
         entity_name = event.entity_name
         entity_password = event.entity_password
@@ -4252,9 +4252,6 @@ class KarapaceProviderEventHandlers(ProviderEventHandlers):
         # Validate entity information is not dynamically changed
         self._validate_entity_consistency(event, diff)
 
-        # Validate entity information is not dynamically changed
-        self._validate_entity_consistency(event, diff)
-
         # Emit a subject requested event if the setup key (subject name)
         # was added to the relation databag, but the entity-type key was not.
         if "subject" in diff.added and "entity-type" not in diff.added:
@@ -4389,7 +4386,6 @@ class KarapaceRequirerEventHandlers(RequirerEventHandlers):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
 
         app_databag = get_encoded_dict(event.relation, event.app, "data")
-
         if app_databag is None:
             app_databag = {}
 
