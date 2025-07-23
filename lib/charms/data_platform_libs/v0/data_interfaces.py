@@ -2059,24 +2059,16 @@ class DataPeerData(RequirerData, ProviderData):
         self,
         model,
         relation_name: str,
-        extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         additional_secret_group_mapping: Dict[str, str] = {},
         secret_field_name: Optional[str] = None,
         deleted_label: Optional[str] = None,
-        extra_group_roles: Optional[str] = None,
-        entity_type: Optional[str] = None,
-        entity_permissions: Optional[str] = None,
     ):
         RequirerData.__init__(
             self,
-            model,
-            relation_name,
-            extra_user_roles,
-            additional_secret_fields,
-            extra_group_roles,
-            entity_type,
-            entity_permissions,
+            model=model,
+            relation_name=relation_name,
+            additional_secret_fields=additional_secret_fields,
         )
         self.secret_field_name = secret_field_name if secret_field_name else self.SECRET_FIELD_NAME
         self.deleted_label = deleted_label
@@ -2593,28 +2585,20 @@ class DataPeer(DataPeerData, DataPeerEventHandlers):
         self,
         charm,
         relation_name: str,
-        extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         additional_secret_group_mapping: Dict[str, str] = {},
         secret_field_name: Optional[str] = None,
         deleted_label: Optional[str] = None,
         unique_key: str = "",
-        extra_group_roles: Optional[str] = None,
-        entity_type: Optional[str] = None,
-        entity_permissions: Optional[str] = None,
     ):
         DataPeerData.__init__(
             self,
             charm.model,
             relation_name,
-            extra_user_roles,
             additional_secret_fields,
             additional_secret_group_mapping,
             secret_field_name,
             deleted_label,
-            extra_group_roles,
-            entity_type,
-            entity_permissions,
         )
         DataPeerEventHandlers.__init__(self, charm, self, unique_key)
 
@@ -2635,28 +2619,20 @@ class DataPeerUnit(DataPeerUnitData, DataPeerEventHandlers):
         self,
         charm,
         relation_name: str,
-        extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         additional_secret_group_mapping: Dict[str, str] = {},
         secret_field_name: Optional[str] = None,
         deleted_label: Optional[str] = None,
         unique_key: str = "",
-        extra_group_roles: Optional[str] = None,
-        entity_type: Optional[str] = None,
-        entity_permissions: Optional[str] = None,
     ):
         DataPeerData.__init__(
             self,
             charm.model,
             relation_name,
-            extra_user_roles,
             additional_secret_fields,
             additional_secret_group_mapping,
             secret_field_name,
             deleted_label,
-            extra_group_roles,
-            entity_type,
-            entity_permissions,
         )
         DataPeerEventHandlers.__init__(self, charm, self, unique_key)
 
@@ -2695,28 +2671,20 @@ class DataPeerOtherUnit(DataPeerOtherUnitData, DataPeerOtherUnitEventHandlers):
         unit: Unit,
         charm: CharmBase,
         relation_name: str,
-        extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
         additional_secret_group_mapping: Dict[str, str] = {},
         secret_field_name: Optional[str] = None,
         deleted_label: Optional[str] = None,
-        extra_group_roles: Optional[str] = None,
-        entity_type: Optional[str] = None,
-        entity_permissions: Optional[str] = None,
     ):
         DataPeerOtherUnitData.__init__(
             self,
             unit,
             charm.model,
             relation_name,
-            extra_user_roles,
             additional_secret_fields,
             additional_secret_group_mapping,
             secret_field_name,
             deleted_label,
-            extra_group_roles,
-            entity_type,
-            entity_permissions,
         )
         DataPeerOtherUnitEventHandlers.__init__(self, charm, self)
 
