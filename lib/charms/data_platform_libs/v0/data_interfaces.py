@@ -4406,7 +4406,7 @@ class KarapaceRequirerEventHandlers(RequirerEventHandlers):
         if self._entity_credentials_shared(diff) and "entity-type" in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("entity created at %s", datetime.now())
-            getattr(self.on, "topic_entity_created").emit(
+            getattr(self.on, "subject_entity_created").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
