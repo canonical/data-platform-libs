@@ -334,6 +334,10 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(
             self.karapace.on.subject_allowed, self._on_karapace_subject_allowed
         )
+        self.framework.observe(
+            self.karapace.on.subject_entity_created, self._on_subject_entity_created
+        )
+
 
     def _on_karapace_server_changed(self, event: EndpointsChangedEvent):
         # Event triggered when a server endpoint was changed for this application
@@ -346,6 +350,12 @@ class ApplicationCharm(CharmBase):
         password = event.password
         tls = event.tls
         endpoints = event.endpoints
+        ...
+
+    def _on_subject_entity_created(self, event: SubjectEntityCreatedEvent):
+        # Event triggered when a subject entity was created this application
+        entity_name = event.entity_name
+        entity_password = event.entity_password
         ...
 ```
 
@@ -437,7 +447,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 51
+LIBPATCH = 52
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -4126,6 +4136,14 @@ class SubjectRequestedEvent(KarapaceProvidesEvent):
         return self.relation.data[self.relation.app].get("extra-user-roles")
 
 
+class SubjectEntityRequestedEvent(KarapaceProvidesEvent, EntityProvidesEvent):
+    """Event emitted when a new entity is requested for use on this relation."""
+
+
+class SubjectEntityPermissionsChangedEvent(KarapaceProvidesEvent, EntityProvidesEvent):
+    """Event emitted when existing entity permissions are changed on this relation."""
+
+
 class KarapaceProvidesEvents(CharmEvents):
     """Karapace events.
 
@@ -4133,6 +4151,8 @@ class KarapaceProvidesEvents(CharmEvents):
     """
 
     subject_requested = EventSource(SubjectRequestedEvent)
+    subject_entity_requested = EventSource(SubjectEntityRequestedEvent)
+    subject_entity_permissions_changed = EventSource(SubjectEntityPermissionsChangedEvent)
 
 
 class KarapaceRequiresEvent(RelationEvent):
@@ -4159,6 +4179,10 @@ class SubjectAllowedEvent(AuthenticationEvent, KarapaceRequiresEvent):
     """Event emitted when a new subject ACL is created for use on this relation."""
 
 
+class SubjectEntityCreatedEvent(EntityRequiresEvent, KarapaceRequiresEvent):
+    """Event emitted when a new entity is created for use on this relation."""
+
+
 class EndpointsChangedEvent(AuthenticationEvent, KarapaceRequiresEvent):
     """Event emitted when the endpoints are changed."""
 
@@ -4170,6 +4194,7 @@ class KarapaceRequiresEvents(CharmEvents):
     """
 
     subject_allowed = EventSource(SubjectAllowedEvent)
+    subject_entity_created = EventSource(SubjectEntityCreatedEvent)
     server_changed = EventSource(EndpointsChangedEvent)
 
 
@@ -4227,12 +4252,39 @@ class KarapaceProviderEventHandlers(ProviderEventHandlers):
         # Validate entity information is not dynamically changed
         self._validate_entity_consistency(event, diff)
 
-        # Emit a subject requested event if the setup key (subject name and optional
-        # extra user roles) was added to the relation databag by the application.
-        if "subject" in diff.added:
+        # Emit a subject requested event if the setup key (subject name)
+        # was added to the relation databag, but the entity-type key was not.
+        if "subject" in diff.added and "entity-type" not in diff.added:
             getattr(self.on, "subject_requested").emit(
                 event.relation, app=event.app, unit=event.unit
             )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        # Emit an entity requested event if the setup key (subject name)
+        # was added to the relation databag, in addition to the entity-type key.
+        if "subject" in diff.added and "entity-type" in diff.added:
+            getattr(self.on, "subject_entity_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        # Emit a permissions changed event if the setup key (subject name)
+        # was added to the relation databag, and the entity-permissions key changed.
+        if (
+            "subject" not in diff.added
+            and "entity-type" not in diff.added
+            and ("entity-permissions" in diff.added or "entity-permissions" in diff.changed)
+        ):
+            getattr(self.on, "subject_entity_permissions_changed").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
         """Event notifying about a new value of a secret."""
@@ -4257,9 +4309,20 @@ class KarapaceRequirerData(RequirerData):
         subject: str,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
+        extra_group_roles: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ):
         """Manager of Karapace client relations."""
-        super().__init__(model, relation_name, extra_user_roles, additional_secret_fields)
+        super().__init__(
+            model,
+            relation_name,
+            extra_user_roles,
+            additional_secret_fields,
+            extra_group_roles,
+            entity_type,
+            entity_permissions,
+        )
         self.subject = subject
 
     @property
@@ -4297,6 +4360,12 @@ class KarapaceRequirerEventHandlers(RequirerEventHandlers):
 
         if self.relation_data.extra_user_roles:
             relation_data["extra-user-roles"] = self.relation_data.extra_user_roles
+        if self.relation_data.extra_group_roles:
+            relation_data["extra-group-roles"] = self.relation_data.extra_group_roles
+        if self.relation_data.entity_type:
+            relation_data["entity-type"] = self.relation_data.entity_type
+        if self.relation_data.entity_permissions:
+            relation_data["entity-permissions"] = self.relation_data.entity_permissions
 
         self.relation_data.update_relation_data(event.relation.id, relation_data)
 
@@ -4316,18 +4385,28 @@ class KarapaceRequirerEventHandlers(RequirerEventHandlers):
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
 
-        secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
-        if (
-            "username" in diff.added and "password" in diff.added
-        ) or secret_field_user in diff.added:
+        app_databag = get_encoded_dict(event.relation, event.app, "data")
+        if app_databag is None:
+            app_databag = {}
+
+        if self._main_credentials_shared(diff) and "entity-type" not in app_databag:
             # Emit the default event (the one without an alias).
             logger.info("subject ACL created at %s", datetime.now())
             getattr(self.on, "subject_allowed").emit(
                 event.relation, app=event.app, unit=event.unit
             )
 
-            # To avoid unnecessary application restarts do not trigger
-            # “endpoints_changed“ event if “subject_allowed“ is triggered.
+            # To avoid unnecessary application restarts do not trigger other events.
+            return
+
+        if self._entity_credentials_shared(diff) and "entity-type" in app_databag:
+            # Emit the default event (the one without an alias).
+            logger.info("entity created at %s", datetime.now())
+            getattr(self.on, "subject_entity_created").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
         # Emit an endpoints changed event if the Karapace endpoints added or changed
@@ -4338,6 +4417,8 @@ class KarapaceRequirerEventHandlers(RequirerEventHandlers):
             getattr(self.on, "server_changed").emit(
                 event.relation, app=event.app, unit=event.unit
             )  # here check if this is the right design
+
+            # To avoid unnecessary application restarts do not trigger other events.
             return
 
 
@@ -4351,6 +4432,9 @@ class KarapaceRequires(KarapaceRequirerData, KarapaceRequirerEventHandlers):
         subject: str,
         extra_user_roles: Optional[str] = None,
         additional_secret_fields: Optional[List[str]] = [],
+        extra_group_roles: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        entity_permissions: Optional[str] = None,
     ) -> None:
         KarapaceRequirerData.__init__(
             self,
@@ -4359,6 +4443,9 @@ class KarapaceRequires(KarapaceRequirerData, KarapaceRequirerEventHandlers):
             subject,
             extra_user_roles,
             additional_secret_fields,
+            extra_group_roles,
+            entity_type,
+            entity_permissions,
         )
         KarapaceRequirerEventHandlers.__init__(self, charm, self)
 
