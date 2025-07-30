@@ -26,7 +26,6 @@ from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseEndpointsChangedEvent,
     DatabaseRequires,
     IndexCreatedEvent,
-    KafkaConnectRequires,
     KafkaRequires,
     OpenSearchRequires,
     TopicCreatedEvent,
@@ -48,6 +47,7 @@ if DATA_INTERFACES_VERSION > 49:
 
 if DATA_INTERFACES_VERSION > 52:
     from charms.data_platform_libs.v0.data_interfaces import (
+        KafkaConnectRequires,
         IntegrationCreatedEvent,
         IntegrationEndpointsChangedEvent,
     )
