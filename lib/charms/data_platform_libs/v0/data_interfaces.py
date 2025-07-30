@@ -417,6 +417,7 @@ from enum import Enum
 from typing import (
     Callable,
     Dict,
+    Final,
     ItemsView,
     KeysView,
     List,
@@ -447,7 +448,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 52
+LIBPATCH = 53
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -4448,6 +4449,213 @@ class KarapaceRequires(KarapaceRequirerData, KarapaceRequirerEventHandlers):
             entity_permissions,
         )
         KarapaceRequirerEventHandlers.__init__(self, charm, self)
+
+
+# Kafka Connect Events
+
+
+class KafkaConnectProvidesEvent(RelationEvent):
+    """Base class for Kafka Connect Provider events."""
+
+    @property
+    def plugin_url(self) -> Optional[str]:
+        """Returns the REST endpoint URL which serves the connector plugin."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("plugin-url")
+
+
+class IntegrationRequestedEvent(KafkaConnectProvidesEvent):
+    """Event emitted when a new integrator boots up and is ready to serve the connector plugin."""
+
+
+class KafkaConnectProvidesEvents(CharmEvents):
+    """Kafka Connect Provider Events."""
+
+    integration_requested = EventSource(IntegrationRequestedEvent)
+
+
+class KafkaConnectRequiresEvent(AuthenticationEvent):
+    """Base class for Kafka Connect Requirer events."""
+
+    @property
+    def plugin_url(self) -> Optional[str]:
+        """Returns the REST endpoint URL which serves the connector plugin."""
+        if not self.relation.app:
+            return None
+
+        return self.relation.data[self.relation.app].get("plugin-url")
+
+
+class IntegrationCreatedEvent(KafkaConnectRequiresEvent):
+    """Event emitted when the credentials are created for this integrator."""
+
+
+class IntegrationEndpointsChangedEvent(KafkaConnectRequiresEvent):
+    """Event emitted when Kafka Connect REST endpoints change."""
+
+
+class KafkaConnectRequiresEvents(CharmEvents):
+    """Kafka Connect Requirer Events."""
+
+    integration_created = EventSource(IntegrationCreatedEvent)
+    integration_endpoints_changed = EventSource(IntegrationEndpointsChangedEvent)
+
+
+class KafkaConnectProviderData(ProviderData):
+    """Provider-side of the Kafka Connect relation."""
+
+    RESOURCE_FIELD = "plugin-url"
+
+    def __init__(self, model: Model, relation_name: str) -> None:
+        super().__init__(model, relation_name)
+
+    def set_endpoints(self, relation_id: int, endpoints: str) -> None:
+        """Sets REST endpoints of the Kafka Connect service."""
+        self.update_relation_data(relation_id, {"endpoints": endpoints})
+
+
+class KafkaConnectProviderEventHandlers(EventHandlers):
+    """Provider-side implementation of the Kafka Connect event handlers."""
+
+    on = KafkaConnectProvidesEvents()  # pyright: ignore [reportAssignmentType]
+
+    def __init__(self, charm: CharmBase, relation_data: KafkaConnectProviderData) -> None:
+        super().__init__(charm, relation_data)
+        self.relation_data = relation_data
+
+    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
+        """Event emitted when the relation has changed."""
+        # Leader only
+        if not self.relation_data.local_unit.is_leader():
+            return
+
+        # Check which data has changed to emit customs events.
+        diff = self._diff(event)
+
+        if "plugin-url" in diff.added:
+            getattr(self.on, "integration_requested").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+
+    def _on_secret_changed_event(self, event: SecretChangedEvent):
+        """Event notifying about a new value of a secret."""
+        pass
+
+
+class KafkaConnectProvides(KafkaConnectProviderData, KafkaConnectProviderEventHandlers):
+    """Provider-side implementation of the Kafka Connect relation."""
+
+    def __init__(self, charm: CharmBase, relation_name: str) -> None:
+        KafkaConnectProviderData.__init__(self, charm.model, relation_name)
+        KafkaConnectProviderEventHandlers.__init__(self, charm, self)
+
+
+# Sentinel value passed from Kafka Connect requirer side when it does not need to serve any plugins.
+PLUGIN_URL_NOT_REQUIRED: Final[str] = "NOT-REQUIRED"
+
+
+class KafkaConnectRequirerData(RequirerData):
+    """Requirer-side of the Kafka Connect relation."""
+
+    def __init__(
+        self,
+        model: Model,
+        relation_name: str,
+        plugin_url: str,
+        extra_user_roles: Optional[str] = None,
+        additional_secret_fields: Optional[List[str]] = [],
+    ):
+        """Manager of Kafka client relations."""
+        super().__init__(
+            model,
+            relation_name,
+            extra_user_roles=extra_user_roles,
+            additional_secret_fields=additional_secret_fields,
+        )
+        self.plugin_url = plugin_url
+
+    @property
+    def plugin_url(self):
+        """The REST endpoint URL which serves the connector plugin."""
+        return self._plugin_url
+
+    @plugin_url.setter
+    def plugin_url(self, value):
+        self._plugin_url = value
+
+
+class KafkaConnectRequirerEventHandlers(RequirerEventHandlers):
+    """Requirer-side of the Kafka Connect relation."""
+
+    on = KafkaConnectRequiresEvents()  # pyright: ignore [reportAssignmentType]
+
+    def __init__(self, charm: CharmBase, relation_data: KafkaConnectRequirerData) -> None:
+        super().__init__(charm, relation_data)
+        self.relation_data = relation_data
+
+    def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
+        """Event emitted when the Kafka Connect relation is created."""
+        super()._on_relation_created_event(event)
+
+        if not self.relation_data.local_unit.is_leader():
+            return
+
+        relation_data = {"plugin-url": self.relation_data.plugin_url}
+        self.relation_data.update_relation_data(event.relation.id, relation_data)
+
+    def _on_secret_changed_event(self, event: SecretChangedEvent):
+        """Event notifying about a new value of a secret."""
+        pass
+
+    def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
+        """Event emitted when the Kafka Connect relation has changed."""
+        # Check which data has changed to emit customs events.
+        diff = self._diff(event)
+
+        # Register all new secrets with their labels
+        if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
+            self.relation_data._register_secrets_to_relation(event.relation, diff.added)
+
+        if self._main_credentials_shared(diff):
+            logger.info("integration created at %s", datetime.now())
+            getattr(self.on, "integration_created").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+            return
+
+        # Emit an endpoints changed event if the provider added or
+        # changed this info in the relation databag.
+        if "endpoints" in diff.added or "endpoints" in diff.changed:
+            # Emit the default event (the one without an alias).
+            logger.info("endpoints changed on %s", datetime.now())
+            getattr(self.on, "integration_endpoints_changed").emit(
+                event.relation, app=event.app, unit=event.unit
+            )
+            return
+
+
+class KafkaConnectRequires(KafkaConnectRequirerData, KafkaConnectRequirerEventHandlers):
+    """Requirer-side implementation of the Kafka Connect relation."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        relation_name: str,
+        plugin_url: str,
+        extra_user_roles: Optional[str] = None,
+        additional_secret_fields: Optional[List[str]] = [],
+    ) -> None:
+        KafkaConnectRequirerData.__init__(
+            self,
+            charm.model,
+            relation_name,
+            plugin_url,
+            extra_user_roles=extra_user_roles,
+            additional_secret_fields=additional_secret_fields,
+        )
+        KafkaConnectRequirerEventHandlers.__init__(self, charm, self)
 
 
 # Opensearch related events

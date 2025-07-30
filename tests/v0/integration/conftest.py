@@ -58,6 +58,8 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     shutil.copyfile(library_path, install_path)
     install_path = "tests/v0/integration/opensearch-charm/" + library_path
     shutil.copyfile(library_path, install_path)
+    install_path = "tests/v0/integration/kafka-connect-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -114,6 +116,14 @@ async def s3_charm(ops_test: OpsTest):
 async def kafka_charm(ops_test: OpsTest):
     """Build the Kafka charm."""
     charm_path = "tests/v0/integration/kafka-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def kafka_connect_charm(ops_test: OpsTest):
+    """Build the Kafka Connect dummy charm."""
+    charm_path = "tests/v0/integration/kafka-connect-charm"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
