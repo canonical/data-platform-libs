@@ -417,8 +417,8 @@ from enum import Enum
 from typing import (
     Callable,
     Dict,
-    ItemsView,
     Final,
+    ItemsView,
     KeysView,
     List,
     Optional,
@@ -4570,9 +4570,9 @@ class KafkaConnectRequirerData(RequirerData):
         """Manager of Kafka client relations."""
         super().__init__(
             model,
-            relation_name, 
+            relation_name,
             extra_user_roles=extra_user_roles,
-            additional_secret_fields=additional_secret_fields
+            additional_secret_fields=additional_secret_fields,
         )
         self.plugin_url = plugin_url
 

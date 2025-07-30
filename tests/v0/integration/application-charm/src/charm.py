@@ -14,7 +14,6 @@ from typing import Optional, Tuple
 
 from ops import Relation
 from ops.charm import ActionEvent, CharmBase
-from ops.framework import EventBase
 from ops.main import main
 from ops.model import ActiveStatus
 
