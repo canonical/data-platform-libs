@@ -4618,10 +4618,7 @@ class KafkaConnectRequirerEventHandlers(RequirerEventHandlers):
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
 
-        secret_field_user = self.relation_data._generate_secret_field_name(SECRET_GROUPS.USER)
-        if (
-            "username" in diff.added and "password" in diff.added
-        ) or secret_field_user in diff.added:
+        if self._main_credentials_shared(diff):
             logger.info("integration created at %s", datetime.now())
             getattr(self.on, "integration_created").emit(
                 event.relation, app=event.app, unit=event.unit
