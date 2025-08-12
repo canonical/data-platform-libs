@@ -448,7 +448,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 53
+LIBPATCH = 54
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -1945,7 +1945,7 @@ class RequirerData(Data):
         ) and not self.secrets_enabled:
             raise SecretsUnavailableError("Secrets unavailable on current Juju version")
 
-        if self.requested_entity_secret and self.requsted_entity_name:
+        if self.requested_entity_secret and self.requested_entity_name:
             raise IllegalOperationError("Unable to use provided and automated entity name secret")
 
         self._validate_entity_type()
@@ -3009,16 +3009,14 @@ class DatabaseRequestedEvent(DatabaseProvidesEvent):
         )
 
     @property
-    def requested_entity_secret_content(self) -> Optional[dict[str, str]]:
+    def requested_entity_secret_content(self) -> Optional[dict[str, Optional[str]]]:
         """Returns the content of the requested entity secret."""
-        content = None
+        names = None
         if secret_uri := self.relation.data[self.relation.app].get("requested-entity-secret"):
             secret = self.framework.model.get_secret(id=secret_uri)
-            content = secret.get_content(refresh=True)
-            for key, val in content.items():
-                if val == "None":
-                    content[key] = None
-        return content
+            if content := secret.get_content(refresh=True):
+                names = {key: val if val != "None" else None for key, val in content.items()}
+        return names
 
 
 class DatabaseEntityRequestedEvent(DatabaseProvidesEvent, EntityProvidesEvent):
@@ -3563,6 +3561,8 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
                 label=f"{self.charm.app}-requested-entity",
             )
             secret.grant(event.relation)
+            if not secret.id:
+                raise SecretError("Secret helper missing Id")
             event_data["requested-entity-secret"] = secret.id
 
         # set external-node-connectivity field
@@ -3571,7 +3571,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
         self.relation_data.update_relation_data(event.relation.id, event_data)
 
-    def _clear_helper_secret(self, event: RelationChangedEvent, app_databag: {}) -> None:
+    def _clear_helper_secret(self, event: RelationChangedEvent, app_databag: Dict) -> None:
         """Remove helper secret if set."""
         if (
             self.relation_data.local_unit.is_leader()
