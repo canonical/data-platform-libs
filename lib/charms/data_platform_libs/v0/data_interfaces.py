@@ -3009,7 +3009,7 @@ class DatabaseRequestedEvent(DatabaseProvidesEvent):
         )
 
     @property
-    def requested_entity_secret_content(self) -> Optional[dict[str, Optional[str]]]:
+    def requested_entity_secret_content(self) -> Optional[Dict[str, Optional[str]]]:
         """Returns the content of the requested entity secret."""
         names = None
         if secret_uri := self.relation.data[self.relation.app].get("requested-entity-secret"):
