@@ -198,10 +198,18 @@ class DatabaseCharm(CharmBase):
         # Retrieve the database name and extra user roles using the charm library.
         database = event.database
         extra_user_roles = event.extra_user_roles
+        username = None
+        password = None
+        if DATA_INTERFACES_VERSION >= 54:
+            if content := event.requested_entity_secret_content:
+                for key, val in content.items():
+                    username = key
+                    password = val
+                    break
 
         # Generate a username and a password for the application.
-        username = f"juju_{database}"
-        password = self._new_password()
+        username = username or f"juju_{database}"
+        password = password or self._new_password()
 
         # Connect to the database.
         connection_string = (
@@ -217,7 +225,7 @@ class DatabaseCharm(CharmBase):
         cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {database} TO {username};")
         # Add the roles to the user.
         if extra_user_roles:
-            cursor.execute(f'ALTER USER {username} {extra_user_roles.replace(",", " ")};')
+            cursor.execute(f"ALTER USER {username} {extra_user_roles.replace(',', ' ')};")
         # Get the database version.
         cursor.execute("SELECT version();")
         version = cursor.fetchone()[0]
@@ -243,7 +251,7 @@ class DatabaseCharm(CharmBase):
 
         # Set the read/write endpoint.
         self.database.set_endpoints(
-            event.relation.id, f'{self.model.get_binding("database").network.bind_address}:5432'
+            event.relation.id, f"{self.model.get_binding('database').network.bind_address}:5432"
         )
 
         # Share additional information with the application.
@@ -278,11 +286,11 @@ class DatabaseCharm(CharmBase):
             if entity_type == ENTITY_USER:
                 extra_roles = event.extra_user_roles
                 cursor.execute(f"CREATE ROLE {rolename} WITH ENCRYPTED PASSWORD '{password}';")
-                cursor.execute(f'ALTER ROLE {rolename} {extra_roles.replace(",", " ")};')
+                cursor.execute(f"ALTER ROLE {rolename} {extra_roles.replace(',', ' ')};")
             if entity_type == ENTITY_GROUP:
                 extra_roles = event.extra_group_roles
                 cursor.execute(f"CREATE ROLE {rolename};")
-                cursor.execute(f'ALTER ROLE {rolename} {extra_roles.replace(",", " ")};')
+                cursor.execute(f"ALTER ROLE {rolename} {extra_roles.replace(',', ' ')};")
 
             # Share the credentials with the application.
             self.database.set_entity_credentials(event.relation.id, rolename, password)
