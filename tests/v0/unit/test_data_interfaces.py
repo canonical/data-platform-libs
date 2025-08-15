@@ -43,6 +43,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
     OpenSearchRequires,
     PrematureDataAccessError,
     RequirerData,
+    SecretsUnavailableError,
     TopicRequestedEvent,
 )
 from charms.harness_extensions.v0.capture_events import capture, capture_events
@@ -2359,6 +2360,64 @@ class DataRequirerBaseTests(ABC):
                 extra_user_roles=EXTRA_USER_ROLES,
                 entity_type=ENTITY_GROUP,
             )
+
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_requested_entity_consistency(self):
+        """Test consistency restrictions on direct secret usage and helper values."""
+        # Try to set both secret and entity name
+        with pytest.raises(IllegalOperationError) as e:
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                requested_entity_secret="secret",
+                requested_entity_name="testuser",
+            )
+        assert "Unable to use provided and automated entity name secret" in str(e.value)
+
+        # Try to set both secret and password
+        with pytest.raises(IllegalOperationError) as e:
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                requested_entity_secret="secret",
+                requested_entity_password="testpass",
+            )
+        assert "Unable to use provided and automated entity name secret" in str(e.value)
+
+        # Try to set password without entity name
+        with pytest.raises(IllegalOperationError) as e:
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                requested_entity_password="testpass",
+            )
+        assert "Unable to set entity password without an entity name" in str(e.value)
+
+    @pytest.mark.usefixtures("only_without_juju_secrets")
+    def test_requested_entity_consistency_no_secrets(self):
+        """Test consistency restrictions on direct secret usage and helper values."""
+        # Try to set entity secret without secret support
+        with pytest.raises(SecretsUnavailableError) as e:
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                requested_entity_secret="secret",
+            )
+        assert "Secrets unavailable on current Juju version" in str(e.value)
+
+        # Try to set entity name without secret support
+        with pytest.raises(SecretsUnavailableError) as e:
+            DatabaseRequires(
+                charm=self.harness.charm,
+                relation_name=DATABASE_RELATION_NAME,
+                database_name=DATABASE,
+                requested_entity_name="testuser",
+            )
+        assert "Secrets unavailable on current Juju version" in str(e.value)
 
 
 class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
