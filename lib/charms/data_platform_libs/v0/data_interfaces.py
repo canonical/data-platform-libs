@@ -3557,7 +3557,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
         # Create helper secret if needed
         if (
             self.relation_data.requested_entity_name
-            and "requested-entity-secret" not in event_data
+            and not self.relation_data.requested_entity_secret
         ):
             secret = self.charm.app.add_secret(
                 {
