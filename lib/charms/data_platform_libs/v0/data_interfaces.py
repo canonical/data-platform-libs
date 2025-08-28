@@ -448,7 +448,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 53
+LIBPATCH = 54
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -1926,6 +1926,9 @@ class RequirerData(Data):
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
         entity_permissions: Optional[str] = None,
+        requested_entity_secret: Optional[str] = None,
+        requested_entity_name: Optional[str] = None,
+        requested_entity_password: Optional[str] = None,
     ):
         """Manager of base client relations."""
         super().__init__(model, relation_name)
@@ -1933,6 +1936,22 @@ class RequirerData(Data):
         self.extra_group_roles = extra_group_roles
         self.entity_type = entity_type
         self.entity_permissions = entity_permissions
+        self.requested_entity_secret = requested_entity_secret
+        self.requested_entity_name = requested_entity_name
+        self.requested_entity_password = requested_entity_password
+
+        if (
+            self.requested_entity_secret or self.requested_entity_name
+        ) and not self.secrets_enabled:
+            raise SecretsUnavailableError("Secrets unavailable on current Juju version")
+
+        if self.requested_entity_secret and (
+            self.requested_entity_name or self.requested_entity_password
+        ):
+            raise IllegalOperationError("Unable to use provided and automated entity name secret")
+
+        if self.requested_entity_password and not self.requested_entity_name:
+            raise IllegalOperationError("Unable to set entity password without an entity name")
 
         self._validate_entity_type()
         self._validate_entity_permissions()
@@ -2994,6 +3013,21 @@ class DatabaseRequestedEvent(DatabaseProvidesEvent):
             == "true"
         )
 
+    @property
+    def requested_entity_secret_content(self) -> Optional[Dict[str, Optional[str]]]:
+        """Returns the content of the requested entity secret."""
+        names = None
+        if secret_uri := self.relation.data.get(self.relation.app, {}).get(
+            "requested-entity-secret"
+        ):
+            secret = self.framework.model.get_secret(id=secret_uri)
+            if content := secret.get_content(refresh=True):
+                if "entity-name" in content:
+                    names = {content["entity-name"]: content.get("password")}
+                else:
+                    logger.warning("Invalid requested-entity-secret: no entity name")
+        return names
+
 
 class DatabaseEntityRequestedEvent(DatabaseProvidesEvent, EntityProvidesEvent):
     """Event emitted when a new entity is requested for use on this relation."""
@@ -3315,6 +3349,9 @@ class DatabaseRequirerData(RequirerData):
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
         entity_permissions: Optional[str] = None,
+        requested_entity_secret: Optional[str] = None,
+        requested_entity_name: Optional[str] = None,
+        requested_entity_password: Optional[str] = None,
     ):
         """Manager of database client relations."""
         super().__init__(
@@ -3325,6 +3362,9 @@ class DatabaseRequirerData(RequirerData):
             extra_group_roles,
             entity_type,
             entity_permissions,
+            requested_entity_secret,
+            requested_entity_name,
+            requested_entity_password,
         )
         self.database = database_name
         self.relations_aliases = relations_aliases
@@ -3514,12 +3554,43 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
             event_data["entity-type"] = self.relation_data.entity_type
         if self.relation_data.entity_permissions:
             event_data["entity-permissions"] = self.relation_data.entity_permissions
+        if self.relation_data.requested_entity_secret:
+            event_data["requested-entity-secret"] = self.relation_data.requested_entity_secret
+
+        # Create helper secret if needed
+        if (
+            self.relation_data.requested_entity_name
+            and not self.relation_data.requested_entity_secret
+        ):
+            content = {"entity-name": self.relation_data.requested_entity_name}
+            if self.relation_data.requested_entity_password:
+                content["password"] = self.relation_data.requested_entity_password
+            secret = self.charm.app.add_secret(
+                content, label=f"{self.model.uuid}-{event.relation.id}-requested-entity"
+            )
+            secret.grant(event.relation)
+            if not secret.id:
+                raise SecretError("Secret helper missing Id")
+            event_data["requested-entity-secret"] = secret.id
 
         # set external-node-connectivity field
         if self.relation_data.external_node_connectivity:
             event_data["external-node-connectivity"] = "true"
 
         self.relation_data.update_relation_data(event.relation.id, event_data)
+
+    def _clear_helper_secret(self, event: RelationChangedEvent, app_databag: Dict) -> None:
+        """Remove helper secret if set."""
+        if (
+            self.relation_data.local_unit.is_leader()
+            and self.relation_data.requested_entity_name
+            and (secret_uri := app_databag.get("requested-entity-secret"))
+        ):
+            try:
+                secret = self.framework.model.get_secret(id=secret_uri)
+                secret.remove_all_revisions()
+            except ModelError:
+                logger.debug("Unable to remove helper secret")
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the database relation has changed."""
@@ -3557,6 +3628,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "database_created")
+            self._clear_helper_secret(event, app_databag)
 
             # To avoid unnecessary application restarts do not trigger other events.
             return
@@ -3570,6 +3642,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
 
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "database_entity_created")
+            self._clear_helper_secret(event, app_databag)
 
             # To avoid unnecessary application restarts do not trigger other events.
             return
@@ -3617,6 +3690,9 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
         entity_permissions: Optional[str] = None,
+        requested_entity_secret: Optional[str] = None,
+        requested_entity_name: Optional[str] = None,
+        requested_entity_password: Optional[str] = None,
     ):
         DatabaseRequirerData.__init__(
             self,
@@ -3630,6 +3706,9 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
             extra_group_roles,
             entity_type,
             entity_permissions,
+            requested_entity_secret,
+            requested_entity_name,
+            requested_entity_password,
         )
         DatabaseRequirerEventHandlers.__init__(self, charm, self)
 
