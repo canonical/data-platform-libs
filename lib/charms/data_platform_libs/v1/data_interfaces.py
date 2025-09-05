@@ -170,7 +170,7 @@ class ApplicationCharm(CharmBase):
 
         # Create configuration file for app
         config_file = self._render_app_config_file(
-            event.respones.username,
+            event.response.username,
             event.response.password,
             event.response.endpoints,
         )
@@ -285,6 +285,11 @@ from pydantic import (
 from pydantic.types import _SecretBase, _SecretField
 from pydantic_core import CoreSchema, core_schema
 from typing_extensions import TypeAliasType, override
+
+try:
+    import psycopg
+except ImportError:
+    psycopg = None
 
 # The unique Charmhub library identifier, never change it
 LIBID = "6c3e6b6680d64e9c89e611d1a15f65be"
@@ -693,31 +698,36 @@ class PeerModel(BaseModel):
                 if not secret_group:
                     raise SecretsUnavailableError(field)
 
-                if (value := getattr(self, field)) is None:
-                    continue
-
                 aliased_field = field_info.serialization_alias or field
                 secret = repository.get_secret(secret_group, secret_uri=None)
+
+                value = getattr(self, field)
+
                 actual_value = (
                     value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
                 )
-                if not isinstance(actual_value, str):
-                    actual_value = json.dumps(actual_value)
 
-                if secret:
-                    content = secret.get_content()
-                    full_content = copy.deepcopy(content)
-                    full_content.update({aliased_field: actual_value})
-                    secret.set_content(full_content)
+                if secret is None:
+                    if actual_value:
+                        secret = repository.add_secret(
+                            aliased_field,
+                            actual_value,
+                            secret_group,
+                        )
+                        if not secret or not secret.meta:
+                            raise SecretError("No secret to send back")
+                    continue
+
+                content = secret.get_content()
+                full_content = copy.deepcopy(content)
+
+                if actual_value is None:
+                    full_content.pop(field, None)
                 else:
-                    secret = repository.add_secret(
-                        aliased_field,
-                        actual_value,
-                        secret_group,
-                    )
-                    if not secret or not secret.meta:
-                        raise SecretError("No secret to send back")
-
+                    if not isinstance(actual_value, str):
+                        actual_value = json.dumps(actual_value)
+                    full_content.update({aliased_field: actual_value})
+                secret.set_content(full_content)
         return handler(self)
 
 
@@ -783,6 +793,7 @@ class CommonModel(BaseModel):
     @model_serializer(mode="wrap")
     def serialize_model(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo):
         """Serializes the model writing the secrets in their respective secrets."""
+        _encountered_secrets: set[tuple[CachedSecret, str]] = set()
         if not info.context or not isinstance(info.context.get("repository"), AbstractRepository):
             logger.debug("No secret parsing serialization as we're lacking context here.")
             return handler(self)
@@ -797,8 +808,6 @@ class CommonModel(BaseModel):
                 secret_group = field_info.metadata[0]
                 if not secret_group:
                     raise SecretsUnavailableError(field)
-                if (value := getattr(self, field)) is None:
-                    continue
                 aliased_field = field_info.serialization_alias or field
                 secret_field = repository.secret_field(secret_group, aliased_field).replace(
                     "-", "_"
@@ -807,24 +816,41 @@ class CommonModel(BaseModel):
                 secret = repository.get_secret(
                     secret_group, secret_uri=secret_uri, short_uuid=short_uuid
                 )
+
+                value = getattr(self, field)
+
                 actual_value = (
                     value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
                 )
-                if not isinstance(actual_value, str):
-                    actual_value = json.dumps(actual_value)
 
-                if secret:
-                    content = secret.get_content()
-                    full_content = copy.deepcopy(content)
-                    full_content.update({aliased_field: actual_value})
-                    secret.set_content(full_content)
+                if secret is None:
+                    if actual_value:
+                        secret = repository.add_secret(
+                            aliased_field, actual_value, secret_group, short_uuid
+                        )
+                        if not secret or not secret.meta:
+                            raise SecretError("No secret to send back")
+                        setattr(self, secret_field, secret.meta.id)
+                    continue
+
+                content = secret.get_content()
+                full_content = copy.deepcopy(content)
+
+                if actual_value is None:
+                    full_content.pop(field, None)
+                    _encountered_secrets.add((secret, secret_field))
                 else:
-                    secret = repository.add_secret(
-                        aliased_field, actual_value, secret_group, short_uuid
-                    )
-                    if not secret or not secret.meta:
-                        raise SecretError("No secret to send back")
-                    setattr(self, secret_field, secret.meta.id)
+                    if not isinstance(actual_value, str):
+                        actual_value = json.dumps(actual_value)
+                    full_content.update({aliased_field: actual_value})
+                secret.set_content(full_content)
+
+        # Delete all empty secrets and clean up their fields.
+        for secret, secret_field in _encountered_secrets:
+            if not secret.get_content():
+                # Setting a field to '' deletes it
+                setattr(self, secret_field, "")
+                repository.delete_secret(secret.label)
 
         return handler(self)
 
@@ -1044,7 +1070,7 @@ class AbstractRepository(ABC):
         ...
 
     def write_secret_field(
-        self, field: str, value: Any, group: SecretGroup, uri_to_databag: bool = False
+        self, field: str, value: Any, group: SecretGroup
     ) -> CachedSecret | None:
         """Writes a secret field."""
         ...
@@ -1058,6 +1084,11 @@ class AbstractRepository(ABC):
         short_uuid: str | None = None,
     ) -> CachedSecret | None:
         """Gets a value for a field stored in a secret group."""
+        ...
+
+    @abstractmethod
+    def delete_secret(self, label: str):
+        """Deletes a secret by its label."""
         ...
 
     @abstractmethod
@@ -1389,6 +1420,11 @@ class OpsRepository(AbstractRepository):
             raise SecretError("Secret added but is missing Secret ID")
 
         return secret
+
+    @override
+    @ensure_leader_for_app
+    def delete_secret(self, label: str) -> None:
+        self.secrets.remove(label)
 
 
 @final
@@ -1841,13 +1877,11 @@ class ResourceProvidesEvents(CharmEvents, Generic[TRequirerCommonModel]):
     This class defines the events that the database can emit.
     """
 
-    bulk_resources_requested = EventSource(BulkResourcesRequestedEvent[TRequirerCommonModel])
-    resource_requested = EventSource(ResourceRequestedEvent[TRequirerCommonModel])
-    resource_entity_requested = EventSource(ResourceEntityRequestedEvent[TRequirerCommonModel])
-    resource_entity_permissions_changed = EventSource(
-        ResourceEntityPermissionsChangedEvent[TRequirerCommonModel]
-    )
-    mtls_cert_updated = EventSource(MtlsCertUpdatedEvent[TRequirerCommonModel])
+    bulk_resources_requested = EventSource(BulkResourcesRequestedEvent)
+    resource_requested = EventSource(ResourceRequestedEvent)
+    resource_entity_requested = EventSource(ResourceEntityRequestedEvent)
+    resource_entity_permissions_changed = EventSource(ResourceEntityPermissionsChangedEvent)
+    mtls_cert_updated = EventSource(MtlsCertUpdatedEvent)
 
 
 class ResourceRequirerEvent(EventBase, Generic[TResourceProviderModel]):
@@ -1934,12 +1968,10 @@ class ResourceRequiresEvents(CharmEvents, Generic[TResourceProviderModel]):
     This class defines the events that the database can emit.
     """
 
-    resource_created = EventSource(ResourceCreatedEvent[TResourceProviderModel])
-    resource_entity_created = EventSource(ResourceEntityCreatedEvent[TResourceProviderModel])
-    endpoints_changed = EventSource(ResourceEndpointsChangedEvent[TResourceProviderModel])
-    read_only_endpoints_changed = EventSource(
-        ResourceReadOnlyEndpointsChangedEvent[TResourceProviderModel]
-    )
+    resource_created = EventSource(ResourceCreatedEvent)
+    resource_entity_created = EventSource(ResourceEntityCreatedEvent)
+    endpoints_changed = EventSource(ResourceEndpointsChangedEvent)
+    read_only_endpoints_changed = EventSource(ResourceReadOnlyEndpointsChangedEvent)
 
 
 ##############################################################################
@@ -2027,7 +2059,6 @@ class EventHandlers(Object):
         new_data = request.model_dump(
             mode="json",
             exclude={"data"},
-            context={"repository": repository},
             exclude_none=True,
             exclude_defaults=True,
         )
@@ -2154,7 +2185,7 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         This allows for the developer to process the diff and store it themselves
         """
         for request in request_model.requests:
-            # Compute the diff withtout storing it so we can validate the diffs.
+            # Compute the diff without storing it so we can validate the diffs.
             _diff = self.compute_diff(event.relation, request, repository, store=False)
             self._validate_diff(event, _diff)
 
@@ -2434,6 +2465,54 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
             for request in model.requests
             if request.request_id
         )
+
+    @staticmethod
+    def _is_pg_plugin_enabled(plugin: str, connection_string: str) -> bool:
+        # Actual checking method.
+        # No need to check for psycopg here, it's been checked before.
+        if not psycopg:
+            return False
+
+        try:
+            with psycopg.connect(connection_string) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT TRUE FROM pg_extension WHERE extname=%s::text;", (plugin,)
+                    )
+                    return cursor.fetchone() is not None
+        except psycopg.Error as e:
+            logger.exception(
+                f"failed to check whether {plugin} plugin is enabled in the database: %s",
+                str(e),
+            )
+            return False
+
+    def is_postgresql_plugin_enabled(self, plugin: str, relation_id: int = 0) -> bool:
+        """Returns whether a plugin is enabled in the database.
+
+        Args:
+            plugin: name of the plugin to check.
+            relation_id: Optional index to check the database (default: 0 - first relation).
+        """
+        if not psycopg:
+            return False
+
+        # Can't check a non existing relation.
+        if len(self.relations) <= relation_id:
+            return False
+
+        relation_id = self.relations[relation_id].id
+        model = self.interface.build_model(relation_id=relation_id)
+        for request in model.requests:
+            if request.endpoints and request.username and request.password:
+                host = request.endpoints.split(":")[0]
+                username = request.username.get_secret_value()
+                password = request.password.get_secret_value()
+
+                connection_string = f"host='{host}' dbname='{request.resource}' user='{username}' password='{password}'"
+                return self._is_pg_plugin_enabled(plugin, connection_string)
+        logger.info("No valid request to use to check for plugin.")
+        return False
 
     ##############################################################################
     # Helpers for aliases

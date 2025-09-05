@@ -1,0 +1,140 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+change-admin-password:
+  description: Change the admin password to a new, generated value
+
+set-secret:
+  description: Change the value of a particular secret
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    field:
+      type: string
+      description: The mapping name, i.e. what databag field ('secret-<mapping>') is to be changed
+
+get-relation-field:
+  description: Set fields from the relation
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
+
+get-relation-self-side-field:
+  description: Set fields from the relation
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
+
+set-relation-field:
+  description: Set fields from the relation
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
+    value:
+      type: string
+      description: Value of the field to set
+
+delete-relation-field:
+  description: Delete fields from the relation
+  params:
+    relation_id:
+      type: integer
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
+
+get-peer-relation-field:
+  description: Get fields from the second-database relation
+  params:
+    component:
+      type: string
+      description: app/unit
+    field:
+      type: string
+      description: Relation field
+
+set-peer-relation-field:
+  description: Set fields from the second-database relation
+  params:
+    component:
+      type: string
+      description: app/unit
+    field:
+      type: string
+      description: Relation field
+    value:
+      type: string
+      description: Value of the field to set
+
+set-peer-relation-field-multiple:
+  description: Set fields from the second-database relation multiple times
+  params:
+    component:
+      type: string
+      description: app/unit
+    field:
+      type: string
+      description: Relation field
+    value:
+      type: string
+      description: Value of the field to set
+    count:
+      type: integer
+      description: Number of iterations
+      default: 3
+
+set-peer-secret:
+  description: Set fields from the second-database relation
+  params:
+    component:
+      type: string
+      description: app/unit
+    field:
+      type: string
+      description: Relation field
+    value:
+      type: string
+      description: Value of the field to set
+    group:
+      type: string
+      default: ''
+
+delete-peer-relation-field:
+  description: Delete fields from the sedond-database relation
+  params:
+    component:
+      type: string
+      description: app/unit
+    field:
+      type: string
+      description: Relation field
+
+delete-peer-secret:
+  description: Delete Peer secret
+  params:
+    component:
+      type: string
+      description: app/unit
+    group:
+      type: string
+      default: ''
+
+get-other-peer-relation-field:
+  description: Get fields from the second-database relation
+  params:
+    field:
+      type: string
+      description: Relation field

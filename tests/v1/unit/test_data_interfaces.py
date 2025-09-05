@@ -249,12 +249,7 @@ class DataProvidesBaseTests(ABC):
         # Use a variable to easily update the relation changed event data during the test.
 
         data_model = ResourceProviderModel.model_validate(
-            {
-                "resource": "blah",
-                "request-id": "",
-                "username": "test-username",
-                "password": "test-password",
-            }
+            {"resource": "blah", "request-id": "", "secret-user": "secret://deabeef"}
         )
         # Test with new data added to the relation databag.
         result = self.harness.charm.provider.compute_diff(relation, request=data_model, store=True)
@@ -1056,12 +1051,7 @@ class DataRequirerBaseTests(ABC):
         relation = self.harness.model.get_relation(self.relation_name, rel_id)
 
         data_model = ResourceProviderModel.model_validate(
-            {
-                "resource": "blah",
-                "request-id": "",
-                "username": "test-username",
-                "password": "test-password",
-            }
+            {"resource": "blah", "request-id": "", "secret-user": "secret://deadbeef"}
         )
 
         # Test with new data added to the relation databag.

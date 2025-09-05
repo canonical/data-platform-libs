@@ -1,0 +1,12 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: client
+description: |
+  Data platform libs client charm.
+summary: |
+  Data platform libs database meant to be used
+  only for testing of the libs in this repository.
+
+requires:
+  backward-database:
+    interface: database_client
