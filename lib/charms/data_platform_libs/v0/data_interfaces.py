@@ -5056,7 +5056,7 @@ class IndexEntityCreatedEvent(EntityRequiresEvent, OpenSearchRequiresEvent):
     """Event emitted when a new index is created for use on this relation."""
 
 
-class OpenSearchRequiresEvents(CharmEvents):
+class OpenSearchRequiresEvents(RequirerCharmEvents):
     """OpenSearch events.
 
     This class defines the events that the opensearch requirer can emit.
@@ -5076,8 +5076,10 @@ class OpenSearchProvidesData(ProviderData):
 
     RESOURCE_FIELD = "index"
 
-    def __init__(self, model: Model, relation_name: str) -> None:
-        super().__init__(model, relation_name)
+    def __init__(
+        self, model: Model, relation_name: str, status_schema_path: OptionalPathLike = None
+    ) -> None:
+        super().__init__(model, relation_name, status_schema_path=status_schema_path)
 
     def set_index(self, relation_id: int, index: str) -> None:
         """Set the index in the application relation databag.
@@ -5175,8 +5177,12 @@ class OpenSearchProvidesEventHandlers(ProviderEventHandlers):
 class OpenSearchProvides(OpenSearchProvidesData, OpenSearchProvidesEventHandlers):
     """Provider-side of the OpenSearch relation."""
 
-    def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        OpenSearchProvidesData.__init__(self, charm.model, relation_name)
+    def __init__(
+        self, charm: CharmBase, relation_name: str, status_schema_path: OptionalPathLike = None
+    ) -> None:
+        OpenSearchProvidesData.__init__(
+            self, charm.model, relation_name, status_schema_path=status_schema_path
+        )
         OpenSearchProvidesEventHandlers.__init__(self, charm, self)
 
 
@@ -5269,6 +5275,8 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
 
         This event triggers individual custom events depending on the changing relation.
         """
+        super()._on_relation_changed_event(event)
+
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
@@ -5412,7 +5420,7 @@ class EtcdReadyEvent(AuthenticationEvent, DatabaseRequiresEvent):
     """Event emitted when the etcd relation is ready to be consumed."""
 
 
-class EtcdRequirerEvents(CharmEvents):
+class EtcdRequirerEvents(RequirerCharmEvents):
     """Etcd events.
 
     This class defines the events that the etcd requirer can emit.
@@ -5430,8 +5438,10 @@ class EtcdProviderData(ProviderData):
 
     RESOURCE_FIELD = "prefix"
 
-    def __init__(self, model: Model, relation_name: str) -> None:
-        super().__init__(model, relation_name)
+    def __init__(
+        self, model: Model, relation_name: str, status_schema_path: OptionalPathLike = None
+    ) -> None:
+        super().__init__(model, relation_name, status_schema_path=status_schema_path)
 
     def set_uris(self, relation_id: int, uris: str) -> None:
         """Set the database connection URIs in the application relation databag.
@@ -5528,8 +5538,12 @@ class EtcdProviderEventHandlers(ProviderEventHandlers):
 class EtcdProvides(EtcdProviderData, EtcdProviderEventHandlers):
     """Provider-side of the Etcd relation."""
 
-    def __init__(self, charm: CharmBase, relation_name: str) -> None:
-        EtcdProviderData.__init__(self, charm.model, relation_name)
+    def __init__(
+        self, charm: CharmBase, relation_name: str, status_schema_path: OptionalPathLike = None
+    ) -> None:
+        EtcdProviderData.__init__(
+            self, charm.model, relation_name, status_schema_path=status_schema_path
+        )
         EtcdProviderEventHandlers.__init__(self, charm, self)
         if not self.secrets_enabled:
             raise SecretsUnavailableError("Secrets unavailable on current Juju version")
@@ -5603,6 +5617,8 @@ class EtcdRequirerEventHandlers(RequirerEventHandlers):
 
         This event triggers individual custom events depending on the changing relation.
         """
+        super()._on_relation_changed_event(event)
+
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
         # Register all new secrets with their labels
