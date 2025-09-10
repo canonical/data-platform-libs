@@ -35,3 +35,5 @@ requires:
     interface: connect_client
   connect-sink:
     interface: connect_client
+  database-with-status:
+    interface: database_client

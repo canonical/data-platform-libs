@@ -53,6 +53,13 @@ if DATA_INTERFACES_VERSION > 52:
     )
 
 
+if DATA_INTERFACES_VERSION > 54:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        StatusRaisedEvent,
+        StatusResolvedEvent,
+    )
+
+
 logger = logging.getLogger(__name__)
 
 # Extra roles that this application needs when interacting with the database.
@@ -280,6 +287,21 @@ class ApplicationCharm(CharmBase):
                 self._on_opensearch_entity_created,
             )
 
+        # Status/Error Propagation
+        if DATA_INTERFACES_VERSION > 54:
+            db = f"{self.app.name.replace('-', '_')}"
+            self.requirer_with_status = DatabaseRequires(
+                charm=self,
+                relation_name="database-with-status",
+                database_name=db,
+            )
+            self.framework.observe(
+                self.requirer_with_status.on.status_raised, self._on_status_raised
+            )
+            self.framework.observe(
+                self.requirer_with_status.on.status_resolved, self._on_status_resolved
+            )
+
         # actions
 
         self.framework.observe(self.on.reset_unit_status_action, self._on_reset_unit_status)
@@ -493,6 +515,21 @@ class ApplicationCharm(CharmBase):
         relation = self.model.get_relation("kafka-split-pattern-client")
         self.kafka_requirer_interface.set_mtls_cert(relation.id, cert)
         event.set_results({"mtls-cert": cert})
+
+    # Status/Error Propagation
+    if DATA_INTERFACES_VERSION > 54:
+
+        def _on_status_raised(self, event: StatusRaisedEvent):
+            logger.info(f"Status raised: {event.status}")
+            self.unit.status = ActiveStatus(
+                f"Active Statuses: {[s.code for s in event.active_statuses]}"
+            )
+
+        def _on_status_resolved(self, event: StatusResolvedEvent):
+            logger.info(f"Status resolved: {event.status}")
+            self.unit.status = ActiveStatus(
+                f"Active Statuses: {[s.code for s in event.active_statuses]}"
+            )
 
 
 if __name__ == "__main__":
