@@ -716,17 +716,17 @@ class RelationStatus:
     resolution: str
 
     @property
-    def informational(self) -> bool:
+    def is_informational(self) -> bool:
         """Is this an informational status?"""
         return self.code // 1000 == 1
 
     @property
-    def transitory(self) -> bool:
+    def is_transitory(self) -> bool:
         """Is this a transitory status?"""
         return self.code // 1000 == 4
 
     @property
-    def fatal(self) -> bool:
+    def is_fatal(self) -> bool:
         """Is this a fatal status, requiring removing the relation?"""
         return self.code // 1000 == 5
 
