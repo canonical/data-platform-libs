@@ -2,12 +2,11 @@
 # See LICENSE file for licensing details.
 
 type: charm
-# Whenever "bases" is changed:
-# - Update tests/integration/conftest.py::pytest_configure()
-# - Update .github/workflow/ci.yaml integration-test matrix
+base: ubuntu@22.04
 platforms:
-  ubuntu@22.04:amd64:
-  ubuntu@24.04:amd64:
+  amd64:
+    build-on: [amd64]
+    build-for: [amd64]
 
 # Files implicitly created by charmcraft without a part:
 # - dispatch (https://github.com/canonical/charmcraft/pull/1898)
@@ -59,14 +58,7 @@ parts:
       - libssl-dev  # Needed to build Python dependencies with Rust from source
       - pkg-config  # Needed to build Python dependencies with Rust from source
     override-build: |
-      # Workaround for https://github.com/canonical/charmcraft/issues/2068
-      # rustup used to install rustc and cargo, which are needed to build Python dependencies with Rust from source
-      if [[ "$CRAFT_PLATFORM" == ubuntu@20.04:* || "$CRAFT_PLATFORM" == ubuntu@22.04:* ]]
-      then
-        snap install rustup --classic
-      else
-        apt-get install rustup -y
-      fi
+      snap install rustup --classic
 
       # If Ubuntu version < 24.04, rustup was installed from snap instead of from the Ubuntu
       # archive—which means the rustup version could be updated at any time. Print rustup version

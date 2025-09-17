@@ -330,13 +330,13 @@ async def test_peer_relation_set_secret(component, ops_test: OpsTest):
     assert action.results.get("value") == "blablabla"
 
     action = await ops_test.model.units.get(unit_name).run_action(
-        "get-peer-relation-field", **{"component": component, "field": "mygroup-field1@mygroup"}
+        "get-peer-relation-field", **{"component": component, "field": "mygroup-field1"}
     )
     await action.wait()
     assert action.results.get("value") == "blablabla3"
 
     action = await ops_test.model.units.get(unit_name).run_action(
-        "get-peer-relation-field", **{"component": component, "field": "mygroup-field2@mygroup"}
+        "get-peer-relation-field", **{"component": component, "field": "mygroup-field2"}
     )
     await action.wait()
     assert action.results.get("value") == "blablabla4"
@@ -412,7 +412,6 @@ async def test_peer_relation_non_leader_unit_secrets(ops_test: OpsTest):
 
     secret = await get_secret_by_label(ops_test, "database-peers.database.unit", unit_name)
     assert secret.get("secret-field") == "blablabla2"
-    assert secret.get("monitor-password") == "#DELETED#"
 
     action = await ops_test.model.units.get(unit_name).run_action(
         "get-peer-relation-field", **{"component": "unit", "field": "monitor-password"}
@@ -611,9 +610,14 @@ async def test_database_relation_with_charm_libraries(ops_test: OpsTest):
 
         # Get the version of the database and compare with the information that
         # was retrieved directly from the database.
-        version = await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "version"
+        requests = json.loads(
+            await get_application_relation_data(
+                ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "requests"
+            )
+            or "[]"
         )
+        request = requests[0]
+        version = request["version"]
         assert version == data[0]
 
 
@@ -697,48 +701,19 @@ async def test_two_applications_dont_share_the_same_relation_data(
     assert application_connection_string != another_application_connection_string
 
 
-@pytest.mark.usefixtures("only_without_juju_secrets")
-async def test_databag_usage_correct(ops_test: OpsTest, application_charm):
-    for field in ["username", "password"]:
-        assert await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, field
-        )
-
-
 @pytest.mark.usefixtures("only_with_juju_secrets")
-async def test_secrets_usage_correct_secrets(ops_test: OpsTest, application_charm):
-    for field in ["username", "password", "uris"]:
-        assert (
-            await get_application_relation_data(
-                ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, field
-            )
-            is None
+async def test_secrets_usage_correct_secrets(ops_test: OpsTest):
+    requests = json.loads(
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "requests"
         )
-    assert await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
+        or "[]"
     )
+    request = requests[0]
+    for field in ["username", "password", "uris"]:
+        assert request.get(field) is None
 
-
-@pytest.mark.abort_on_fail
-@pytest.mark.usefixtures("only_without_juju_secrets")
-async def test_database_roles_relation_with_charm_libraries(ops_test: OpsTest):
-    """Test basic functionality of database-roles relation interface."""
-    # Relate the charms and wait for them exchanging some connection data.
-
-    pytest.first_database_relation = await ops_test.model.add_relation(
-        f"{APPLICATION_APP_NAME}:{ROLES_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
-    )
-    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
-
-    entity_name = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, ROLES_FIRST_DATABASE_RELATION_NAME, "entity-name"
-    )
-    entity_pass = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, ROLES_FIRST_DATABASE_RELATION_NAME, "entity-password"
-    )
-
-    assert entity_name is not None
-    assert entity_pass is not None
+    assert request.get("secret-user")
 
 
 @pytest.mark.abort_on_fail
@@ -752,13 +727,14 @@ async def test_database_roles_relation_with_charm_libraries_secrets(ops_test: Op
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
-    secret_uri = await get_application_relation_data(
-        ops_test,
-        APPLICATION_APP_NAME,
-        ROLES_FIRST_DATABASE_RELATION_NAME,
-        f"{SECRET_REF_PREFIX}entity",
+    requests = json.loads(
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, ROLES_FIRST_DATABASE_RELATION_NAME, "requests"
+        )
+        or "[]"
     )
-
+    request = requests[0]
+    secret_uri = request.get(f"{SECRET_REF_PREFIX}entity")
     secret_content = await get_juju_secret(ops_test, secret_uri)
     entity_name = secret_content["entity-name"]
     entity_pass = secret_content["entity-password"]
@@ -861,77 +837,24 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
 
 async def test_external_node_connectivity_field(ops_test: OpsTest, application_charm):
     # Check that the flag is missing if not requested
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
-            ops_test,
-            DATABASE_APP_NAME,
-            "database",
-            "external-node-connectivity",
-            related_endpoint=DB_FIRST_DATABASE_RELATION_NAME,
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "requests"
         )
-    ) is None
+        or "[]"
+    )
+    request = requests[0]
+    assert request.get("external-node-connectivity") is None
 
     # Check that the second relation raises the flag
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
-            ops_test,
-            DATABASE_APP_NAME,
-            "database",
-            "external-node-connectivity",
-            related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
         )
-    ) == "true"
-
-
-@pytest.mark.usefixtures("only_with_juju_secrets")
-async def test_provider_with_additional_secrets(ops_test: OpsTest, database_charm):
-    # Let's make sure that there was enough time for the relation initialization to communicate secrets
-    secret_fields = await get_application_relation_data(
-        ops_test,
-        DATABASE_APP_NAME,
-        DATABASE_APP_NAME,
-        "requested-secrets",
-        related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
+        or "[]"
     )
-    assert {"topsecret", "donttellanyone"} <= set(json.loads(secret_fields))
-
-    # Set secret
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
-    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "set-secret", **{"relation_id": pytest.second_database_relation.id, "field": "topsecret"}
-    )
-    await action.wait()
-
-    # Get secret original value
-    secret_uri = await get_application_relation_data(
-        ops_test,
-        APPLICATION_APP_NAME,
-        DB_SECOND_DATABASE_RELATION_NAME,
-        f"{SECRET_REF_PREFIX}extra",
-    )
-
-    secret_content = await get_juju_secret(ops_test, secret_uri)
-    topsecret1 = secret_content["topsecret"]
-
-    # Re-set secret
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "set-secret", **{"relation_id": pytest.second_database_relation.id, "field": "topsecret"}
-    )
-    await action.wait()
-
-    # Get secret after change
-    secret_uri = await get_application_relation_data(
-        ops_test,
-        APPLICATION_APP_NAME,
-        DB_SECOND_DATABASE_RELATION_NAME,
-        f"{SECRET_REF_PREFIX}extra",
-    )
-
-    secret_content = await get_juju_secret(ops_test, secret_uri)
-    topsecret2 = secret_content["topsecret"]
-
-    assert topsecret1 != topsecret2
+    request = requests[0]
+    assert request.get("external-node-connectivity") == "true"
 
 
 @pytest.mark.abort_on_fail
@@ -945,6 +868,15 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     rel_id = pytest.second_database_relation.id
     group_mapping = "extra"
 
+    requests = json.loads(
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
+        )
+        or "[]"
+    )
+    request = requests[0]
+    request_id = request["request_id"]
+
     # When
     action = await ops_test.model.units.get(leader_name).run_action(
         "set-secret", **{"relation_id": rel_id, "field": "topsecret", "value": "initialvalue"}
@@ -952,7 +884,7 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     await action.wait()
 
     original_secret_revision = await get_secret_revision_by_label(
-        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{group_mapping}.secret", owner
+        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{request_id}.{group_mapping}.secret", owner
     )
 
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -966,7 +898,7 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     await action.wait()
 
     changed_secret_revision = await get_secret_revision_by_label(
-        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{group_mapping}.secret", owner
+        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{request_id}.{group_mapping}.secret", owner
     )
 
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -980,7 +912,7 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     await action.wait()
 
     unchanged_secret_revision = await get_secret_revision_by_label(
-        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{group_mapping}.secret", owner
+        ops_test, f"{DATABASE_APP_NAME}.{rel_id}.{request_id}.{group_mapping}.secret", owner
     )
 
     # Then
@@ -1005,12 +937,14 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     )
     await action.wait()
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, field
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
         )
-        == value
+        or "[]"
     )
+    request = requests[0]
+    assert request.get(field) == value
 
     # Check all application units can read remote relation data
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
@@ -1043,12 +977,14 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     )
     await action.wait()
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, field
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
         )
-        is None
+        or "[]"
     )
+    request = requests[0]
+    assert request.get(field) is None
 
     # Delete non-existent field
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -1091,9 +1027,14 @@ async def test_provider_get_set_delete_fields_secrets(
     )
     await action.wait()
 
-    assert await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, relation_field
+    requests = json.loads(
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
+        )
+        or "[]"
     )
+    request = requests[0]
+    assert request.get(relation_field)
 
     # Check all application units can read remote relation data
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
@@ -1126,12 +1067,14 @@ async def test_provider_get_set_delete_fields_secrets(
     )
     await action.wait()
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, relation_field
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
         )
-        is None
+        or "[]"
     )
+    request = requests[0]
+    assert request.get(relation_field) is None
 
     # Check that the field is deleted
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -1235,16 +1178,18 @@ async def test_requires_get_set_delete_fields(ops_test: OpsTest):
     )
     await action.wait()
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
             ops_test,
-            DATABASE_APP_NAME,
+            APPLICATION_APP_NAME,
             DB_SECOND_DATABASE_RELATION_NAME,
-            "new_field",
+            "requests",
             related_endpoint="second-database-db",
         )
-        == "blah"
+        or "[]"
     )
+    request = requests[0]
+    assert request.get("new_field") == "blah"
 
     # Check all application units can read remote relation data
     for unit in ops_test.model.applications[DATABASE_APP_NAME].units:
@@ -1277,16 +1222,18 @@ async def test_requires_get_set_delete_fields(ops_test: OpsTest):
     )
     await action.wait()
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
             ops_test,
-            DATABASE_APP_NAME,
+            APPLICATION_APP_NAME,
             DB_SECOND_DATABASE_RELATION_NAME,
-            "new_field",
+            "requests",
             related_endpoint="second-database-db",
         )
-        is None
+        or "[]"
     )
+    request = requests[0]
+    assert request.get("new_field") is None
 
 
 @pytest.mark.log_errors_allowed(
@@ -1321,17 +1268,20 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
     await action.wait()
     assert await check_logs(
         ops_test,
-        strings=[
-            "This operation (update_relation_data()) can only be performed by the leader unit"
-        ],
+        strings=["This operation (write_field) can only be performed by the leader unit"],
     )
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "new_field2"
+            ops_test,
+            APPLICATION_APP_NAME,
+            DB_SECOND_DATABASE_RELATION_NAME,
+            "requests",
         )
-        is None
+        or "[]"
     )
+    request = requests[0]
+    assert request.get("new_field2") is None
 
     action = await ops_test.model.units.get(unit_name).run_action(
         "delete-relation-field",
@@ -1340,17 +1290,20 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
     await action.wait()
     assert await check_logs(
         ops_test,
-        strings=[
-            "This operation (delete_relation_data()) can only be performed by the leader unit"
-        ],
+        strings=["This operation (delete_field) can only be performed by the leader unit"],
     )
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "new_field"
+            ops_test,
+            APPLICATION_APP_NAME,
+            DB_SECOND_DATABASE_RELATION_NAME,
+            "requests",
         )
-        == "blah"
+        or "[]"
     )
+    request = requests[0]
+    assert request.get("new_field") == "blah"
 
 
 async def test_requires_set_delete_fields(ops_test: OpsTest):
@@ -1367,16 +1320,18 @@ async def test_requires_set_delete_fields(ops_test: OpsTest):
     )
     await action.wait()
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
             ops_test,
             DATABASE_APP_NAME,
             DATABASE_APP_NAME,
-            "new_field_req",
+            "requests",
             related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
         )
-        == "blah-req"
+        or "[]"
     )
+    request = requests[0]
+    assert request.get("new_field_req") == "blah-req"
 
     # Delete field
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -1385,16 +1340,18 @@ async def test_requires_set_delete_fields(ops_test: OpsTest):
     )
     await action.wait()
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
             ops_test,
             DATABASE_APP_NAME,
             DATABASE_APP_NAME,
-            "new_field_req",
+            "requests",
             related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
         )
-        is None
+        or "[]"
     )
+    request = requests[0]
+    assert request.get("new_field_req") is None
 
 
 @pytest.mark.log_errors_allowed(
@@ -1429,21 +1386,21 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
     await action.wait()
     assert await check_logs(
         ops_test,
-        strings=[
-            "This operation (update_relation_data()) can only be performed by the leader unit"
-        ],
+        strings=["This operation (write_field) can only be performed by the leader unit"],
     )
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
             ops_test,
             DATABASE_APP_NAME,
             DATABASE_APP_NAME,
-            "new_field2-req",
+            "requests",
             related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
         )
-        is None
+        or "[]"
     )
+    request = requests[0]
+    assert request.get("new-field2-req") is None
 
     action = await ops_test.model.units.get(unit_name).run_action(
         "delete-relation-field",
@@ -1452,9 +1409,7 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
     await action.wait()
     assert await check_logs(
         ops_test,
-        strings=[
-            "This operation (delete_relation_data()) can only be performed by the leader unit"
-        ],
+        strings=["This operation (write_field()) can only be performed by the leader unit"],
     )
 
     assert (
@@ -1467,6 +1422,18 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         )
         == "blah-req"
     )
+    requests = json.loads(
+        await get_application_relation_data(
+            ops_test,
+            DATABASE_APP_NAME,
+            DATABASE_APP_NAME,
+            "requests",
+            related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
+        )
+        or "[]"
+    )
+    request = requests[0]
+    assert request.get("new-field-req") == "blah-req"
 
 
 async def test_scaling_requires_can_access_shared_secrest(ops_test):

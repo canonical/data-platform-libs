@@ -43,6 +43,8 @@ BAD_URL = "http://badurl"
 class ExtendedResponseModel(ResourceProviderModel):
     topsecret: ExtraSecretStr = Field(default=None)
     donttellanyone: ExtraSecretStr = Field(default=None)
+    new_field_req: str | None = Field(default=None)
+    new_field2_req: str | None = Field(default=None)
 
 
 class ApplicationCharm(CharmBase):
@@ -53,7 +55,7 @@ class ApplicationCharm(CharmBase):
 
         # Default charm events.
         self.framework.observe(self.on.start, self._on_start)
-        # self.framework.observe(self.on.get_plugin_status_action, self._on_get_plugin_status)
+        self.framework.observe(self.on.get_plugin_status_action, self._on_get_plugin_status)
 
         # Events related to the first database that is requested
         # (these events are defined in the database requires charm library).
@@ -68,7 +70,7 @@ class ApplicationCharm(CharmBase):
         )
         self.first_database_roles = ResourceRequirerEventHandler(
             self,
-            "first_database-roles",
+            "first-database-roles",
             requests=[
                 RequirerCommonModel(
                     resource=database_name, entity_type="USER", extra_user_roles=EXTRA_USER_ROLES
@@ -258,10 +260,10 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(
             self.opensearch.on.resource_created, self._on_opensearch_index_created
         )
-        # TODO: investigate authentication updated.
-        # self.framework.observe(
-        #    self.opensearch.on.authentication_updated, self._on_opensearch_authentication_updated
-        # )
+
+        self.framework.observe(
+            self.opensearch.on.authentication_updated, self._on_opensearch_authentication_updated
+        )
 
         self.opensearch_roles = ResourceRequirerEventHandler(
             charm=self,
@@ -416,17 +418,17 @@ class ApplicationCharm(CharmBase):
         """Event triggered when the read/write endpoints of the database change."""
         logger.info(f"cluster2 endpoints have been changed to: {event.response.endpoints}")
 
-    # def _on_get_plugin_status(self, event: ActionEvent) -> None:
-    #    """Returns the PostgreSQL plugin status (enabled/disabled)."""
-    #    plugin = event.params.get("plugin")
-    #    if not plugin:
-    #        event.fail("Please provide a plugin name")
-    #        return
+    def _on_get_plugin_status(self, event: ActionEvent) -> None:
+        """Returns the PostgreSQL plugin status (enabled/disabled)."""
+        plugin = event.params.get("plugin")
+        if not plugin:
+            event.fail("Please provide a plugin name")
+            return
 
-    #    plugin_status = (
-    #        "enabled" if self.first_database.is_postgresql_plugin_enabled(plugin) else "disabled"
-    #    )
-    #    event.set_results({"plugin-status": plugin_status})
+        plugin_status = (
+            "enabled" if self.first_database.is_postgresql_plugin_enabled(plugin) else "disabled"
+        )
+        event.set_results({"plugin-status": plugin_status})
 
     def _on_kafka_bootstrap_server_changed(self, event: ResourceEndpointsChangedEvent):
         """Event triggered when a bootstrap server was changed for this application."""

@@ -18,9 +18,11 @@ from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 from pydantic import Field
+from pydantic.types import _SecretBase
 
 from charms.data_platform_libs.v1.data_interfaces import (
     DataContractV1,
+    ExtraSecretStr,
     OpsOtherPeerUnitRepository,
     OpsPeerRepositoryInterface,
     OpsPeerUnitRepositoryInterface,
@@ -42,10 +44,16 @@ MygroupSecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None
 
 class PeerAppModel(PeerModel):
     field: MygroupSecretStr = Field(default=None)
+    not_a_secret: str | None = Field(default=None)
+    new_field: ExtraSecretStr = Field(default=None)
+    mygroup_field1: MygroupSecretStr = Field(default=None)
+    mygroup_field2: MygroupSecretStr = Field(default=None)
 
 
 class ExtendedResourceProviderModel(ResourceProviderModel):
     field: MygroupSecretStr = Field(default=None)
+    not_a_secret: str | None = Field(default=None)
+    new_field: ExtraSecretStr = Field(default=None)
 
 
 ExtendedDataContractV1 = DataContractV1[ExtendedResourceProviderModel]
@@ -161,6 +169,7 @@ class DatabaseCharm(CharmBase):
             repository = self.peer_relation_unit.repository(relation_bis.id)
             result = repository.get_secret_field(event.params["field"], event.params["group"])
 
+        result = result.get_secret_value() if issubclass(result.__class__, _SecretBase) else result
         event.set_results({event.params["field"]: result if result else ""})
 
     def _on_set_peer_secret(self, event: ActionEvent):
@@ -180,7 +189,9 @@ class DatabaseCharm(CharmBase):
             relation_bis = self.peer_relation_unit.relations[0]
             repository = self.peer_relation_unit.repository(relation_bis.id)
             repository.write_secret_field(
-                event.params["field"], event.params["value"], event.params["group"]
+                event.params["field"],
+                event.params["value"],
+                event.params["group"] or SecretGroup("extra"),
             )
 
     # Remove peer secrets
@@ -206,16 +217,15 @@ class DatabaseCharm(CharmBase):
 
         value = None
         if component == "app":
-            relation_bis = self.peer_relation_app.relations[0]
-            repository = self.peer_relation_app.repository(relation_bis.id)
-            value_new = repository.get_field(event.params["field"])
+            relation = self.peer_relation_app.relations[0]
+            model = self.peer_relation_app.build_model(relation.id)
+            value = getattr(model, event.params["field"].replace("-", "_"))
         else:
-            relation_bis = self.peer_relation_unit.relations[0]
-            repository = self.peer_relation_unit.repository(relation_bis.id)
-            value_new = repository.get_field(event.params["field"])
-        event.set_results(
-            {"value": value if value else "", "value-new": value_new if value_new else ""}
-        )
+            relation = self.peer_relation_unit.relations[0]
+            model = self.peer_relation_unit.build_model(relation.id)
+            value = getattr(model, event.params["field"].replace("-", "_"))
+        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
+        event.set_results({"value": value if value else ""})
 
 
 if __name__ == "__main__":

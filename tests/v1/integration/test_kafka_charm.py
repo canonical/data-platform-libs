@@ -81,10 +81,12 @@ async def test_kafka_relation_with_charm_libraries_secrets(ops_test: OpsTest):
     request = requests[0]
     secret_uri = request[f"{PROV_SECRET_PREFIX}user"]
     secret_data = await get_juju_secret(ops_test, secret_uri)
+    extra_secret_uri = request[f"{PROV_SECRET_PREFIX}extra"]
+    extra_secret_data = await get_juju_secret(ops_test, extra_secret_uri)
     username = secret_data["username"]
     password = secret_data["password"]
     bootstrap_server = request["endpoints"]
-    consumer_group_prefix = request["consumer-group-prefix"]
+    consumer_group_prefix = extra_secret_data["consumer-group-prefix"]
     topic = request["resource"]
 
     assert username == "admin"

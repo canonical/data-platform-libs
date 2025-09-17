@@ -21,7 +21,8 @@ from ops.charm import ActionEvent, CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
-from pydantic import Field, SecretStr, TypeAdapter
+from pydantic import Field, SecretStr
+from pydantic.types import _SecretBase
 
 from charms.data_platform_libs.v1.data_interfaces import (
     DataContractV1,
@@ -54,15 +55,23 @@ class PeerAppModel(PeerModel):
     secret_field: ExtraSecretStr
     mygroup_field1: MygroupSecretStr = Field(default=None)
     mygroup_field2: MygroupSecretStr = Field(default=None)
+    not_a_secret: str | None = Field(default=None)
 
 
 class PeerUnitModel(PeerModel):
     monitor_password: ExtraSecretStr
     secret_field: ExtraSecretStr
     my_unit_secret: ExtraSecretStr
+    not_a_secret: str | None = Field(default=None)
 
 
-DataContract = TypeAdapter(DataContractV1[ResourceProviderModel])
+class ExtendedResourceProviderModel(ResourceProviderModel):
+    topsecret: ExtraSecretStr = Field(default=None)
+    new_field: str | None = Field(default=None)
+    new_field2: str | None = Field(default=None)
+
+
+DataContract = DataContractV1[ExtendedResourceProviderModel]
 
 
 class DatabaseCharm(CharmBase):
@@ -145,9 +154,7 @@ class DatabaseCharm(CharmBase):
         for unit in self.peer_relation.units:
             if unit not in self._servers_data:
                 self._servers_data[unit] = OpsOtherPeerUnitRepositoryInterface(
-                    charm=self,
-                    relation_name=PEER,
-                    unit=unit,
+                    charm=self, relation_name=PEER, unit=unit, model=PeerUnitModel
                 )
         return self._servers_data
 
@@ -221,7 +228,7 @@ class DatabaseCharm(CharmBase):
         cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {resource} TO {username};")
         # Add the roles to the user.
         if extra_user_roles:
-            cursor.execute(f"ALTER USER {username} {' '.join(extra_user_roles)};")
+            cursor.execute(f"ALTER USER {username} {extra_user_roles};")
         # Get the database version.
         cursor.execute("SELECT version();")
         version = cursor.fetchone()[0]
@@ -280,11 +287,11 @@ class DatabaseCharm(CharmBase):
         if entity_type == "user":
             extra_roles = request.extra_user_roles
             cursor.execute(f"CREATE ROLE {rolename} WITH ENCRYPTED PASSWORD '{password}';")
-            cursor.execute(f"ALTER ROLE {rolename} {' '.join(extra_roles)};")
+            cursor.execute(f"ALTER ROLE {rolename} {extra_roles};")
         if entity_type == "group":
             extra_roles = request.extra_group_roles
             cursor.execute(f"CREATE ROLE {rolename};")
-            cursor.execute(f"ALTER ROLE {rolename} {' '.join(extra_roles)};")
+            cursor.execute(f"ALTER ROLE {rolename} {extra_roles};")
 
         # Share the credentials with the application.
         response = ResourceProviderModel(
@@ -307,32 +314,38 @@ class DatabaseCharm(CharmBase):
         """[second_database]: Get requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
         value = None
-        repository = self.database.interface.repository(relation.id, component=relation.app)
-
-        repository.get_field(event.params["field"])
+        model = self.database.interface.build_model(relation.id)
+        for request in model.requests:
+            value = getattr(request, event.params["field"].replace("-", "_"))
+        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_get_relation_self_side_field(self, event: ActionEvent):
         """[second_database]: Get requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
         value = None
-        repository = self.database.interface.repository(relation.id)
-
-        repository.get_field(event.params["field"])
+        model = self.database.interface.build_model(relation.id)
+        for request in model.requests:
+            value = getattr(request, event.params["field"].replace("-", "_"))
+        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_set_relation_field(self, event: ActionEvent):
         """Set requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
-        repository = self.database.interface.repository(relation.id)
-        repository.write_field(event.params["field"], event.params["value"])
+        model = self.database.interface.build_model(relation.id)
+        for request in model.requests:
+            setattr(request, event.params["field"].replace("-", "_"), event.params["value"])
+        self.database.interface.write_model(relation.id, model)
 
     def _on_delete_relation_field(self, event: ActionEvent):
         """Delete requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
-        repository = self.database.interface.repository(relation.id)
-        repository.delete_field(event.params["field"])
+        model = self.database.interface.build_model(relation.id)
+        for request in model.requests:
+            setattr(request, event.params["field"].replace("-", "_"), None)
         # Charms should be compatible with old vesrions, to simulatrams["field"])
+        self.database.interface.write_model(relation.id, model)
 
     def _new_rolename(self) -> str:
         """Generate a random rolename string.
@@ -362,11 +375,12 @@ class DatabaseCharm(CharmBase):
         if component == "app":
             relation = self._peer_relation_app.relations[0]
             model = self._peer_relation_app.build_model(relation.id)
-            value = getattr(model, event.params["field"])
+            value = getattr(model, event.params["field"].replace("-", "_"))
         else:
             relation = self._peer_relation_unit.relations[0]
             model = self._peer_relation_unit.build_model(relation.id)
-            value = getattr(model, event.params["field"])
+            value = getattr(model, event.params["field"].replace("-", "_"))
+        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_set_peer_relation_field(self, event: ActionEvent):
@@ -375,12 +389,12 @@ class DatabaseCharm(CharmBase):
         if component == "app":
             relation = self._peer_relation_app.relations[0]
             model = self._peer_relation_app.build_model(relation.id)
-            setattr(model, event.params["field"], event.params["value"])
+            setattr(model, event.params["field"].replace("-", "_"), event.params["value"])
             self._peer_relation_app.write_model(relation.id, model)
         else:
             relation = self._peer_relation_unit.relations[0]
             model = self._peer_relation_unit.build_model(relation.id)
-            setattr(model, event.params["field"], event.params["value"])
+            setattr(model, event.params["field"].replace("-", "_"), event.params["value"])
             self._peer_relation_unit.write_model(relation.id, model)
 
     def _on_set_peer_relation_field_multiple(self, event: ActionEvent):
@@ -423,12 +437,12 @@ class DatabaseCharm(CharmBase):
         if component == "app":
             relation = self._peer_relation_app.relations[0]
             model = self._peer_relation_app.build_model(relation.id)
-            setattr(model, event.params["field"], None)
+            setattr(model, event.params["field"].replace("-", "_"), None)
             self._peer_relation_app.write_model(relation.id, model)
         else:
             relation = self._peer_relation_unit.relations[0]
             model = self._peer_relation_unit.build_model(relation.id)
-            setattr(model, event.params["field"], None)
+            setattr(model, event.params["field"].replace("-", "_"), None)
             self._peer_relation_unit.write_model(relation.id, model)
 
     # Other Peer Data
@@ -440,9 +454,13 @@ class DatabaseCharm(CharmBase):
             event.fail("Missing relation")
             return
         for unit, interface in self.peer_units_data_interfaces.items():
-            value[unit.name.replace("/", "-")] = interface.repository(relation.id).get_field(
-                event.params["field"]
+            model = interface.build_model(relation.id)
+            value[unit.name.replace("/", "-")] = getattr(
+                model, event.params["field"].replace("-", "_")
             )
+        for key, item in value.items():
+            item = item.get_secret_value() if issubclass(item.__class__, _SecretBase) else item
+            value[key] = item
         event.set_results(value)
 
     # Remove peer secrets
