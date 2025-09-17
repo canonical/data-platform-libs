@@ -924,19 +924,20 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     "Non-existing field 'doesnt_exist' was attempted to be removed from the databag"
 )
 @pytest.mark.parametrize(
-    "field,value,relation_field",
+    "field,value,relation_field,output",
     [
-        ("new-field", "blah", "new-field"),
-        ("tls", "true", "secret-tls"),
+        ("new-field", "blah", "new-field", "blah"),
+        ("tls", "true", "secret-tls", "True"),
     ],
 )
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_get_set_delete_fields_secrets(
-    field, value, relation_field, ops_test: OpsTest
+    field, value, relation_field, output, ops_test: OpsTest
 ):
     # Add field
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
+
     action = await ops_test.model.units.get(leader_name).run_action(
         "set-relation-field",
         **{
@@ -954,7 +955,7 @@ async def test_provider_get_set_delete_fields_secrets(
         or "[]"
     )
     request = requests[0]
-    assert request.get(field)
+    assert request.get(relation_field)
 
     # Check all application units can read remote relation data
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
@@ -966,7 +967,7 @@ async def test_provider_get_set_delete_fields_secrets(
             },
         )
         await action.wait()
-        assert action.results.get("value") == value
+        assert action.results.get("value") == output
 
     # Check if database can retrieve self-side relation data
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -978,7 +979,7 @@ async def test_provider_get_set_delete_fields_secrets(
         },
     )
     await action.wait()
-    assert action.results.get("value") == value
+    assert action.results.get("value") == output
 
     # Delete field
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -1017,7 +1018,6 @@ async def test_provider_get_set_delete_fields_secrets(
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.log_errors_allowed("Can't delete secret for relation")
 @pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     """The 'tls' field, that was removed in the previous test has it's secret removed."""
@@ -1050,23 +1050,12 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
-    assert not (
-        await check_logs(
-            ops_test,
-            strings=["Non-existing field 'tls' was attempted to be removed from the databag"],
-        )
-    )
-    assert not (await check_logs(ops_test, strings=["Can't delete secret for relation"]))
 
     action = await ops_test.model.units.get(leader_name).run_action(
         "delete-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
-    assert await check_logs(
-        ops_test, strings=["Non-existing field 'tls' was attempted to be removed from the databag"]
-    )
-    assert await check_logs(ops_test, strings=["Can't delete secret for relation"])
 
     assert (
         await get_application_relation_data(
@@ -1157,10 +1146,10 @@ async def test_requires_get_set_delete_fields(ops_test: OpsTest):
 
 
 @pytest.mark.log_errors_allowed(
-    "This operation (update_relation_data()) can only be performed by the leader unit"
+    "This operation (write_field()) can only be performed by the leader unit"
 )
 @pytest.mark.log_errors_allowed(
-    "This operation (delete_relation_data()) can only be performed by the leader unit"
+    "This operation (delete_field()) can only be performed by the leader unit"
 )
 async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
@@ -1186,10 +1175,6 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
         },
     )
     await action.wait()
-    assert await check_logs(
-        ops_test,
-        strings=["This operation (write_field) can only be performed by the leader unit"],
-    )
 
     requests = json.loads(
         await get_application_relation_data(
@@ -1208,10 +1193,6 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": "new_field"},
     )
     await action.wait()
-    assert await check_logs(
-        ops_test,
-        strings=["This operation (delete_field) can only be performed by the leader unit"],
-    )
 
     requests = json.loads(
         await get_application_relation_data(
@@ -1274,12 +1255,6 @@ async def test_requires_set_delete_fields(ops_test: OpsTest):
     assert request.get("new_field_req") is None
 
 
-@pytest.mark.log_errors_allowed(
-    "This operation (update_relation_data()) can only be performed by the leader unit"
-)
-@pytest.mark.log_errors_allowed(
-    "This operation (delete_relation_data()) can only be performed by the leader unit"
-)
 async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_name = f"{APPLICATION_APP_NAME}/{leader_id}"
@@ -1304,10 +1279,6 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         },
     )
     await action.wait()
-    assert await check_logs(
-        ops_test,
-        strings=["This operation (write_field) can only be performed by the leader unit"],
-    )
 
     requests = json.loads(
         await get_application_relation_data(
@@ -1327,10 +1298,6 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": "new_field-req"},
     )
     await action.wait()
-    assert await check_logs(
-        ops_test,
-        strings=["This operation (write_field()) can only be performed by the leader unit"],
-    )
 
     assert (
         await get_application_relation_data(

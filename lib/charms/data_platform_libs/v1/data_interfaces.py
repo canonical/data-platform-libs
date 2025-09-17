@@ -800,7 +800,6 @@ class CommonModel(BaseModel):
     @model_serializer(mode="wrap")
     def serialize_model(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo):
         """Serializes the model writing the secrets in their respective secrets."""
-        _encountered_secrets: set[tuple[CachedSecret, str]] = set()
         if not info.context or not isinstance(info.context.get("repository"), AbstractRepository):
             logger.debug("No secret parsing serialization as we're lacking context here.")
             return handler(self)
@@ -847,17 +846,14 @@ class CommonModel(BaseModel):
 
                 if value is None:
                     full_content.pop(aliased_field, None)
-                    _encountered_secrets.add((secret, secret_field))
                 else:
                     full_content.update({aliased_field: actual_value})
                 secret.set_content(full_content)
 
-        # Delete all empty secrets and clean up their fields.
-        for secret, secret_field in _encountered_secrets:
-            if not secret.get_content():
-                # Setting a field to '' deletes it
-                setattr(self, secret_field, "")
-                repository.delete_secret(secret.label)
+                if not full_content:
+                    # Setting a field to '' deletes it
+                    setattr(self, secret_field, None)
+                    repository.delete_secret(secret.label)
 
         return handler(self)
 
