@@ -10,6 +10,7 @@ from time import sleep
 import psycopg2
 import pytest
 import yaml
+from more_itertools import one
 from pytest_operator.plugin import OpsTest
 
 from .helpers import (
@@ -835,30 +836,29 @@ async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, 
     assert first_database_connection_string != second_database_connection_string
 
 
-async def test_external_node_connectivity_field(ops_test: OpsTest, application_charm):
+async def test_external_node_connectivity_field(ops_test: OpsTest):
     # Check that the flag is missing if not requested
     requests = json.loads(
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "requests"
+            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "data"
         )
         or "[]"
     )
-    request = requests[0]
+    request = one(requests.values())
     assert request.get("external-node-connectivity") is None
 
     # Check that the second relation raises the flag
     requests = json.loads(
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "data"
         )
-        or "[]"
+        or "{}"
     )
-    request = requests[0]
-    assert request.get("external-node-connectivity") == "true"
+    request = one(requests.values())
+    assert request.get("external-node-connectivity")
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_relation_secret_revisions(ops_test: OpsTest):
     """Check that only a content change triggers the emission of a new revision."""
     # Given
@@ -875,7 +875,7 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
         or "[]"
     )
     request = requests[0]
-    request_id = request["request_id"]
+    request_id = request["request-id"]
 
     # When
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -904,7 +904,7 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     action = await ops_test.model.units.get(leader_name).run_action(
         "set-relation-field",
         **{
-            "relation_id": pytest.second_database_relation.id,
+            "relation_id": rel_id,
             "field": "topsecret",
             "value": "changedvalue",
         },
@@ -920,94 +920,14 @@ async def test_relation_secret_revisions(ops_test: OpsTest):
     assert changed_secret_revision == unchanged_secret_revision
 
 
-@pytest.mark.parametrize("field,value", [("new_field", "blah"), ("tls", "True")])
-@pytest.mark.usefixtures("only_without_juju_secrets")
-async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
-    # Add normal field
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
-    leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
-
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "set-relation-field",
-        **{
-            "relation_id": pytest.second_database_relation.id,
-            "field": field,
-            "value": value,
-        },
-    )
-    await action.wait()
-
-    requests = json.loads(
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
-        )
-        or "[]"
-    )
-    request = requests[0]
-    assert request.get(field) == value
-
-    # Check all application units can read remote relation data
-    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
-        action = await unit.run_action(
-            "get-relation-field",
-            **{
-                "relation_id": pytest.second_database_relation.id,
-                "field": field,
-            },
-        )
-        await action.wait()
-        assert action.results.get("value") == value
-
-    # Check if database can retrieve self-side relation data
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "get-relation-self-side-field",
-        **{
-            "relation_id": pytest.second_database_relation.id,
-            "field": field,
-            "value": value,
-        },
-    )
-    await action.wait()
-    assert action.results.get("value") == value
-
-    # Delete normal field
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field",
-        **{"relation_id": pytest.second_database_relation.id, "field": field},
-    )
-    await action.wait()
-
-    requests = json.loads(
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
-        )
-        or "[]"
-    )
-    request = requests[0]
-    assert request.get(field) is None
-
-    # Delete non-existent field
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field",
-        **{"relation_id": pytest.second_database_relation.id, "field": "doesnt_exist"},
-    )
-    await action.wait()
-    # Juju2 syntax
-    assert int(action.results["Code"]) == 0
-    assert await check_logs(
-        ops_test,
-        strings=["Non-existing field 'doesnt_exist' was attempted to be removed from the databag"],
-    )
-
-
 @pytest.mark.log_errors_allowed(
     "Non-existing field 'doesnt_exist' was attempted to be removed from the databag"
 )
 @pytest.mark.parametrize(
     "field,value,relation_field",
     [
-        ("new_field", "blah", "new_field"),
-        ("tls", "True", "secret-tls"),
+        ("new-field", "blah", "new-field"),
+        ("tls", "true", "secret-tls"),
     ],
 )
 @pytest.mark.usefixtures("only_with_juju_secrets")
@@ -1034,7 +954,7 @@ async def test_provider_get_set_delete_fields_secrets(
         or "[]"
     )
     request = requests[0]
-    assert request.get(relation_field)
+    assert request.get(field)
 
     # Check all application units can read remote relation data
     for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:

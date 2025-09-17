@@ -2625,7 +2625,7 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                 remote_unit = unit
                 break
 
-        response_model = self.interface.build_model(relation.id)
+        response_model = self.interface.build_model(relation.id, component=relation.app)
         if not short_uuid:
             return
         for _response in response_model.requests:

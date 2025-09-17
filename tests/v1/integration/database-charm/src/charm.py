@@ -170,14 +170,18 @@ class DatabaseCharm(CharmBase):
     def _on_set_secret_action(self, event: ActionEvent):
         """Change the admin password."""
         secret_field: str | None = event.params.get("field")
-        if not secret_field:
+        rel_id = event.params.get("relation_id")
+        if not secret_field or not rel_id:
             event.fail("Invalid empty field.")
             return
         password = event.params.get("value", self._new_password())
         for relation in self.database.interface.relations:
-            model = self.database.interface.build_model(relation.id, DataContract)
-            for request in model.requests:
-                setattr(request, secret_field, password)
+            if relation.id == rel_id:
+                break
+        model = self.database.interface.build_model(relation.id, DataContract)
+        for request in model.requests:
+            setattr(request, secret_field, password)
+        self.database.interface.write_model(relation.id, model)
 
     def _on_database_pebble_ready(self, event: WorkloadEvent) -> None:
         """Define and start the database using the Pebble API."""
@@ -314,7 +318,7 @@ class DatabaseCharm(CharmBase):
         """[second_database]: Get requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
         value = None
-        model = self.database.interface.build_model(relation.id)
+        model = self.database.interface.build_model(relation.id, DataContract)
         for request in model.requests:
             value = getattr(request, event.params["field"].replace("-", "_"))
         value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
@@ -324,7 +328,7 @@ class DatabaseCharm(CharmBase):
         """[second_database]: Get requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
         value = None
-        model = self.database.interface.build_model(relation.id)
+        model = self.database.interface.build_model(relation.id, DataContract)
         for request in model.requests:
             value = getattr(request, event.params["field"].replace("-", "_"))
         value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
@@ -333,7 +337,7 @@ class DatabaseCharm(CharmBase):
     def _on_set_relation_field(self, event: ActionEvent):
         """Set requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
-        model = self.database.interface.build_model(relation.id)
+        model = self.database.interface.build_model(relation.id, DataContract)
         for request in model.requests:
             setattr(request, event.params["field"].replace("-", "_"), event.params["value"])
         self.database.interface.write_model(relation.id, model)
@@ -341,7 +345,7 @@ class DatabaseCharm(CharmBase):
     def _on_delete_relation_field(self, event: ActionEvent):
         """Delete requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
-        model = self.database.interface.build_model(relation.id)
+        model = self.database.interface.build_model(relation.id, DataContract)
         for request in model.requests:
             setattr(request, event.params["field"].replace("-", "_"), None)
         # Charms should be compatible with old vesrions, to simulatrams["field"])
@@ -454,7 +458,7 @@ class DatabaseCharm(CharmBase):
             event.fail("Missing relation")
             return
         for unit, interface in self.peer_units_data_interfaces.items():
-            model = interface.build_model(relation.id)
+            model = interface.build_model(relation.id, DataContract)
             value[unit.name.replace("/", "-")] = getattr(
                 model, event.params["field"].replace("-", "_")
             )

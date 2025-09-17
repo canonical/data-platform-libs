@@ -16,6 +16,7 @@ from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 from pydantic import Field, SecretStr
+from pydantic.types import _SecretBase
 
 from charms.data_platform_libs.v1.data_interfaces import (
     ExtraSecretStr,
@@ -66,7 +67,7 @@ class ApplicationCharm(CharmBase):
             requests=[
                 RequirerCommonModel(resource=database_name, extra_user_roles=EXTRA_USER_ROLES)
             ],
-            response_model=ResourceProviderModel,
+            response_model=ExtendedResponseModel,
         )
         self.first_database_roles = ResourceRequirerEventHandler(
             self,
@@ -76,7 +77,7 @@ class ApplicationCharm(CharmBase):
                     resource=database_name, entity_type="USER", extra_user_roles=EXTRA_USER_ROLES
                 )
             ],
-            response_model=ResourceProviderModel,
+            response_model=ExtendedResponseModel,
         )
         self.framework.observe(
             self.first_database.on.resource_created, self._on_first_database_created
@@ -325,9 +326,11 @@ class ApplicationCharm(CharmBase):
     def _on_get_relation_field(self, event: ActionEvent):
         """Get requested relation field (OTHER side)."""
         source, relation = self._get_relation(event.params["relation_id"])
-        value = source.interface.repository(relation.id, relation.app).get_field(
-            event.params["field"]
-        )
+        value = None
+        model = source.interface.build_model(relation.id, component=relation.app)
+        for request in model.requests:
+            value = getattr(request, event.params["field"].replace("-", "_"))
+        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_get_relation_self_side_field(self, event: ActionEvent):
