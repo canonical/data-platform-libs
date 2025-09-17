@@ -1023,7 +1023,7 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     """The 'tls' field, that was removed in the previous test has it's secret removed."""
     # Add field
     field = "tls"
-    value = "True"
+    value = "true"
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
     action = await ops_test.model.units.get(leader_name).run_action(

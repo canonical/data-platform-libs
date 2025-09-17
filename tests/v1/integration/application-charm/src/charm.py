@@ -44,6 +44,7 @@ BAD_URL = "http://badurl"
 class ExtendedResponseModel(ResourceProviderModel):
     topsecret: ExtraSecretStr = Field(default=None)
     donttellanyone: ExtraSecretStr = Field(default=None)
+    new_field: str | None = Field(default=None)
     new_field_req: str | None = Field(default=None)
     new_field2_req: str | None = Field(default=None)
 
