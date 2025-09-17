@@ -458,7 +458,7 @@ class DatabaseCharm(CharmBase):
             event.fail("Missing relation")
             return
         for unit, interface in self.peer_units_data_interfaces.items():
-            model = interface.build_model(relation.id, DataContract)
+            model = interface.build_model(relation.id)
             value[unit.name.replace("/", "-")] = getattr(
                 model, event.params["field"].replace("-", "_")
             )
