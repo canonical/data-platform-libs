@@ -49,6 +49,10 @@ class ExtendedResponseModel(ResourceProviderModel):
     new_field2_req: str | None = Field(default=None)
 
 
+class ExtendedRequirerCommonModel(RequirerCommonModel):
+    new_field: str | None = Field(default=None)
+
+
 class ApplicationCharm(CharmBase):
     """Application charm that connects to database charms."""
 
@@ -100,7 +104,7 @@ class ApplicationCharm(CharmBase):
             charm=self,
             relation_name="second-database-db",
             requests=[
-                RequirerCommonModel(
+                ExtendedRequirerCommonModel(
                     resource=database_name,
                     extra_user_roles=EXTRA_USER_ROLES,
                     external_node_connectivity=True,
@@ -337,20 +341,34 @@ class ApplicationCharm(CharmBase):
     def _on_get_relation_self_side_field(self, event: ActionEvent):
         """Get requested relation field (OTHER side)."""
         source, relation = self._get_relation(event.params["relation_id"])
-        value = source.interface.repository(relation.id).get_field(event.params["field"])
+        value = None
+        model = source.interface.build_model(
+            relation.id, model=RequirerDataContractV1[ExtendedRequirerCommonModel]
+        )
+        for request in model.requests:
+            value = getattr(request, event.params["field"].replace("-", "_"))
+        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_set_relation_field(self, event: ActionEvent):
         """Set requested relation field on self-side (that's the only one writeable)."""
         source, relation = self._get_relation(event.params["relation_id"])
-        source.interface.repository(relation.id).write_field(
-            event.params["field"], event.params["value"]
+        model = source.interface.build_model(
+            relation.id, model=RequirerDataContractV1[ExtendedRequirerCommonModel]
         )
+        for request in model.requests:
+            setattr(request, event.params["field"].replace("-", "_"), event.params["value"])
+        source.interface.write_model(relation.id, model)
 
     def _on_delete_relation_field(self, event: ActionEvent):
         """Delete requested relation field on self-side (that's the only one writeable)."""
         source, relation = self._get_relation(event.params["relation_id"])
-        source.interface.repository(relation.id).delete_field(event.params["field"])
+        model = source.interface.build_model(
+            relation.id, model=RequirerDataContractV1[ExtendedRequirerCommonModel]
+        )
+        for request in model.requests:
+            setattr(request, event.params["field"].replace("-", "_"), None)
+        source.interface.write_model(relation.id, model)
 
     # First database events observers.
     def _on_first_database_created(self, event: ResourceCreatedEvent) -> None:

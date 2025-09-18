@@ -15,7 +15,6 @@ from pytest_operator.plugin import OpsTest
 
 from .helpers import (
     build_connection_string,
-    check_logs,
     get_application_relation_data,
     get_juju_secret,
     get_leader_id,
@@ -1018,7 +1017,6 @@ async def test_provider_get_set_delete_fields_secrets(
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.usefixtures("only_with_juju_secrets")
 async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     """The 'tls' field, that was removed in the previous test has it's secret removed."""
     # Add field
@@ -1037,12 +1035,14 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     await action.wait()
 
     # Get TLS secret pointer
-    secret_uri = await get_application_relation_data(
-        ops_test,
-        APPLICATION_APP_NAME,
-        DB_SECOND_DATABASE_RELATION_NAME,
-        f"{SECRET_REF_PREFIX}{field}",
+    requests = json.loads(
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
+        )
+        or "[]"
     )
+    request = requests[0]
+    secret_uri = request.get(f"{SECRET_REF_PREFIX}{field}")
 
     # Delete field
     action = await ops_test.model.units.get(leader_name).run_action(
@@ -1051,22 +1051,14 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     )
     await action.wait()
 
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field",
-        **{"relation_id": pytest.second_database_relation.id, "field": field},
-    )
-    await action.wait()
-
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
-            ops_test,
-            APPLICATION_APP_NAME,
-            DB_SECOND_DATABASE_RELATION_NAME,
-            f"{SECRET_REF_PREFIX}{field}",
+            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "requests"
         )
-        is None
+        or "[]"
     )
-
+    request = requests[0]
+    assert request.get(f"{SECRET_REF_PREFIX}{field}") is None
     secrets = await list_juju_secrets(ops_test)
     secret_xid = secret_uri.split("/")[-1]
     assert secret_xid not in secrets
@@ -1090,15 +1082,15 @@ async def test_requires_get_set_delete_fields(ops_test: OpsTest):
     requests = json.loads(
         await get_application_relation_data(
             ops_test,
-            APPLICATION_APP_NAME,
-            DB_SECOND_DATABASE_RELATION_NAME,
+            DATABASE_APP_NAME,
+            DATABASE_APP_NAME,
             "requests",
             related_endpoint="second-database-db",
         )
         or "[]"
     )
     request = requests[0]
-    assert request.get("new_field") == "blah"
+    assert request.get("new-field") == "blah"
 
     # Check all application units can read remote relation data
     for unit in ops_test.model.applications[DATABASE_APP_NAME].units:
@@ -1134,8 +1126,8 @@ async def test_requires_get_set_delete_fields(ops_test: OpsTest):
     requests = json.loads(
         await get_application_relation_data(
             ops_test,
-            APPLICATION_APP_NAME,
-            DB_SECOND_DATABASE_RELATION_NAME,
+            DATABASE_APP_NAME,
+            DATABASE_APP_NAME,
             "requests",
             related_endpoint="second-database-db",
         )
@@ -1146,10 +1138,7 @@ async def test_requires_get_set_delete_fields(ops_test: OpsTest):
 
 
 @pytest.mark.log_errors_allowed(
-    "This operation (write_field()) can only be performed by the leader unit"
-)
-@pytest.mark.log_errors_allowed(
-    "This operation (delete_field()) can only be performed by the leader unit"
+    "This operation (get_data) can only be performed by the leader unit"
 )
 async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
@@ -1204,9 +1193,10 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
         or "[]"
     )
     request = requests[0]
-    assert request.get("new_field") == "blah"
+    assert request.get("new-field") == "blah"
 
 
+@pytest.mark.abort_on_fail
 async def test_requires_set_delete_fields(ops_test: OpsTest):
     # Add field
     leader_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
@@ -1255,6 +1245,7 @@ async def test_requires_set_delete_fields(ops_test: OpsTest):
     assert request.get("new_field_req") is None
 
 
+@pytest.mark.abort_on_fail
 async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
     leader_name = f"{APPLICATION_APP_NAME}/{leader_id}"
@@ -1262,7 +1253,7 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         "set-relation-field",
         **{
             "relation_id": pytest.second_database_relation.id,
-            "field": "new_field-req",
+            "field": "new_field_req",
             "value": "blah-req",
         },
     )
@@ -1274,7 +1265,7 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         "set-relation-field",
         **{
             "relation_id": pytest.second_database_relation.id,
-            "field": "new_field2-req",
+            "field": "new_field2_req",
             "value": "blah2-req",
         },
     )
@@ -1291,24 +1282,14 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         or "[]"
     )
     request = requests[0]
-    assert request.get("new-field2-req") is None
+    assert request.get("new_field2_req") is None
 
     action = await ops_test.model.units.get(unit_name).run_action(
         "delete-relation-field",
-        **{"relation_id": pytest.second_database_relation.id, "field": "new_field-req"},
+        **{"relation_id": pytest.second_database_relation.id, "field": "new_field_req"},
     )
     await action.wait()
 
-    assert (
-        await get_application_relation_data(
-            ops_test,
-            DATABASE_APP_NAME,
-            DATABASE_APP_NAME,
-            "new_field-req",
-            related_endpoint=DB_SECOND_DATABASE_RELATION_NAME,
-        )
-        == "blah-req"
-    )
     requests = json.loads(
         await get_application_relation_data(
             ops_test,
@@ -1320,11 +1301,15 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         or "[]"
     )
     request = requests[0]
-    assert request.get("new-field-req") == "blah-req"
+    assert request.get("new_field_req") == "blah-req"
 
 
-async def test_scaling_requires_can_access_shared_secrest(ops_test):
+@pytest.mark.abort_on_fail
+async def test_scaling_requires_can_access_shared_secrets(ops_test):
     """When scaling up the application, new units should have access to relation secrets."""
+    for relation in ops_test.model.relations:
+        if relation.id == 10:
+            pytest.second_database_relation = relation
     await ops_test.model.applications[APPLICATION_APP_NAME].scale(3)
 
     await ops_test.model.wait_for_idle(

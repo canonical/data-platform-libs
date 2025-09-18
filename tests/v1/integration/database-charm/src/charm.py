@@ -318,7 +318,9 @@ class DatabaseCharm(CharmBase):
         """[second_database]: Get requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
         value = None
-        model = self.database.interface.build_model(relation.id, DataContract)
+        model = self.database.interface.build_model(
+            relation.id, DataContract, component=relation.app
+        )
         for request in model.requests:
             value = getattr(request, event.params["field"].replace("-", "_"))
         value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value

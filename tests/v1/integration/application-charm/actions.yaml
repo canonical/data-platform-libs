@@ -34,6 +34,10 @@ set-relation-field:
   value:
     type: string
     description: Value of the field to set
+  raw:
+    type: bool
+    description: Direct access
+    default: false
 
 delete-relation-field:
   description: Delete fields from the sedond-database relation

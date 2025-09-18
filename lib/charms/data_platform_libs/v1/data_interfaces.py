@@ -368,12 +368,15 @@ def ensure_leader_for_app(f):
     """Decorator to ensure that only leader can perform given operation."""
 
     def wrapper(self, *args, **kwargs):
-        if self.component == self._local_app and not self._local_unit.is_leader():
+        if (
+            self.leader_only
+            and self.component == self._local_app
+            and not self._local_unit.is_leader()
+        ):
             logger.error(f"This operation ({f.__name__}) can only be performed by the leader unit")
             return
         return f(self, *args, **kwargs)
 
-    wrapper.leader_only = True
     return wrapper
 
 
@@ -1146,6 +1149,7 @@ class OpsRepository(AbstractRepository):
         self.component = component
         self.model = model
         self.secrets = SecretCache(model, component)
+        self.leader_only = True
 
     @abstractmethod
     def _generate_secret_label(
@@ -1155,6 +1159,7 @@ class OpsRepository(AbstractRepository):
         ...
 
     @override
+    @ensure_leader_for_app
     def get_data(self) -> dict[str, Any] | None:
         ret: dict[str, Any] = {}
         if not self.relation:
@@ -1464,6 +1469,10 @@ class OpsPeerRepository(OpsRepository):
     ]
 
     uri_to_databag: bool = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.leader_only = False
 
     @property
     def scope(self) -> Scope:

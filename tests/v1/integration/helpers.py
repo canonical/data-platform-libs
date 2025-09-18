@@ -269,7 +269,7 @@ async def get_application_relation_data(
         return relation_data[0]["local-unit"].get("data", {}).get(key)
 
 
-async def check_logs(ops_test: OpsTest, strings: str, limit: int = 10) -> bool:
+async def check_logs(ops_test: OpsTest, strings: list[str], limit: int = 10) -> bool:
     """Check if any of strings may appear in juju debug-log."""
     # juju debug-log may not be flushed yet, thus the "tenacity simulation"
     for tries in range(5):
