@@ -969,7 +969,7 @@ class RequirerDataContractV1(BaseModel, Generic[TRequirerCommonModel]):
     """The new Data Contract."""
 
     version: Literal["v1"] = Field(default="v1")
-    requests: list[TRequirerCommonModel]
+    requests: list[TRequirerCommonModel] = Field(default_factory=list)
 
 
 def discriminate_on_version(payload: Any) -> str:
