@@ -45,6 +45,14 @@ def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
 
 
 @pytest.fixture(scope="module", autouse=True)
+def copy_v0_data_interfaces_library_into_charm(ops_test: OpsTest):
+    """Copy the data_interfaces library to the different charm folder."""
+    library_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"
+    install_path = "tests/v1/integration/backward-compatibility-charm/" + library_path
+    shutil.copyfile(library_path, install_path)
+
+
+@pytest.fixture(scope="module", autouse=True)
 def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     """Copy the data_interfaces library to the different charm folder."""
     library_path = "lib/charms/data_platform_libs/v1/data_interfaces.py"
