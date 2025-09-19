@@ -46,7 +46,7 @@ class ClientCharm(CharmBase):
         password = event.password
         database = event.database
 
-        logger.error(
+        logger.info(
             f"Database {database} created for relation {relation_id} with user {username} and password {password}"
         )
         self.unit.status = ActiveStatus("backward_database_created")
