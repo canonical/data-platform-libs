@@ -59,7 +59,7 @@ class KafkaConnectCharm(CharmBase):
         if not relation:
             return {}
 
-        return dict(relation.data[self.app])
+        return relation.data[self.app]
 
     def get_secret(self, scope: str, key: str) -> str:
         """Get secret from the secret storage."""

@@ -28,9 +28,16 @@ class ClientCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
+        # Default charm events.
+        self.framework.observe(self.on.start, self._on_start)
+
         # Charm events defined in the database provides charm library.
         self.database = DatabaseRequires(self, "backward-database", "bwclient")
         self.framework.observe(self.database.on.database_created, self._on_resource_created)
+
+    def _on_start(self, _) -> None:
+        """Only sets an active status."""
+        self.unit.status = ActiveStatus("Backward compatibility charm ready!")
 
     def _on_resource_created(self, event: DatabaseCreatedEvent) -> None:
         """Event triggered when a new database is requested."""

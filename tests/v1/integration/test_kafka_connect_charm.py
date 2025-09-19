@@ -93,6 +93,10 @@ async def test_kafka_connect_credentials_change(ops_test: OpsTest, request: pyte
     password = request.config.cache.get("initial_password", "")
     assert password == "password"
 
+    import pdb
+
+    pdb.set_trace()
+
     # Change connect password
     action = (
         await ops_test.model.applications[PROVIDER_APP_NAME]
