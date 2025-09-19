@@ -1959,13 +1959,13 @@ class ResourceEntityCreatedEvent(ResourceRequirerEvent[TResourceProviderModel]):
 
 
 class ResourceEndpointsChangedEvent(ResourceRequirerEvent[TResourceProviderModel]):
-    """Read/Write enpoints are changed."""
+    """Read/Write endpoints are changed."""
 
     pass
 
 
 class ResourceReadOnlyEndpointsChangedEvent(ResourceRequirerEvent[TResourceProviderModel]):
-    """Read-only enpoints are changed."""
+    """Read-only endpoints are changed."""
 
     pass
 
