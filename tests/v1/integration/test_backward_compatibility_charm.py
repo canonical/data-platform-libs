@@ -70,19 +70,21 @@ async def test_backward_relation_with_charm_libraries_secrets(ops_test: OpsTest)
         assert unit.workload_status_message == "backward_database_created"
 
     # Get the requests
-    requests = json.loads(
+    secret_uri = (
         await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, RELATION_NAME, "requests"
+            ops_test, APPLICATION_APP_NAME, RELATION_NAME, f"{PROV_SECRET_PREFIX}user"
         )
-        or "[]"
+        or ""
     )
-    request = requests[0]
-    secret_uri = request[f"{PROV_SECRET_PREFIX}user"]
     secret_data = await get_juju_secret(ops_test, secret_uri)
     username = secret_data["username"]
     password = secret_data["password"]
-    endpoints = request["endpoints"]
-    database = request["resource"]
+    endpoints = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "endpoints"
+    )
+    database = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, RELATION_NAME, "database"
+    )
 
     assert username == f"relation_{rel.id}_None"
     assert len(password) == 16
