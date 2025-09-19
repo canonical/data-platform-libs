@@ -63,6 +63,7 @@ class PeerUnitModel(PeerModel):
     secret_field: ExtraSecretStr
     my_unit_secret: ExtraSecretStr
     not_a_secret: str | None = Field(default=None)
+    non_secret_field: str | None = Field(default=None)
 
 
 class ExtendedResourceProviderModel(ResourceProviderModel):
