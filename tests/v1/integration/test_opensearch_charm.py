@@ -100,6 +100,8 @@ async def test_opensearch_relation_secret_changed(ops_test: OpsTest):
     action = await ops_test.model.units.get(unit_name).run_action("change-admin-password")
     await action.wait()
 
+    await ops_test.model.wait_for_idle(apps=[APPLICATION_APP_NAME], status="active")
+
     secret_content = await get_juju_secret(ops_test, secret_uri)
     new_password = secret_content["password"]
     assert password != new_password
