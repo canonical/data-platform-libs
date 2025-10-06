@@ -92,7 +92,7 @@ class ClientCharm(CharmBase):
         # Event triggered when a new entity is created.
         ...
 
-Compared to V1, this library makes heavy use of pydantic models, and allows for
+Compared to V0, this library makes heavy use of pydantic models, and allows for
 multiple requests, specified as a list.
 On the Requirer side, each response will trigger one custom event for that response.
 This way, it allows for more strategic events to be emitted according to the request.
@@ -194,29 +194,41 @@ Following an example of using the ResourceRequestedEvent, in the context of the
 database charm code:
 
 ```python
-from charms.data_platform_libs.v0.data_interfaces import DatabaseProvides
+from charms.data_platform_libs.v1.data_interfaces import (
+    ResourceProviderEventHandler,
+    ResourceProviderModel,
+    ResourceRequestedEvent,
+    RequirerCommonModel,
+)
 
 class SampleCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
         # Charm events defined in the database provides charm library.
-        self.provided_database = DatabaseProvides(self, relation_name="database")
-        self.framework.observe(self.provided_database.on.database_requested,
-            self._on_database_requested)
+        self.provided_database = ResourceProviderEventHandler(self, "database", RequirerCommonModel)
+        self.framework.observe(self.provided_database.on.resource_requested,
+            self._on_resource_requested)
         # Database generic helper
         self.database = DatabaseHelper()
 
-    def _on_database_requested(self, event: DatabaseRequestedEvent) -> None:
+    def _on_database_requested(self, event: ResourceRequestedEvent) -> None:
         # Handle the event triggered by a new database requested in the relation
         # Retrieve the database name using the charm library.
-        db_name = event.database
+        db_name = event.request.resource
         # generate a new user credential
-        username = self.database.generate_user()
-        password = self.database.generate_password()
+        username = self.database.generate_user(event.request.request_id)
+        password = self.database.generate_password(event.request.request_id)
         # set the credentials for the relation
-        self.provided_database.set_credentials(event.relation.id, username, password)
-        # set other variables for the relation event.set_tls("False")
+        response = ResourceProviderModel(
+            salt=event.request.salt,
+            request_id=event.request.request_id,
+            resource=db_name,
+            username=SecretStr(username),
+            password=SecretStr(password),
+            ...
+        )
+        self.provided_database.set_response(event.relation.id, response)
 ```
 
 As shown above, the library provides a custom event (database_requested) to handle
@@ -1449,7 +1461,10 @@ class OpsRelationRepository(OpsRepository):
         """Generates the field name to store in the peer relation."""
         return f"{self.SECRET_FIELD_NAME}-{secret_group}"
 
-    get_data = ensure_leader_for_app(OpsRepository.get_data)
+    @ensure_leader_for_app
+    @override
+    def get_data(self) -> dict[str, Any] | None:
+        return super().get_data()
 
 
 class OpsPeerRepository(OpsRepository):
@@ -2029,6 +2044,15 @@ class EventHandlers(Object):
         """Shortcut to get access to the relations."""
         return self.interface.relations
 
+    def get_remote_unit(self, relation: Relation) -> Unit | None:
+        """Gets the remote unit in the relation."""
+        remote_unit = None
+        for unit in relation.units:
+            if unit.app != self.charm.app:
+                remote_unit = unit
+                break
+        return remote_unit
+
     # Event handlers
 
     def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
@@ -2272,11 +2296,7 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
             logging.info("Secret changed on wrong relation.")
             return
 
-        remote_unit = None
-        for unit in relation.units:
-            if unit.app != self.charm.app:
-                remote_unit = unit
-                break
+        remote_unit = self.get_remote_unit(relation)
 
         repository = OpsRelationRepository(self.model, relation, component=relation.app)
         version = repository.get_field("version") or "v0"
@@ -2616,11 +2636,7 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
             logging.info("Secret changed on wrong relation.")
             return
 
-        remote_unit = None
-        for unit in relation.units:
-            if unit.app != self.charm.app:
-                remote_unit = unit
-                break
+        remote_unit = self.get_remote_unit(relation)
 
         response_model = self.interface.build_model(relation.id, component=relation.app)
         if not short_uuid:
