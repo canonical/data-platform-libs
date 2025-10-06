@@ -329,6 +329,7 @@ RESOURCE_ALIASES = [
     "topic",
     "index",
     "plugin-url",
+    "prefix",
 ]
 
 SECRET_PREFIX = "secret-"
