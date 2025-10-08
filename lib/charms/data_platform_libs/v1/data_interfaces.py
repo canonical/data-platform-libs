@@ -275,7 +275,7 @@ from ops import (
     SecretInfo,
     SecretNotFoundError,
 )
-from ops.charm import CharmEvents
+from ops.charm import CharmEvents, SecretRemoveEvent
 from ops.framework import EventSource, Handle, Object
 from ops.model import Application, ModelError, Relation, Unit
 from pydantic import (
@@ -2039,6 +2039,7 @@ class EventHandlers(Object):
             charm.on.secret_changed,
             self._on_secret_changed_event,
         )
+        self.framework.observe(charm.on.secret_remove, self._on_secret_remove_event)
 
     @property
     def relations(self) -> list[Relation]:
@@ -2069,6 +2070,34 @@ class EventHandlers(Object):
     def _on_secret_changed_event(self, event: SecretChangedEvent) -> None:
         """Event emitted when the relation data has changed."""
         raise NotImplementedError
+
+    def _on_secret_remove_event(self, event: SecretRemoveEvent) -> None:
+        """Event emitted when a secret is removed.
+
+        A secret removal (entire removal, not just a revision removal) causes
+        https://github.com/juju/juju/issues/20794. This check is to avoid the
+        errors that would happen if we tried to remove the revision in that case
+        (in the revision removal, the label is present).
+        """
+        if not event.secret.label:
+            return
+        relation = self._relation_from_secret_label(event.secret.label)
+
+        if not relation:
+            logging.info(
+                f"Received secret {event.secret.label} but couldn't parse, seems irrelevant"
+            )
+            return
+
+        if relation.app != self.charm.app:
+            logging.info("Secret removed event ignored for non Secret Owner")
+            return
+
+        if relation.name != self.relation_name:
+            logging.info("Secret changed on wrong relation.")
+            return
+
+        event.remove_revision()
 
     @abstractmethod
     def _handle_event(
