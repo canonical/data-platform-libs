@@ -321,6 +321,7 @@ MODEL_ERRORS = {
     "not_leader": "this unit is not the leader",
     "no_label_and_uri": "ERROR either URI or label should be used for getting an owned secret but not both",
     "owner_no_refresh": "ERROR secret owner cannot use --refresh",
+    "permission_denied": "ERROR permission denied",
 }
 
 RESOURCE_ALIASES = [
@@ -513,7 +514,11 @@ class CachedSecret:
     The data structure is precisely reusing/simulating as in the actual Secret Storage
     """
 
-    KNOWN_MODEL_ERRORS = [MODEL_ERRORS["no_label_and_uri"], MODEL_ERRORS["owner_no_refresh"]]
+    KNOWN_MODEL_ERRORS = [
+        MODEL_ERRORS["no_label_and_uri"],
+        MODEL_ERRORS["owner_no_refresh"],
+        MODEL_ERRORS["permission_denied"],
+    ]
 
     def __init__(
         self,
