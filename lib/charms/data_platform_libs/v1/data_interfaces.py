@@ -212,7 +212,7 @@ class SampleCharm(CharmBase):
         # Database generic helper
         self.database = DatabaseHelper()
 
-    def _on_database_requested(self, event: ResourceRequestedEvent) -> None:
+    def _on_resource_requested(self, event: ResourceRequestedEvent) -> None:
         # Handle the event triggered by a new database requested in the relation
         # Retrieve the database name using the charm library.
         db_name = event.request.resource
@@ -231,7 +231,7 @@ class SampleCharm(CharmBase):
         self.provided_database.set_response(event.relation.id, response)
 ```
 
-As shown above, the library provides a custom event (database_requested) to handle
+As shown above, the library provides a custom event (resource_requested) to handle
 the situation when an application charm requests a new database to be created.
 It's preferred to subscribe to this event instead of relation changed event to avoid
 creating a new database when other information other than a database name is
@@ -247,7 +247,6 @@ import pickle
 import random
 import string
 from abc import ABC, abstractmethod
-from collections import namedtuple
 from datetime import datetime
 from enum import Enum
 from typing import (
@@ -256,6 +255,7 @@ from typing import (
     ClassVar,
     Generic,
     Literal,
+    NamedTuple,
     NewType,
     TypeAlias,
     TypeVar,
@@ -399,13 +399,17 @@ def get_encoded_dict(
     logger.error("Unexpected datatype for %s instead of dict.", str(data))
 
 
-Diff = namedtuple("Diff", ["added", "changed", "deleted"])
-Diff.__doc__ = """
-A tuple for storing the diff between two data mappings.
+class Diff(NamedTuple):
+    """A tuple for storing the diff between two data mappings.
 
-added - keys that were added
-changed - keys that still exist but have new values
-deleted - key that were deleted"""
+    added - keys that were added
+    changed - keys that still exist but have new values
+    deleted - key that were deleted
+    """
+
+    added: set[str]
+    changed: set[str]
+    deleted: set[str]
 
 
 def diff(old_data: dict[str, str] | None, new_data: dict[str, str]) -> Diff:
@@ -443,7 +447,14 @@ def store_new_data(
     new_data: dict[str, str],
     short_uuid: str | None = None,
 ):
-    """Stores the new data in the databag for diff computation."""
+    """Stores the new data in the databag for diff computation.
+
+    Args:
+        relation: The relation considered to write data to
+        component: The component databag to write data to
+        new_data: a dictionary containing the data to write
+        short_uuid: Only present in V1, the request-id of that data to write.
+    """
     # First, the case for V0
     if not short_uuid:
         relation.data[component].update({"data": json.dumps(new_data)})
@@ -452,9 +463,8 @@ def store_new_data(
         data = json.loads(relation.data[component].get("data", "{}"))
         if not isinstance(data, dict):
             raise ValueError
-        newest_data = copy.deepcopy(data)
-        newest_data[short_uuid] = new_data
-        relation.data[component].update({"data": json.dumps(newest_data)})
+        data[short_uuid] = new_data
+        relation.data[component].update({"data": json.dumps(data)})
 
 
 ##############################################################################
@@ -1142,8 +1152,6 @@ class OpsRepository(AbstractRepository):
 
     SECRET_FIELD_NAME: str
 
-    IGNORES_GROUPS: list[SecretGroup] = []
-
     uri_to_databag: bool = True
 
     def __init__(
@@ -1353,9 +1361,6 @@ class OpsRepository(AbstractRepository):
         if self.component not in self.relation.data:
             logger.info(f"Component {self.component} not in relation {self.relation}")
             return None
-        if secret_group in self.IGNORES_GROUPS:
-            logger.warning(f"Trying to get invalid secret group {secret_group}")
-            return None
 
         label = self._generate_secret_label(self.relation, secret_group, short_uuid=short_uuid)
 
@@ -1368,17 +1373,13 @@ class OpsRepository(AbstractRepository):
         secret_group: SecretGroup,
         uri: str | None = None,
         short_uuid: str | None = None,
-    ) -> Any | None:
+    ) -> str | None:
         """Gets a value for a field stored in a secret group."""
         if not self.relation:
             logger.info("No relation to get value from")
             return None
         if self.component not in self.relation.data:
             logger.info(f"Component {self.component} not in relation {self.relation}")
-            return None
-
-        if secret_group in self.IGNORES_GROUPS:
-            logger.warning(f"Trying to get invalid secret group {secret_group}")
             return None
 
         secret_field = self.secret_field(secret_group, field)
@@ -1423,9 +1424,6 @@ class OpsRepository(AbstractRepository):
         if self.component not in self.relation.data:
             logger.info(f"Component {self.component} not in relation {self.relation}")
             return None
-
-        if secret_group in self.IGNORES_GROUPS:
-            logger.warning(f"Trying to get invalid secret group {secret_group}")
 
         label = self._generate_secret_label(self.relation, secret_group, short_uuid)
 
@@ -1472,13 +1470,6 @@ class OpsPeerRepository(OpsRepository):
     """Implementation of the Ops Repository for peer relations."""
 
     SECRET_FIELD_NAME = "internal_secret"
-
-    IGNORES_GROUPS = [
-        SecretGroup("user"),
-        SecretGroup("entity"),
-        SecretGroup("mtls"),
-        SecretGroup("tls"),
-    ]
 
     uri_to_databag: bool = False
 
@@ -2212,7 +2203,13 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         if not isinstance(event, RelationChangedEvent):
             return
 
-        for key in ["entity-type", "extra-user-roles", "extra-group-roles"]:
+        for key in [
+            "resource",
+            "entity-type",
+            "entity-permissions",
+            "extra-user-roles",
+            "extra-group-roles",
+        ]:
             if key in _diff.changed:
                 raise ValueError(f"Cannot change {key} after relation has already been created")
 
@@ -2355,7 +2352,7 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
             app=relation.app,
             unit=remote_unit,
             request=request,
-            mtls_cert=old_mtls_cert,
+            old_mtls_cert=old_mtls_cert,
         )
 
     @override
