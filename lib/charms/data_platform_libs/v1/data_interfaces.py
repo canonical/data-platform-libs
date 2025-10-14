@@ -538,19 +538,29 @@ class CachedSecret:
     @property
     def meta(self) -> Secret | None:
         """Getting cached secret meta-information."""
-        if not self._secret_meta:
-            if not (self._secret_uri or self.label):
-                return
+        if self._secret_meta:
+            return self._secret_meta
 
+        if not (self._secret_uri or self.label):
+            return
+
+        try:
+            self._secret_meta = self._model.get_secret(label=self.label)
+        except SecretNotFoundError:
+            # Falling back to seeking for potential legacy labels
+            logger.info(f"Secret with label {self.label} not found")
+        except ModelError as err:
+            if not any(msg in str(err) for msg in self.KNOWN_MODEL_ERRORS):
+                raise
+
+        # If still not found, to be checked by URI, to be labelled with the proposed label
+        if not self._secret_meta and self._secret_uri:
             try:
-                self._secret_meta = self._model.get_secret(label=self.label)
-            except SecretNotFoundError:
-                # Falling back to seeking for potential legacy labels
-                logger.info(f"Secret with label {self.label} not found")
-
-            # If still not found, to be checked by URI, to be labelled with the proposed label
-            if not self._secret_meta and self._secret_uri:
                 self._secret_meta = self._model.get_secret(id=self._secret_uri, label=self.label)
+            except ModelError as err:
+                if not any(msg in str(err) for msg in self.KNOWN_MODEL_ERRORS):
+                    raise
+
         return self._secret_meta
 
     ##########################################################################
@@ -867,6 +877,10 @@ class CommonModel(BaseModel):
                             raise SecretError("No secret to send back")
                         setattr(self, secret_field, secret.meta.id)
                     continue
+
+                if secret and secret.meta:
+                    # In case we lost the secret uri in the structure, let's add it back.
+                    setattr(self, secret_field, secret.meta.id)
 
                 content = secret.get_content()
                 full_content = copy.deepcopy(content)
@@ -2320,13 +2334,16 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
             )
             return
 
-        if relation.app == self.charm.app:
-            logging.info("Secret changed event ignored for Secret Owner")
-            return
-
         if relation.name != self.relation_name:
             logging.info("Secret changed on wrong relation.")
             return
+
+        try:
+            event.secret.get_info()
+            logging.info("Secret changed event ignored for Secret Owner")
+            return
+        except SecretNotFoundError:
+            pass
 
         remote_unit = self.get_remote_unit(relation)
 
@@ -2660,13 +2677,16 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
             )
             return
 
-        if relation.app == self.charm.app:
-            logging.info("Secret changed event ignored for Secret Owner")
-            return
-
         if relation.name != self.relation_name:
             logging.info("Secret changed on wrong relation.")
             return
+
+        try:
+            event.secret.get_info()
+            logging.info("Secret changed event ignored for Secret Owner")
+            return
+        except SecretNotFoundError:
+            pass
 
         remote_unit = self.get_remote_unit(relation)
 
