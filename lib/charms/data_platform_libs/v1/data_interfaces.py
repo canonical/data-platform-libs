@@ -798,7 +798,7 @@ class CommonModel(BaseModel):
 
     def update(self: Self, model: Self):
         """Updates a common Model with another one."""
-        # Iterate on all the fields that where explicitely set.
+        # Iterate on all the fields that where explicitly set.
         for item in model.model_fields_set:
             # ignore the outstanding fields.
             if item not in ["salt", "request_id"]:
