@@ -239,6 +239,8 @@ exchanged in the relation databag.
 
 """
 
+from __future__ import annotations
+
 import copy
 import hashlib
 import json
@@ -296,7 +298,7 @@ from pydantic import (
 )
 from pydantic.types import _SecretBase, _SecretField
 from pydantic_core import CoreSchema, core_schema
-from typing_extensions import TypeAliasType, override
+from typing_extensions import Self, TypeAliasType, override
 
 try:
     import psycopg2
@@ -548,7 +550,7 @@ class CachedSecret:
             self._secret_meta = self._model.get_secret(label=self.label)
         except SecretNotFoundError:
             # Falling back to seeking for potential legacy labels
-            logger.info(f"Secret with label {self.label} not found")
+            logger.debug(f"Secret with label {self.label} not found")
         except ModelError as err:
             if not any(msg in str(err) for msg in self.KNOWN_MODEL_ERRORS):
                 raise
@@ -793,6 +795,16 @@ class CommonModel(BaseModel):
         description="This salt is used to create unique hashes even when other fields map 1-1",
         default_factory=gen_salt,
     )
+
+    def update(self: Self, model: Self):
+        """Updates a common Model with another one."""
+        # Iterate on all the fields that where explicitely set.
+        for item in model.model_fields_set:
+            # ignore the outstanding fields.
+            if item not in ["salt", "request_id"]:
+                value = getattr(model, item)
+                setattr(self, item, value)
+        return self
 
     @model_validator(mode="after")
     def extract_secrets(self, info: ValidationInfo):
@@ -1041,7 +1053,7 @@ class DataContractV1(BaseModel, Generic[TResourceProviderModel]):
     requests: list[TResourceProviderModel] = Field(default_factory=list)
 
 
-DataContact = TypeAdapter(DataContractV1[ResourceProviderModel])
+DataContract = TypeAdapter(DataContractV1[ResourceProviderModel])
 
 
 TCommonModel = TypeVar("TCommonModel", bound=CommonModel)
@@ -2099,7 +2111,9 @@ class EventHandlers(Object):
             )
             return
 
-        if relation.app != self.charm.app:
+        try:
+            event.secret.get_info()
+        except SecretNotFoundError:
             logging.info("Secret removed event ignored for non Secret Owner")
             return
 
@@ -2448,7 +2462,7 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         # This allows us to update or append easily.
         for index, _response in enumerate(model.requests):
             if _response.request_id == response.request_id:
-                model.requests[index] = response
+                model.requests[index].update(response)
                 break
         else:
             model.requests.append(response)
