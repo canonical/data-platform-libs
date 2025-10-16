@@ -261,7 +261,6 @@ from typing import (
     NewType,
     TypeAlias,
     TypeVar,
-    final,
     overload,
 )
 
@@ -890,7 +889,7 @@ class CommonModel(BaseModel):
                         setattr(self, secret_field, secret.meta.id)
                     continue
 
-                if secret and secret.meta:
+                if secret and secret.meta and secret.meta.id:
                     # In case we lost the secret uri in the structure, let's add it back.
                     setattr(self, secret_field, secret.meta.id)
 
@@ -1472,7 +1471,6 @@ class OpsRepository(AbstractRepository):
         self.secrets.remove(label)
 
 
-@final
 class OpsRelationRepository(OpsRepository):
     """Implementation of the Abstract Repository for non peer relations."""
 
@@ -1531,7 +1529,6 @@ class OpsPeerRepository(OpsRepository):
         return f"{field}@{secret_group}"
 
 
-@final
 class OpsPeerUnitRepository(OpsPeerRepository):
     """Implementation for a unit."""
 
@@ -1540,7 +1537,6 @@ class OpsPeerUnitRepository(OpsPeerRepository):
         super().__init__(model, relation, component)
 
 
-@final
 class OpsOtherPeerUnitRepository(OpsPeerRepository):
     """Implementation for a remote unit."""
 
