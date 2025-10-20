@@ -138,10 +138,10 @@ class DatabaseCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.peer_relation_app = OpsPeerRepositoryInterface(
-            self, PEER_RELATION_NAME, model=PeerAppModel
+            self.model, PEER_RELATION_NAME, data_model=PeerAppModel
         )
         self.peer_relation_unit = OpsPeerUnitRepositoryInterface(
-            self, PEER_RELATION_NAME, model=PeerUnitModel
+            self.model, PEER_RELATION_NAME, data_model=PeerUnitModel
         )
         self.provider = ResourceProviderEventHandler(
             self, DATABASE_RELATION_NAME, RequirerCommonModel
@@ -194,10 +194,10 @@ class DatabaseCharmDynamicSecrets(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.peer_relation_app = OpsPeerRepositoryInterface(
-            self, PEER_RELATION_NAME, model=PeerAppModel
+            self.model, PEER_RELATION_NAME, data_model=PeerAppModel
         )
         self.peer_relation_unit = OpsPeerUnitRepositoryInterface(
-            self, PEER_RELATION_NAME, model=PeerUnitModel
+            self.model, PEER_RELATION_NAME, data_model=PeerUnitModel
         )
 
     @property

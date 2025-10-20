@@ -67,11 +67,11 @@ class DatabaseCharm(CharmBase):
         self._servers_data = {}
 
         self.peer_relation_app = OpsPeerRepositoryInterface(
-            self, relation_name=PEER, model=PeerAppModel
+            self.model, relation_name=PEER, data_model=PeerAppModel
         )
 
         self.peer_relation_unit = OpsPeerUnitRepositoryInterface(
-            self, relation_name=PEER, model=PeerAppModel
+            self.model, relation_name=PEER, data_model=PeerAppModel
         )
 
         self.database = ResourceProviderEventHandler(self, "database", RequirerCommonModel)

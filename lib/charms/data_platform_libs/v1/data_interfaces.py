@@ -1584,17 +1584,16 @@ class RepositoryInterface(Generic[TRepository, TCommon]):
 
     def __init__(
         self,
-        charm: CharmBase,
+        model: Model,
         relation_name: str,
         component: Unit | Application,
         repository_type: type[TRepository],
-        model: type[TCommon] | TypeAdapter | None,
+        data_model: type[TCommon] | TypeAdapter | None,
     ):
-        self.charm = charm
-        self._model = charm.model
+        self._model = model
         self.repository_type = repository_type
         self.relation_name = relation_name
-        self.model = model
+        self.model = data_model
         self.component = component
 
     @property
@@ -1677,11 +1676,11 @@ class OpsRelationRepositoryInterface(RepositoryInterface[OpsRelationRepository, 
 
     def __init__(
         self,
-        charm: CharmBase,
+        model: Model,
         relation_name: str,
-        model: type[TCommon] | TypeAdapter | None = None,
+        data_model: type[TCommon] | TypeAdapter | None = None,
     ):
-        super().__init__(charm, relation_name, charm.app, OpsRelationRepository, model)
+        super().__init__(model, relation_name, model.app, OpsRelationRepository, data_model)
 
 
 class OpsPeerRepositoryInterface(RepositoryInterface[OpsPeerRepository, TPeerCommon]):
@@ -1689,11 +1688,11 @@ class OpsPeerRepositoryInterface(RepositoryInterface[OpsPeerRepository, TPeerCom
 
     def __init__(
         self,
-        charm: CharmBase,
+        model: Model,
         relation_name: str,
-        model: type[TPeerCommon] | TypeAdapter | None = None,
+        data_model: type[TPeerCommon] | TypeAdapter | None = None,
     ):
-        super().__init__(charm, relation_name, charm.app, OpsPeerRepository, model)
+        super().__init__(model, relation_name, model.app, OpsPeerRepository, data_model)
 
 
 class OpsPeerUnitRepositoryInterface(RepositoryInterface[OpsPeerUnitRepository, TPeerCommon]):
@@ -1701,11 +1700,11 @@ class OpsPeerUnitRepositoryInterface(RepositoryInterface[OpsPeerUnitRepository, 
 
     def __init__(
         self,
-        charm: CharmBase,
+        model: Model,
         relation_name: str,
-        model: type[TPeerCommon] | TypeAdapter | None = None,
+        data_model: type[TPeerCommon] | TypeAdapter | None = None,
     ):
-        super().__init__(charm, relation_name, charm.unit, OpsPeerUnitRepository, model)
+        super().__init__(model, relation_name, model.unit, OpsPeerUnitRepository, data_model)
 
 
 class OpsOtherPeerUnitRepositoryInterface(
@@ -1715,12 +1714,12 @@ class OpsOtherPeerUnitRepositoryInterface(
 
     def __init__(
         self,
-        charm: CharmBase,
+        model: Model,
         relation_name: str,
         unit: Unit,
-        model: type[TPeerCommon] | TypeAdapter | None = None,
+        data_model: type[TPeerCommon] | TypeAdapter | None = None,
     ):
-        super().__init__(charm, relation_name, unit, OpsOtherPeerUnitRepository, model)
+        super().__init__(model, relation_name, unit, OpsOtherPeerUnitRepository, data_model)
 
 
 ##############################################################################
@@ -2217,7 +2216,7 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         super().__init__(charm, relation_name, unique_key)
         self.component = self.charm.app
         self.request_model = request_model
-        self.interface = OpsRelationRepositoryInterface(charm, relation_name, request_model)
+        self.interface = OpsRelationRepositoryInterface(charm.model, relation_name, request_model)
         self.mtls_enabled = mtls_enabled
         self.bulk_event = bulk_event
 
@@ -2487,7 +2486,7 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
         self._requests = requests
         self.response_model = DataContractV1[response_model]
         self.interface: OpsRelationRepositoryInterface[DataContractV1[TResourceProviderModel]] = (
-            OpsRelationRepositoryInterface(charm, relation_name, self.response_model)
+            OpsRelationRepositoryInterface(charm.model, relation_name, self.response_model)
         )
 
         if requests:

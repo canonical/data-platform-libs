@@ -85,10 +85,10 @@ class DatabaseCharm(CharmBase):
         self._servers_data = {}
 
         self._peer_relation_app = OpsPeerRepositoryInterface(
-            self, relation_name=PEER, model=PeerAppModel
+            self.model, relation_name=PEER, data_model=PeerAppModel
         )
         self._peer_relation_unit = OpsPeerUnitRepositoryInterface(
-            self, relation_name=PEER, model=PeerUnitModel
+            self.model, relation_name=PEER, data_model=PeerUnitModel
         )
 
         # Default charm events.
@@ -155,7 +155,7 @@ class DatabaseCharm(CharmBase):
         for unit in self.peer_relation.units:
             if unit not in self._servers_data:
                 self._servers_data[unit] = OpsOtherPeerUnitRepositoryInterface(
-                    charm=self, relation_name=PEER, unit=unit, model=PeerUnitModel
+                    model=self.model, relation_name=PEER, unit=unit, data_model=PeerUnitModel
                 )
         return self._servers_data
 
