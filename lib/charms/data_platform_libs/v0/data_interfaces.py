@@ -2322,7 +2322,7 @@ class RequirerEventHandlers(EventHandlers):
         # Retrieve old statuses from "data"
         old_data = get_encoded_dict(event.relation, self.relation_data.local_unit, "data") or {}
         old_statuses = json.loads(old_data.get(STATUS_FIELD, "[]"))
-        old_codes = {status.get("code") for status in old_statuses}
+        previous_codes = {status.get("code") for status in old_statuses}
 
         # Compute current statuses
         current_statuses = json.loads(
@@ -2331,12 +2331,12 @@ class RequirerEventHandlers(EventHandlers):
         current_codes = {status.get("code") for status in current_statuses}
 
         # Detect changes
-        raised = current_codes - old_codes
-        resolved = old_codes - current_codes
+        raised = current_codes - previous_codes
+        resolved = previous_codes - current_codes
 
         for status_code in raised:
             logger.debug(f"Status [{status_code}] raised")
-            _status = next(iter(s for s in current_statuses if s["code"] == status_code))
+            _status = next(s for s in current_statuses if s["code"] == status_code)
             _status_instance = RelationStatus(**_status)
             getattr(self.on, "status_raised").emit(
                 event.relation,
@@ -2347,7 +2347,7 @@ class RequirerEventHandlers(EventHandlers):
 
         for status_code in resolved:
             logger.debug(f"Status [{status_code}] resolved")
-            _status = next(iter(s for s in old_statuses if s["code"] == status_code))
+            _status = next(s for s in old_statuses if s["code"] == status_code)
             _status_instance = RelationStatus(**_status)
             getattr(self.on, "status_resolved").emit(
                 event.relation,
