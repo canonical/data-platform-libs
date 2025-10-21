@@ -2340,7 +2340,7 @@ class RequirerEventHandlers(EventHandlers):
             _status_instance = RelationStatus(**_status)
             getattr(self.on, "status_raised").emit(
                 event.relation,
-                _status_instance,
+                status=_status_instance,
                 app=event.app,
                 unit=event.unit,
             )
@@ -2351,7 +2351,7 @@ class RequirerEventHandlers(EventHandlers):
             _status_instance = RelationStatus(**_status)
             getattr(self.on, "status_resolved").emit(
                 event.relation,
-                _status_instance,
+                status=_status_instance,
                 app=event.app,
                 unit=event.unit,
             )
