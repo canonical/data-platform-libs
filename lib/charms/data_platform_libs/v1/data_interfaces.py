@@ -815,7 +815,9 @@ class BaseCommonModel(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def serialize_model(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo):  # noqa: C901
+    def serialize_model(
+        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
+    ):  # noqa: C901
         """Serializes the model writing the secrets in their respective secrets."""
         if not info.context or not isinstance(info.context.get("repository"), AbstractRepository):
             logger.debug("No secret parsing serialization as we're lacking context here.")
@@ -2606,8 +2608,8 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
         for request in model.requests:
             if request.endpoints and request.username and request.password:
                 host = request.endpoints.split(":")[0]
-                username = request.username.get_secret_value()
-                password = request.password.get_secret_value()
+                username = request.username
+                password = request.password
 
                 connection_string = f"host='{host}' dbname='{request.resource}' user='{username}' password='{password}'"
                 return self._is_pg_plugin_enabled(plugin, connection_string)
