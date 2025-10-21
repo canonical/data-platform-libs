@@ -254,7 +254,6 @@ from enum import Enum
 from typing import (
     Annotated,
     Any,
-    ClassVar,
     Generic,
     Literal,
     NamedTuple,
@@ -286,7 +285,6 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
-    SecretStr,
     SerializationInfo,
     SerializerFunctionWrapHandler,
     Tag,
@@ -295,8 +293,6 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
-from pydantic.types import _SecretBase, _SecretField
-from pydantic_core import CoreSchema, core_schema
 from typing_extensions import Self, TypeAliasType, override
 
 try:
@@ -479,18 +475,8 @@ SecretGroup = NewType("SecretGroup", str)
 SecretString = TypeAliasType("SecretString", Annotated[str, Field(pattern="secret:.*")])
 
 
-class SecretBool(_SecretField[bool]):
-    """Class for booleans as secrets."""
-
-    _inner_schema: ClassVar[CoreSchema] = core_schema.bool_schema()
-    _error_kind: ClassVar[str] = "bool_type"
-
-    def _display(self) -> str:
-        return "****"
-
-
-OptionalSecretStr: TypeAlias = SecretStr | None
-OptionalSecretBool: TypeAlias = SecretBool | None
+OptionalSecretStr: TypeAlias = str | None
+OptionalSecretBool: TypeAlias = bool | None
 
 OptionalSecrets = (OptionalSecretStr, OptionalSecretBool)
 
@@ -716,11 +702,8 @@ class PeerModel(BaseModel):
                     continue
 
                 value = secret.get_content().get(aliased_field)
-
                 if value and field_info.annotation == OptionalSecretBool:
-                    value = SecretBool(json.loads(value))
-                elif value:
-                    value = SecretStr(value)
+                    value = json.loads(value)
                 setattr(self, field, value)
 
         return self
@@ -744,17 +727,14 @@ class PeerModel(BaseModel):
 
                 value = getattr(self, field)
 
-                actual_value = (
-                    value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
-                )
-                if not isinstance(actual_value, str):
-                    actual_value = json.dumps(actual_value)
+                if value and not isinstance(value, str):
+                    value = json.dumps(value)
 
                 if secret is None:
                     if value:
                         secret = repository.add_secret(
                             aliased_field,
-                            actual_value,
+                            value,
                             secret_group,
                         )
                         if not secret or not secret.meta:
@@ -767,17 +747,13 @@ class PeerModel(BaseModel):
                 if value is None:
                     full_content.pop(aliased_field, None)
                 else:
-                    full_content.update({aliased_field: actual_value})
+                    full_content.update({aliased_field: value})
                 secret.set_content(full_content)
         return handler(self)
 
 
-class CommonModel(BaseModel):
-    """Common Model for both requirer and provider.
-
-    request_id stores the request identifier for easier access.
-    resource is the requested resource.
-    """
+class BaseCommonModel(BaseModel):
+    """Embeds the logic of parsing and serializing."""
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -786,13 +762,6 @@ class CommonModel(BaseModel):
         serialize_by_alias=True,
         alias_generator=lambda x: x.replace("_", "-"),
         extra="allow",
-    )
-
-    resource: str = Field(validation_alias=AliasChoices(*RESOURCE_ALIASES), default="")
-    request_id: str | None = Field(default=None)
-    salt: str = Field(
-        description="This salt is used to create unique hashes even when other fields map 1-1",
-        default_factory=gen_salt,
     )
 
     def update(self: Self, model: Self):
@@ -812,7 +781,7 @@ class CommonModel(BaseModel):
             logger.debug("No secret parsing as we're lacking context here.")
             return self
         repository: AbstractRepository = info.context.get("repository")
-        short_uuid = self.request_id or gen_hash(self.resource, self.salt)
+        short_uuid = self.short_uuid
         for field, field_info in self.__pydantic_fields__.items():
             if field_info.annotation in OptionalSecrets and len(field_info.metadata) == 1:
                 secret_group = field_info.metadata[0]
@@ -837,22 +806,23 @@ class CommonModel(BaseModel):
                     continue
 
                 value = secret.get_content().get(aliased_field)
+
                 if value and field_info.annotation == OptionalSecretBool:
-                    value = SecretBool(json.loads(value))
-                elif value:
-                    value = SecretStr(value)
+                    value = json.loads(value)
 
                 setattr(self, field, value)
+
         return self
 
     @model_serializer(mode="wrap")
-    def serialize_model(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo):
+    def serialize_model(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo):  # noqa: C901
         """Serializes the model writing the secrets in their respective secrets."""
         if not info.context or not isinstance(info.context.get("repository"), AbstractRepository):
             logger.debug("No secret parsing serialization as we're lacking context here.")
             return handler(self)
         repository: AbstractRepository = info.context.get("repository")
-        short_uuid = self.request_id or gen_hash(self.resource, self.salt)
+
+        short_uuid = self.short_uuid
         # Backward compatibility for v0 regarding secrets.
         if info.context.get("version") == "v0":
             short_uuid = None
@@ -873,16 +843,13 @@ class CommonModel(BaseModel):
 
                 value = getattr(self, field)
 
-                actual_value = (
-                    value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
-                )
-                if not isinstance(actual_value, str):
-                    actual_value = json.dumps(actual_value)
+                if value and not isinstance(value, str):
+                    value = json.dumps(value)
 
                 if secret is None:
                     if value:
                         secret = repository.add_secret(
-                            aliased_field, actual_value, secret_group, short_uuid
+                            aliased_field, value, secret_group, short_uuid
                         )
                         if not secret or not secret.meta:
                             raise SecretError("No secret to send back")
@@ -899,7 +866,7 @@ class CommonModel(BaseModel):
                 if value is None:
                     full_content.pop(aliased_field, None)
                 else:
-                    full_content.update({aliased_field: actual_value})
+                    full_content.update({aliased_field: value})
                 secret.set_content(full_content)
 
                 if not full_content:
@@ -920,6 +887,41 @@ class CommonModel(BaseModel):
             if info.annotation == SecretString:
                 return SecretGroup(value)
         return None
+
+    @property
+    def short_uuid(self) -> str | None:
+        """The request id."""
+        return None
+
+
+class CommonModel(BaseCommonModel):
+    """Common Model for both requirer and provider.
+
+    request_id stores the request identifier for easier access.
+    salt is used to create a valid request id.
+    resource is the requested resource.
+    """
+
+    model_config = ConfigDict(
+        validate_by_name=True,
+        validate_by_alias=True,
+        populate_by_name=True,
+        serialize_by_alias=True,
+        alias_generator=lambda x: x.replace("_", "-"),
+        extra="allow",
+    )
+
+    resource: str = Field(validation_alias=AliasChoices(*RESOURCE_ALIASES), default="")
+    request_id: str | None = Field(default=None)
+    salt: str = Field(
+        description="This salt is used to create unique hashes even when other fields map 1-1",
+        default_factory=gen_salt,
+    )
+
+    @property
+    def short_uuid(self) -> str | None:
+        """The request id."""
+        return self.request_id or gen_hash(self.resource, self.salt)
 
 
 class EntityPermissionModel(BaseModel):

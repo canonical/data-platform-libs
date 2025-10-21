@@ -14,7 +14,6 @@ import string
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
-from pydantic import SecretStr
 
 from charms.data_platform_libs.v1.data_interfaces import (
     DataContractV1,
@@ -23,7 +22,6 @@ from charms.data_platform_libs.v1.data_interfaces import (
     ResourceProviderEventHandler,
     ResourceProviderModel,
     ResourceRequestedEvent,
-    SecretBool,
 )
 
 logger = logging.getLogger(__name__)
@@ -97,7 +95,7 @@ class OpenSearchCharm(CharmBase):
                 relation.id, DataContractV1[ResourceProviderModel]
             )
             for request in model.requests:
-                request.password = SecretStr(password)
+                request.password = password
             self.opensearch_provider.interface.write_model(relation.id, model)
 
     def _on_index_requested(self, event: ResourceRequestedEvent[RequirerCommonModel]):
@@ -119,11 +117,11 @@ class OpenSearchCharm(CharmBase):
             salt=event.request.salt,
             request_id=event.request.request_id,
             resource=index,
-            username=SecretStr(username),
-            password=SecretStr(password),
-            tls_ca=SecretStr("Canonical"),
+            username=username,
+            password=password,
+            tls_ca="Canonical",
             endpoints=endpoints,
-            tls=SecretBool(True),
+            tls=True,
         )
         self.opensearch_provider.set_response(relation_id, response)
         self.unit.status = ActiveStatus(f"index: {index} granted!")
@@ -139,8 +137,8 @@ class OpenSearchCharm(CharmBase):
         response = ResourceProviderModel(
             salt=event.request.salt,
             request_id=event.request.request_id,
-            entity_name=SecretStr(rolename),
-            entity_password=SecretStr(password),
+            entity_name=rolename,
+            entity_password=password,
         )
         # set connection info in the databag relation
         self.opensearch_provider.set_response(event.relation.id, response)

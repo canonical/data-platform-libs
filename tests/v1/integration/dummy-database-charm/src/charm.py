@@ -18,7 +18,6 @@ from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 from pydantic import Field
-from pydantic.types import _SecretBase
 
 from charms.data_platform_libs.v1.data_interfaces import (
     DataContractV1,
@@ -169,7 +168,6 @@ class DatabaseCharm(CharmBase):
             repository = self.peer_relation_unit.repository(relation_bis.id)
             result = repository.get_secret_field(event.params["field"], event.params["group"])
 
-        result = result.get_secret_value() if issubclass(result.__class__, _SecretBase) else result
         event.set_results({event.params["field"]: result if result else ""})
 
     def _on_set_peer_secret(self, event: ActionEvent):
@@ -224,7 +222,6 @@ class DatabaseCharm(CharmBase):
             relation = self.peer_relation_unit.relations[0]
             model = self.peer_relation_unit.build_model(relation.id)
             value = getattr(model, event.params["field"].replace("-", "_"))
-        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
 

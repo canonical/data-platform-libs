@@ -13,7 +13,6 @@ import logging
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
-from pydantic import SecretStr
 
 from charms.data_platform_libs.v1.data_interfaces import (
     DataContractV1,
@@ -21,7 +20,6 @@ from charms.data_platform_libs.v1.data_interfaces import (
     ResourceProviderEventHandler,
     ResourceProviderModel,
     ResourceRequestedEvent,
-    SecretBool,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,10 +111,10 @@ class KafkaConnectCharm(CharmBase):
             salt=event.request.salt,
             request_id=event.request.request_id,
             endpoints=endpoints,
-            username=SecretStr(username),
-            password=SecretStr(password),
-            tls=SecretBool(False),
-            tls_ca=SecretStr("disabled"),
+            username=username,
+            password=password,
+            tls=False,
+            tls_ca="disabled",
         )
         self.provider.set_response(relation_id, response)
         self.unit.status = ActiveStatus(
@@ -150,7 +148,7 @@ class KafkaConnectCharm(CharmBase):
             )
             for request in model.requests:
                 if key in ("username", "password"):
-                    setattr(request, key, SecretStr(self.get_secret("app", key)))
+                    setattr(request, key, self.get_secret("app", key))
                 else:
                     setattr(request, key, value)
             self.provider.interface.write_model(relation.id, model)

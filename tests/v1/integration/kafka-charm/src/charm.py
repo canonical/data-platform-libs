@@ -14,7 +14,6 @@ import os
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
-from pydantic import SecretStr
 
 from charms.data_platform_libs.v1.data_interfaces import (
     DataContractV1,
@@ -24,7 +23,6 @@ from charms.data_platform_libs.v1.data_interfaces import (
     ResourceEntityRequestedEvent,
     ResourceProviderEventHandler,
     ResourceRequestedEvent,
-    SecretBool,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,9 +105,6 @@ class KafkaCharm(CharmBase):
         topic = event.request.resource
         consumer_group_prefix = event.request.consumer_group_prefix
 
-        if consumer_group_prefix is not None:
-            consumer_group_prefix = SecretStr(consumer_group_prefix)
-
         relation_id = event.relation.id
 
         username = "admin"
@@ -122,13 +117,13 @@ class KafkaCharm(CharmBase):
         response = KafkaResponseModel(
             salt=event.request.salt,
             request_id=event.request.request_id,
-            username=SecretStr(username),
-            password=SecretStr(password),
+            username=username,
+            password=password,
             endpoints=bootstrap_server,
             consumer_group_prefix=consumer_group_prefix,
-            tls=SecretBool(True),
-            tls_ca=SecretStr("Canonical"),
-            zookeeper_uris=SecretStr("protocol.z1:port/,protocol.z2:port/"),
+            tls=True,
+            tls_ca="Canonical",
+            zookeeper_uris="protocol.z1:port/,protocol.z2:port/",
             resource=topic,
         )
         self.kafka_provider.set_response(relation_id, response)
@@ -145,8 +140,8 @@ class KafkaCharm(CharmBase):
         response = KafkaResponseModel(
             request_id=event.request.request_id,
             salt=event.request.salt,
-            entity_name=SecretStr(rolename),
-            entity_password=SecretStr(password),
+            entity_name=rolename,
+            entity_password=password,
         )
         # set connection info in the databag relation
         self.kafka_provider.set_response(event.relation.id, response)
@@ -170,7 +165,7 @@ class KafkaCharm(CharmBase):
                     relation.id, DataContractV1[KafkaResponseModel]
                 )
                 for request in model.requests:
-                    request.password = SecretStr(password)
+                    request.password = password
                 self.kafka_provider.interface.write_model(relation.id, model)
         event.set_results({"password": self.get_secret("app", "password")})
 
@@ -222,7 +217,7 @@ class KafkaCharm(CharmBase):
         if not mtls_cert:
             return
 
-        open("client-cert.pem", "w").write(mtls_cert.get_secret_value())
+        open("client-cert.pem", "w").write(mtls_cert)
         self.unit.status = ActiveStatus(f"{os.getcwd()}/client-cert.pem")
 
 

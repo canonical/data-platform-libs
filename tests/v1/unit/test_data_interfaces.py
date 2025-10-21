@@ -14,7 +14,7 @@ from ops.charm import CharmBase
 from ops.model import Relation, Unit
 from ops.testing import Harness
 from parameterized import parameterized
-from pydantic import Field, SecretStr, TypeAdapter, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError
 
 from charms.data_platform_libs.v0.data_interfaces import (
     PROV_SECRET_PREFIX,
@@ -302,8 +302,8 @@ class DataProvidesBaseTests(ABC):
             salt="kkkkkkkk",
             request_id="c759221a6c14c72a",
             resource=DATABASE,
-            username=SecretStr("test-username"),
-            password=SecretStr("test-password"),
+            username="test-username",
+            password="test-password",
         )
 
         # Set the credentials in the relation using the provides charm library.
@@ -357,8 +357,8 @@ class DataProvidesBaseTests(ABC):
             salt="kkkkkkkk",
             request_id="c759221a6c14c72a",
             resource=DATABASE,
-            entity_name=SecretStr("test-name"),  # pyright: ignore[reportCallIssue]
-            entity_password=SecretStr("test-password"),  # pyright: ignore[reportCallIssue]
+            entity_name="test-name",  # pyright: ignore[reportCallIssue]
+            entity_password="test-password",  # pyright: ignore[reportCallIssue]
         )
 
         # Set the credentials in the relation using the provides charm library.
@@ -1255,8 +1255,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # using the requires charm library event.
         event = _on_resource_created.call_args[0][0]
         assert event.response.secret_user == secret.id
-        assert event.response.username.get_secret_value() == "test-username"
-        assert event.response.password.get_secret_value() == "test-password"
+        assert event.response.username == "test-username"
+        assert event.response.password == "test-password"
 
         assert self.harness.charm.requirer.is_resource_created(
             self.rel_id, event.response.request_id
@@ -1301,8 +1301,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # using the requires charm library event.
         event = _on_resource_created.call_args[0][0]
         assert event.response.secret_user == secret2.id
-        assert event.response.username.get_secret_value() == "test-username-2"
-        assert event.response.password.get_secret_value() == "test-password-2"
+        assert event.response.username == "test-username-2"
+        assert event.response.password == "test-password-2"
 
         assert self.harness.charm.requirer.is_resource_created(rel_id, event.response.request_id)
         assert self.harness.charm.requirer.are_all_resources_created(rel_id)
@@ -1347,8 +1347,8 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the entity-type, entity-name and entity-password are present in the relation.
         event = _on_resource_entity_created.call_args[0][0]
         assert event.response.secret_entity == secret.id
-        assert event.response.entity_name.get_secret_value() == "test-username"
-        assert event.response.entity_password.get_secret_value() == "test-password"
+        assert event.response.entity_name == "test-username"
+        assert event.response.entity_password == "test-password"
 
         # Reset the mock call count.
         _on_resource_entity_created.reset_mock()
@@ -1388,7 +1388,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the entity-type and entity-name are present in the relation.
         event = _on_resource_entity_created.call_args[0][0]
         assert event.response.secret_entity == secret2.id
-        assert event.response.entity_name.get_secret_value() == "test-groupname"
+        assert event.response.entity_name == "test-groupname"
         assert event.response.entity_password is None
 
     def test_fetch_relation_data_secrets_fields(self):
@@ -1695,9 +1695,9 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
 
         # Check that the fields are present in the relation
         # using the requires charm library.
-        assert event.response.tls.get_secret_value() is True
-        assert event.response.tls_ca.get_secret_value() == "deadbeef"
-        assert event.response.uris.get_secret_value() == "host1:port,host2:port"
+        assert event.response.tls is True
+        assert event.response.tls_ca == "deadbeef"
+        assert event.response.uris == "host1:port,host2:port"
         assert event.response.version == "1.0"
 
     def test_assign_relation_alias(self):

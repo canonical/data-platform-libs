@@ -21,8 +21,7 @@ from ops.charm import ActionEvent, CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
-from pydantic import Field, SecretStr
-from pydantic.types import _SecretBase
+from pydantic import Field
 
 from charms.data_platform_libs.v1.data_interfaces import (
     DataContractV1,
@@ -37,7 +36,6 @@ from charms.data_platform_libs.v1.data_interfaces import (
     ResourceProviderEventHandler,
     ResourceProviderModel,
     ResourceRequestedEvent,
-    SecretBool,
 )
 
 logger = logging.getLogger(__name__)
@@ -257,10 +255,10 @@ class DatabaseCharm(CharmBase):
         response = ResourceProviderModel(
             request_id=request.request_id,
             resource=resource,
-            password=SecretStr(password),
-            username=SecretStr(username),
+            password=password,
+            username=username,
             endpoints=f"{self.model.get_binding('database').network.bind_address}:5432",
-            tls=SecretBool(False),
+            tls=False,
             version=version,
         )
         self.database.set_response(event.relation.id, response)
@@ -302,8 +300,8 @@ class DatabaseCharm(CharmBase):
         response = ResourceProviderModel(
             request_id=request.request_id,
             salt=request.salt,
-            entity_name=SecretStr(rolename),
-            entity_password=SecretStr(password),
+            entity_name=rolename,
+            entity_password=password,
         )
         self.database.set_response(event.relation.id, response)
         self.unit.status = ActiveStatus()
@@ -324,7 +322,6 @@ class DatabaseCharm(CharmBase):
         )
         for request in model.requests:
             value = getattr(request, event.params["field"].replace("-", "_"))
-        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_get_relation_self_side_field(self, event: ActionEvent):
@@ -334,7 +331,6 @@ class DatabaseCharm(CharmBase):
         model = self.database.interface.build_model(relation.id, DataContract)
         for request in model.requests:
             value = getattr(request, event.params["field"].replace("-", "_"))
-        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_set_relation_field(self, event: ActionEvent):
@@ -387,7 +383,6 @@ class DatabaseCharm(CharmBase):
             relation = self._peer_relation_unit.relations[0]
             model = self._peer_relation_unit.build_model(relation.id)
             value = getattr(model, event.params["field"].replace("-", "_"))
-        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_set_peer_relation_field(self, event: ActionEvent):
@@ -466,7 +461,6 @@ class DatabaseCharm(CharmBase):
                 model, event.params["field"].replace("-", "_")
             )
         for key, item in value.items():
-            item = item.get_secret_value() if issubclass(item.__class__, _SecretBase) else item
             value[key] = item
         event.set_results(value)
 

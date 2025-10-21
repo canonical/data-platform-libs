@@ -15,8 +15,7 @@ from ops import Relation
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
-from pydantic import Field, SecretStr
-from pydantic.types import _SecretBase
+from pydantic import Field
 
 from charms.data_platform_libs.v1.data_interfaces import (
     ExtraSecretStr,
@@ -335,7 +334,6 @@ class ApplicationCharm(CharmBase):
         model = source.interface.build_model(relation.id, component=relation.app)
         for request in model.requests:
             value = getattr(request, event.params["field"].replace("-", "_"))
-        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_get_relation_self_side_field(self, event: ActionEvent):
@@ -347,7 +345,6 @@ class ApplicationCharm(CharmBase):
         )
         for request in model.requests:
             value = getattr(request, event.params["field"].replace("-", "_"))
-        value = value.get_secret_value() if issubclass(value.__class__, _SecretBase) else value
         event.set_results({"value": value if value else ""})
 
     def _on_set_relation_field(self, event: ActionEvent):
@@ -507,7 +504,7 @@ class ApplicationCharm(CharmBase):
             relation.id, RequirerDataContractV1[KafkaRequestModel], component=self.app
         )
         for response in model.requests:
-            response.mtls_cert = SecretStr(cert)
+            response.mtls_cert = cert
         self.kafka_split_pattern.interface.write_model(relation.id, model)
         event.set_results({"mtls-cert": cert})
 
