@@ -224,8 +224,8 @@ class SampleCharm(CharmBase):
             salt=event.request.salt,
             request_id=event.request.request_id,
             resource=db_name,
-            username=SecretStr(username),
-            password=SecretStr(password),
+            username=username,
+            password=password,
             ...
         )
         self.provided_database.set_response(event.relation.id, response)
