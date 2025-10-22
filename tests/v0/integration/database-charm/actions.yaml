@@ -138,3 +138,33 @@ get-other-peer-relation-field:
     field:
       type: string
       description: Relation field
+
+raise-status:
+  description: Raise a status on relations.
+  params:
+    relation-id:
+      type: integer 
+      description: The relation's unique ID
+    status-code:
+      type: integer
+      description: Status code.
+  required: [relation-id, status-code]
+
+resolve-status:
+  description: Resolve a status on relation.
+  params:
+    relation-id:
+      type: integer 
+      description: The relation's unique ID
+    status-code:
+      type: integer
+      description: Status code.
+  required: [relation-id, status-code]
+
+clear-statuses:
+  description: Clear all statuses on relation.
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+  required: [relation-id]
