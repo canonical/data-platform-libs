@@ -12,7 +12,7 @@ import logging
 import subprocess
 from typing import Optional, Tuple
 
-from ops import Relation
+from ops import JujuVersion, Relation
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
@@ -53,6 +53,13 @@ if DATA_INTERFACES_VERSION > 52:
     )
 
 
+if DATA_INTERFACES_VERSION > 54:
+    from charms.data_platform_libs.v0.data_interfaces import (
+        StatusRaisedEvent,
+        StatusResolvedEvent,
+    )
+
+
 logger = logging.getLogger(__name__)
 
 # Extra roles that this application needs when interacting with the database.
@@ -75,7 +82,7 @@ class ApplicationCharm(CharmBase):
 
         # Events related to the first database that is requested
         # (these events are defined in the database requires charm library).
-        database_name = f'{self.app.name.replace("-", "_")}_first_database_db'
+        database_name = f"{self.app.name.replace('-', '_')}_first_database_db"
         self.first_database = DatabaseRequires(
             charm=self,
             relation_name="first-database-db",
@@ -102,9 +109,20 @@ class ApplicationCharm(CharmBase):
                 self._on_first_database_entity_created,
             )
 
+        if DATA_INTERFACES_VERSION > 53 and JujuVersion.from_environ().has_secrets:
+            self.first_database_username = DatabaseRequires(
+                charm=self,
+                relation_name="first-database-username",
+                database_name=f"{database_name}_creds",
+                requested_entity_name="testuser",
+            )
+            self.framework.observe(
+                self.first_database_username.on.database_created, self._on_first_database_created
+            )
+
         # Events related to the second database that is requested
         # (these events are defined in the database requires charm library).
-        database_name = f'{self.app.name.replace("-", "_")}_second_database_db'
+        database_name = f"{self.app.name.replace('-', '_')}_second_database_db"
 
         # Keeping the charm backwards compatible, for upgrades testing
         if DATA_INTERFACES_VERSION > 17:
@@ -132,7 +150,7 @@ class ApplicationCharm(CharmBase):
         )
 
         # Multiple database clusters charm events (clusters/relations without alias).
-        database_name = f'{self.app.name.replace("-", "_")}_multiple_database_clusters'
+        database_name = f"{self.app.name.replace('-', '_')}_multiple_database_clusters"
         self.database_clusters = DatabaseRequires(
             charm=self,
             relation_name="multiple-database-clusters",
@@ -149,7 +167,7 @@ class ApplicationCharm(CharmBase):
 
         # Multiple database clusters charm events (defined dynamically
         # in the database requires charm library, using the provided cluster/relation aliases).
-        database_name = f'{self.app.name.replace("-", "_")}_aliased_multiple_database_clusters'
+        database_name = f"{self.app.name.replace('-', '_')}_aliased_multiple_database_clusters"
         cluster_aliases = ["cluster1", "cluster2"]  # Aliases for the multiple clusters/relations.
         self.aliased_database_clusters = DatabaseRequires(
             charm=self,
@@ -267,6 +285,21 @@ class ApplicationCharm(CharmBase):
             self.framework.observe(
                 self.opensearch_roles.on.index_entity_created,
                 self._on_opensearch_entity_created,
+            )
+
+        # Status/Error Propagation
+        if DATA_INTERFACES_VERSION > 54:
+            db = f"{self.app.name.replace('-', '_')}"
+            self.requirer_with_status = DatabaseRequires(
+                charm=self,
+                relation_name="database-with-status",
+                database_name=db,
+            )
+            self.framework.observe(
+                self.requirer_with_status.on.status_raised, self._on_status_raised
+            )
+            self.framework.observe(
+                self.requirer_with_status.on.status_resolved, self._on_status_resolved
             )
 
         # actions
@@ -482,6 +515,21 @@ class ApplicationCharm(CharmBase):
         relation = self.model.get_relation("kafka-split-pattern-client")
         self.kafka_requirer_interface.set_mtls_cert(relation.id, cert)
         event.set_results({"mtls-cert": cert})
+
+    # Status/Error Propagation
+    if DATA_INTERFACES_VERSION > 54:
+
+        def _on_status_raised(self, event: StatusRaisedEvent):
+            logger.info(f"Status raised: {event.status}")
+            self.unit.status = ActiveStatus(
+                f"Active Statuses: {[s.code for s in event.active_statuses]}"
+            )
+
+        def _on_status_resolved(self, event: StatusResolvedEvent):
+            logger.info(f"Status resolved: {event.status}")
+            self.unit.status = ActiveStatus(
+                f"Active Statuses: {[s.code for s in event.active_statuses]}"
+            )
 
 
 if __name__ == "__main__":

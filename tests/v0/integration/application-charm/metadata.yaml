@@ -12,6 +12,8 @@ requires:
     interface: database_client
   first-database-roles:
     interface: database_client
+  first-database-username:
+    interface: database_client
   second-database-db:
     interface: database_client
   multiple-database-clusters:
@@ -33,3 +35,5 @@ requires:
     interface: connect_client
   connect-sink:
     interface: connect_client
+  database-with-status:
+    interface: database_client

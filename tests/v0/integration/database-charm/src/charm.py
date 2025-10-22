@@ -43,6 +43,9 @@ if DATA_INTERFACES_VERSION > 49:
         DatabaseEntityRequestedEvent,
     )
 
+if DATA_INTERFACES_VERSION > 54:
+    from charms.data_platform_libs.v0.data_interfaces import DatabaseProviderData
+
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +134,16 @@ class DatabaseCharm(CharmBase):
             self.on.get_other_peer_relation_field_action, self._on_get_other_peer_relation_field
         )
 
+        # Status/Error Propagation
+        if DATA_INTERFACES_VERSION > 54:
+            self.database_provider = DatabaseProviderData(
+                self.model, "database", status_schema_path="src/status-schema.json"
+            )
+
+            self.framework.observe(self.on.raise_status_action, self._on_raise_status)
+            self.framework.observe(self.on.resolve_status_action, self._on_resolve_status)
+            self.framework.observe(self.on.clear_statuses_action, self._on_clear_statuses)
+
     @property
     def peer_relation(self) -> Optional[Relation]:
         """The cluster peer relation."""
@@ -198,10 +211,18 @@ class DatabaseCharm(CharmBase):
         # Retrieve the database name and extra user roles using the charm library.
         database = event.database
         extra_user_roles = event.extra_user_roles
+        username = None
+        password = None
+        if DATA_INTERFACES_VERSION >= 54:
+            if content := event.requested_entity_secret_content:
+                for key, val in content.items():
+                    username = key
+                    password = val
+                    break
 
         # Generate a username and a password for the application.
-        username = f"juju_{database}"
-        password = self._new_password()
+        username = username or f"juju_{database}"
+        password = password or self._new_password()
 
         # Connect to the database.
         connection_string = (
@@ -217,7 +238,7 @@ class DatabaseCharm(CharmBase):
         cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {database} TO {username};")
         # Add the roles to the user.
         if extra_user_roles:
-            cursor.execute(f'ALTER USER {username} {extra_user_roles.replace(",", " ")};')
+            cursor.execute(f"ALTER USER {username} {extra_user_roles.replace(',', ' ')};")
         # Get the database version.
         cursor.execute("SELECT version();")
         version = cursor.fetchone()[0]
@@ -243,7 +264,7 @@ class DatabaseCharm(CharmBase):
 
         # Set the read/write endpoint.
         self.database.set_endpoints(
-            event.relation.id, f'{self.model.get_binding("database").network.bind_address}:5432'
+            event.relation.id, f"{self.model.get_binding('database').network.bind_address}:5432"
         )
 
         # Share additional information with the application.
@@ -278,11 +299,11 @@ class DatabaseCharm(CharmBase):
             if entity_type == ENTITY_USER:
                 extra_roles = event.extra_user_roles
                 cursor.execute(f"CREATE ROLE {rolename} WITH ENCRYPTED PASSWORD '{password}';")
-                cursor.execute(f'ALTER ROLE {rolename} {extra_roles.replace(",", " ")};')
+                cursor.execute(f"ALTER ROLE {rolename} {extra_roles.replace(',', ' ')};")
             if entity_type == ENTITY_GROUP:
                 extra_roles = event.extra_group_roles
                 cursor.execute(f"CREATE ROLE {rolename};")
-                cursor.execute(f'ALTER ROLE {rolename} {extra_roles.replace(",", " ")};')
+                cursor.execute(f"ALTER ROLE {rolename} {extra_roles.replace(',', ' ')};")
 
             # Share the credentials with the application.
             self.database.set_entity_credentials(event.relation.id, rolename, password)
@@ -510,6 +531,32 @@ class DatabaseCharm(CharmBase):
 
         if secret:
             secret.remove_all_revisions()
+
+    def _on_raise_status(self, event: ActionEvent):
+        """Raise a status using action parameters."""
+        status_code = int(event.params["status-code"])
+        relation_id = int(event.params["relation-id"])
+
+        self.database_provider.raise_status(relation_id, status_code)
+
+        event.set_results({"result": f"successfully raised {status_code}"})
+
+    def _on_resolve_status(self, event: ActionEvent):
+        """Resolve a status using action parameters."""
+        status_code = int(event.params["status-code"])
+        relation_id = int(event.params["relation-id"])
+
+        self.database_provider.resolve_status(relation_id, status_code)
+
+        event.set_results({"result": f"successfully resolved {status_code}"})
+
+    def _on_clear_statuses(self, event: ActionEvent):
+        """Clear all statuses on a relation using action parameters."""
+        relation_id = int(event.params["relation-id"])
+
+        self.database_provider.clear_statuses(relation_id)
+
+        event.set_results({"result": f"cleared all statuses on {relation_id}"})
 
 
 if __name__ == "__main__":

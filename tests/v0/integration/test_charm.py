@@ -41,6 +41,7 @@ DATABASE_DUMMY_APP_METADATA = yaml.safe_load(
 DB_FIRST_DATABASE_RELATION_NAME = "first-database-db"
 DB_SECOND_DATABASE_RELATION_NAME = "second-database-db"
 ROLES_FIRST_DATABASE_RELATION_NAME = "first-database-roles"
+USERNAME_FIRST_DATABASE_RELATION_NAME = "first-database-username"
 
 MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "multiple-database-clusters"
 ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "aliased-multiple-database-clusters"
@@ -582,7 +583,6 @@ async def test_other_peer_relation(ops_test: OpsTest):
         await action.wait()
 
     for main_unit in units:
-
         action = await main_unit.run_action(
             "get-other-peer-relation-field", **{"field": "monitor-password"}
         )
@@ -615,7 +615,6 @@ async def test_other_peer_relation_scale(ops_test: OpsTest):
     units = ops_test.model.applications[DATABASE_APP_NAME].units
 
     for main_unit in units:
-
         action = await main_unit.run_action(
             "get-other-peer-relation-field", **{"field": "monitor-password"}
         )
@@ -642,7 +641,6 @@ async def test_other_peer_relation_scale(ops_test: OpsTest):
     unit = list(set(new_units) - set(units))[0]
 
     for main_unit in units:
-
         action = await main_unit.run_action(
             "get-other-peer-relation-field", **{"field": "monitor-password"}
         )
@@ -845,6 +843,32 @@ async def test_database_roles_relation_with_charm_libraries_secrets(ops_test: Op
 
     assert entity_name is not None
     assert entity_pass is not None
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_database_username(ops_test: OpsTest):
+    """Test basic functionality of database-roles relation interface."""
+    # Relate the charms and wait for them exchanging some connection data.
+
+    pytest.first_database_relation = await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{USERNAME_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    secret_uri = await get_application_relation_data(
+        ops_test,
+        APPLICATION_APP_NAME,
+        USERNAME_FIRST_DATABASE_RELATION_NAME,
+        "secret-user",
+    )
+
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    name = secret_content["username"]
+    password = secret_content["password"]
+
+    assert name == "testuser"
+    assert password is not None
 
 
 async def test_an_application_can_connect_to_multiple_database_clusters(
@@ -1549,7 +1573,7 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
     )
 
 
-async def test_scaling_requires_can_access_shared_secrest(ops_test):
+async def test_scaling_requires_can_access_shared_secret(ops_test):
     """When scaling up the application, new units should have access to relation secrets."""
     await ops_test.model.applications[APPLICATION_APP_NAME].scale(3)
 

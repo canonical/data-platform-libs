@@ -79,6 +79,7 @@ jobs:
           - integration-opensearch-v0
           - integration-kafka-v0
           - integration-kafka-connect-v0
+          - integration-status-v0
         juju-version:
           - juju-bootstrap-option: "2.9.51"
             juju-snap-channel: "2.9/stable"
@@ -108,6 +109,8 @@ jobs:
           - tox-environments: integration-kafka-v0
             ubuntu-versions: {series: focal}
           - tox-environments: integration-kafka-connect-v0
+            ubuntu-versions: {series: focal}
+          - tox-environments: integration-status-v0
             ubuntu-versions: {series: focal}
     name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
     needs:
