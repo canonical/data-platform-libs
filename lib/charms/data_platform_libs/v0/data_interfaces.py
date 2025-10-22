@@ -453,7 +453,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 55
+LIBPATCH = 56
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -3381,6 +3381,20 @@ class DatabaseReadOnlyEndpointsChangedEvent(AuthenticationEvent, DatabaseRequire
     """Event emitted when the read only endpoints are changed."""
 
 
+class DatabasePrefixDatabasesChangedEvent(AuthenticationEvent, DatabaseRequiresEvent):
+    """Event emitted when the prefix databases are changed."""
+
+    @property
+    def prefix_databases(self) -> Optional[List[str]]:
+        """Returns a list of databases matching a prefix."""
+        if not self.relation.app:
+            return None
+
+        if prefixed_databases := self.relation.data[self.relation.app].get("prefix-databases"):
+            return prefixed_databases.split(",")
+        return []
+
+
 class DatabaseRequiresEvents(RequirerCharmEvents):
     """Database events.
 
@@ -3391,6 +3405,7 @@ class DatabaseRequiresEvents(RequirerCharmEvents):
     database_entity_created = EventSource(DatabaseEntityCreatedEvent)
     endpoints_changed = EventSource(DatabaseEndpointsChangedEvent)
     read_only_endpoints_changed = EventSource(DatabaseReadOnlyEndpointsChangedEvent)
+    prefix_databases_changed = EventSource(DatabaseReadOnlyEndpointsChangedEvent)
 
 
 # Database Provider and Requires
@@ -3415,6 +3430,18 @@ class DatabaseProviderData(ProviderData):
             database_name: database name.
         """
         self.update_relation_data(relation_id, {"database": database_name})
+
+    def set_prefix_databases(self, relation_id: int, databases: List[str]) -> None:
+        """Set a coma separated list of databases matching a prefix.
+
+        This function writes in the application data bag, therefore,
+        only the leader unit can call it.
+
+        Args:
+            relation_id: the identifier for a particular relation.
+            databases: list of database names matching the requested prefix.
+        """
+        self.update_relation_data(relation_id, {"prefix-databases": ",".join(sorted(databases))})
 
     def set_endpoints(self, relation_id: int, connection_strings: str) -> None:
         """Set database primary connections.
@@ -3884,32 +3911,22 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
             # To avoid unnecessary application restarts do not trigger other events.
             return
 
-        # Emit an endpoints changed event if the database
-        # added or changed this info in the relation databag.
-        if "endpoints" in diff.added or "endpoints" in diff.changed:
-            # Emit the default event (the one without an alias).
-            logger.info("endpoints changed on %s", datetime.now())
-            getattr(self.on, "endpoints_changed").emit(
-                event.relation, app=event.app, unit=event.unit
-            )
+        for key, event_name in [
+            ("endpoints", "endpoints_changed"),
+            ("read-only-endpoints", "read_only_endpoints_changed"),
+            ("prefix-databases", "prefix_databases_changed"),
+        ]:
+            # Emit a change event if the key changed.
+            if key in diff.added or key in diff.changed:
+                # Emit the default event (the one without an alias).
+                logger.info("%s changed on %s", key, datetime.now())
+                getattr(self.on, event_name).emit(event.relation, app=event.app, unit=event.unit)
 
-            # Emit the aliased event (if any).
-            self._emit_aliased_event(event, "endpoints_changed")
+                # Emit the aliased event (if any).
+                self._emit_aliased_event(event, event_name)
 
-            # To avoid unnecessary application restarts do not trigger other events.
-            return
-
-        # Emit a read only endpoints changed event if the database
-        # added or changed this info in the relation databag.
-        if "read-only-endpoints" in diff.added or "read-only-endpoints" in diff.changed:
-            # Emit the default event (the one without an alias).
-            logger.info("read-only-endpoints changed on %s", datetime.now())
-            getattr(self.on, "read_only_endpoints_changed").emit(
-                event.relation, app=event.app, unit=event.unit
-            )
-
-            # Emit the aliased event (if any).
-            self._emit_aliased_event(event, "read_only_endpoints_changed")
+                # To avoid unnecessary application restarts do not trigger other events.
+                return
 
 
 class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
