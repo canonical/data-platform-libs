@@ -1,0 +1,18 @@
+[tool.poetry]
+package-mode = false
+requires-poetry = ">=2.0.0"
+
+[tool.poetry.dependencies]
+python = "^3.10.12"
+ops = ">=2.0.0,<3.0.0"
+pydantic = ">=2.11"
+
+[tool.poetry.group.charm-libs.dependencies]
+ops = ">=2.0.0"
+pydantic = ">=2.11"
+
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.8"
+
+[build-system]
+build-backend = "poetry.core.masonry.api"

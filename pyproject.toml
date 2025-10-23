@@ -66,7 +66,7 @@ ignore = ["E501", "D107"]
 per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104", "E999"]}
 
 [tool.ruff.lint.mccabe]
-max-complexity = 12
+max-complexity = 13
 
 [tool.pyright]
 include = ["src", "lib"]

@@ -1,0 +1,50 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+get-plugin-status:
+  description: Get plugin status (enabled/disabled).
+  params:
+    plugin:
+      type: string
+      description: The plugin to check the status.
+
+reset-unit-status:
+  description: Set empty status message (ActiveStatus)
+
+get-relation-field:
+  description: Get fields from the second-database relation
+  field:
+    type: string
+    description: Relation field
+
+get-relation-self-side-field:
+  description: Set fields from the relation
+  params:
+    relation_id:
+      type: integer 
+      description: The relation's unique ID
+    field:
+      type: string
+      description: Relation field
+
+set-relation-field:
+  description: Set fields from the second-database relation
+  field:
+    type: string
+    description: Relation field
+  value:
+    type: string
+    description: Value of the field to set
+  raw:
+    type: bool
+    description: Direct access
+    default: false
+
+delete-relation-field:
+  description: Delete fields from the sedond-database relation
+  field:
+    type: string
+    description: Relation field
+
+set-mtls-cert:
+  description: Sets the MTLS cert for the requirer application.
+ 
