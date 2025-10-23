@@ -424,7 +424,6 @@ from typing import (
     ItemsView,
     KeysView,
     List,
-    Literal,
     Optional,
     Set,
     Tuple,
@@ -2072,7 +2071,7 @@ class RequirerData(Data):
         requested_entity_secret: Optional[str] = None,
         requested_entity_name: Optional[str] = None,
         requested_entity_password: Optional[str] = None,
-        prefix_matching: Optional[Literal["all", "only-existing"]] = None,
+        prefix_matching: Optional[str] = None,
     ):
         """Manager of base client relations."""
         super().__init__(model, relation_name)
@@ -3262,7 +3261,7 @@ class DatabaseRequestedEvent(DatabaseProvidesEvent):
         return names
 
     @property
-    def prefix_matching(self) -> Optional[Literal["all", "only-existing"]]:
+    def prefix_matching(self) -> Optional[str]:
         """Returns the prefix matching strategy that were requested."""
         if not self.relation.app:
             return None
@@ -3626,7 +3625,7 @@ class DatabaseRequirerData(RequirerData):
         requested_entity_secret: Optional[str] = None,
         requested_entity_name: Optional[str] = None,
         requested_entity_password: Optional[str] = None,
-        prefix_matching: Optional[Literal["all", "only-existing"]] = None,
+        prefix_matching: Optional[str] = None,
     ):
         """Manager of database client relations."""
         super().__init__(
@@ -3966,7 +3965,7 @@ class DatabaseRequires(DatabaseRequirerData, DatabaseRequirerEventHandlers):
         requested_entity_secret: Optional[str] = None,
         requested_entity_name: Optional[str] = None,
         requested_entity_password: Optional[str] = None,
-        prefix_matching: Optional[Literal["all", "only-existing"]] = None,
+        prefix_matching: Optional[str] = None,
     ):
         DatabaseRequirerData.__init__(
             self,
