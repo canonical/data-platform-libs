@@ -249,6 +249,7 @@ import pickle
 import random
 import string
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import (
@@ -2468,6 +2469,93 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
 
         self.interface.write_model(relation_id, model)
         return
+
+    def set_responses(self, relation_id: int, responses: list[ResourceProviderModel]) -> None:
+        r"""Sets a list of responses in the databag.
+
+        This function will react accordingly to the version number.
+        If the version number is v0, then we write the data directly in the databag.
+        If the version number is v1, then we write the data in the list of responses.
+
+        /!\ This function updates a response if it was already present in the databag!
+
+        Args:
+            relation_id: The specific relation id for that event.
+            responses: The response to write in the databag.
+        """
+        if not self.charm.unit.is_leader():
+            return
+
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+
+        assert len(responses) >= 1, "List of responses is empty"
+
+        if not relation:
+            raise ValueError("Missing relation.")
+
+        repository = OpsRelationRepository(self.model, relation, component=relation.app)
+        version = repository.get_field("version") or "v0"
+
+        if version == "v0":
+            assert len(responses) == 1, "V0 only expects one response"
+            # Ensure the request_id is None
+            response = responses[0]
+            response.request_id = None
+            self.interface.write_model(
+                relation_id, response, context={"version": "v0"}
+            )  # {"database": "database-name", "secret-user": "uri", ...}
+            return
+
+        model = self.interface.build_model(relation_id, DataContractV1[responses[0].__class__])
+
+        response_map: dict[str, ResourceProviderModel] = {response.request_id: response for response in responses if response.request_id}
+
+        # Update all the already existing keys
+        for index, _response in enumerate(model.requests):
+            assert _response.request_id, "Missing request id in the response"
+            response = response_map.get(_response.request_id)
+            if response:
+                model.requests[index].update(response)
+                del response_map[_response.request_id]
+
+        # Add the missing keys
+        model.requests += list(response_map.values())
+
+        self.interface.write_model(relation_id, model)
+        return
+
+    def requests(self, relation: Relation) -> Sequence[RequirerCommonModel]:
+        """Returns the list of requests that we got."""
+        repository = OpsRelationRepository(
+            self.model, relation, component=relation.app
+        )
+
+        # Don't do anything until we get some data
+        if not repository.get_data():
+            return []
+
+        version = repository.get_field("version") or "v0"
+        if version == "v0":
+            request_model = build_model(repository, RequirerDataContractV0)
+            request_model.request_id = None  # For safety, let's ensure that we don't have a model.
+            return [request_model]
+        else:
+            request_model = build_model(repository, RequirerDataContractV1[self.request_model])
+            return request_model.requests
+
+    def responses(self, relation: Relation, model: type[ResourceProviderModel]) -> list[ResourceProviderModel]:
+        """Returns the list of responses that we currently have."""
+        repository = self.interface.repository(relation.id, component=relation.app)
+
+        version = repository.get_field("version") or "v0"
+        if version == "v0":
+            # Ensure the request_id is None
+            return [self.interface.build_model(relation.id, DataContractV0)]
+
+        return self.interface.build_model(relation.id, DataContractV1[model]).requests
+
+
+
 
 
 class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel]):
