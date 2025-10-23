@@ -1150,6 +1150,28 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
             == "host1:port,host2:port"
         )
 
+    def test_set_prefix_databases(self):
+        """Asserts that the read only endpoints are in the relation databag when they change."""
+        # We pretend that the connection is initialized
+        self.harness.update_relation_data(
+            self.rel_id, "application", {self.DATABASE_FIELD: DATABASE}
+        )
+
+        # Set the prefix databases in the relation using the provides charm library.
+        self.harness.charm.provider.set_prefix_databases(self.rel_id, ["db2", "db1"])
+
+        # Check that the endpoints are present in the relation.
+        assert (
+            self.harness.get_relation_data(self.rel_id, "database")["prefix-databases"]
+            == "db1,db2"
+        )
+
+        # Unset
+        self.harness.charm.provider.set_prefix_databases(self.rel_id, [])
+
+        # Check that the endpoints are present in the relation.
+        assert "prefix-databases" not in self.harness.get_relation_data(self.rel_id, "database")
+
     @pytest.mark.usefixtures("only_without_juju_secrets")
     def test_set_additional_fields(self):
         """Asserts that the additional fields are in the relation databag when they are set."""
@@ -2254,6 +2276,7 @@ def reset_aliases():
             delattr(DatabaseRequiresEvents, f"{cluster_alias}_database_entity_created")
             delattr(DatabaseRequiresEvents, f"{cluster_alias}_endpoints_changed")
             delattr(DatabaseRequiresEvents, f"{cluster_alias}_read_only_endpoints_changed")
+            delattr(DatabaseRequiresEvents, f"{cluster_alias}_prefix_databases_changed")
         except AttributeError:
             # Ignore the events not existing before the first test.
             pass
@@ -3074,6 +3097,39 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert relation_data["tls-ca"] == "Canonical"
         assert relation_data["uris"] == "host1:port,host2:port"
         assert relation_data["version"] == "1.0"
+
+    @patch.object(charm, "_on_database_created")
+    def test_prefix_are_accessible_through_event(self, _on_database_created):
+        """Asserts fields are accessible through the requires charm library event."""
+        # Not set
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "username": "test-username",
+                "password": "test-password",
+                "endpoints": "host1:port,host2:port",
+                "read-only-endpoints": "host1:port,host2:port",
+                "replset": "rs0",
+                "tls": "True",
+                "tls-ca": "Canonical",
+                "uris": "host1:port,host2:port",
+                "version": "1.0",
+            },
+        )
+
+        # Check that the fields are present in the relation
+        # using the requires charm library event.
+        event = _on_database_created.call_args[0][0]
+        assert event.prefix_databases == []
+
+        # Add the field
+        self.harness.update_relation_data(
+            self.rel_id, self.provider, {"prefix-databases": "db1,db2"}
+        )
+
+        event = _on_database_created.call_args[0][0]
+        assert event.prefix_databases == ["db1", "db2"]
 
     @patch.object(charm, "_on_database_created")
     def test_fields_are_accessible_through_event(self, _on_database_created):
