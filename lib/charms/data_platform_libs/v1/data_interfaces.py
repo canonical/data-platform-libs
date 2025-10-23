@@ -752,6 +752,24 @@ class PeerModel(BaseModel):
                 secret.set_content(full_content)
         return handler(self)
 
+    def __getitem__(self, key):
+        """Dict like access to the model."""
+        try:
+            return getattr(self, key.replace("-", "_"))
+        except Exception:
+            raise KeyError(f"{key} is not present in the model")
+
+    def __setitem__(self, key, value):
+        """Dict like setter for the model."""
+        return setattr(self, key.replace("-", "_"), value)
+
+    def __delitem__(self, key):
+        """Dict like deleter for the model."""
+        try:
+            return delattr(self, key.replace("-", "_"))
+        except Exception:
+            raise KeyError(f"{key} is not present in the model.")
+
 
 class BaseCommonModel(BaseModel):
     """Embeds the logic of parsing and serializing."""
@@ -895,6 +913,24 @@ class BaseCommonModel(BaseModel):
     def short_uuid(self) -> str | None:
         """The request id."""
         return None
+
+    def __getitem__(self, key):
+        """Dict like access to the model."""
+        try:
+            return getattr(self, key.replace("-", "_"))
+        except Exception:
+            raise KeyError(f"{key} is not present in the model")
+
+    def __setitem__(self, key, value):
+        """Dict like setter for the model."""
+        return setattr(self, key.replace("-", "_"), value)
+
+    def __delitem__(self, key):
+        """Dict like deleter for the model."""
+        try:
+            return delattr(self, key.replace("-", "_"))
+        except Exception:
+            raise KeyError(f"{key} is not present in the model.")
 
 
 class CommonModel(BaseCommonModel):

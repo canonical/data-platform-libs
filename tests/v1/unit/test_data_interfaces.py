@@ -306,6 +306,8 @@ class DataProvidesBaseTests(ABC):
             password="test-password",
         )
 
+        assert response["request-id"] == response.request_id
+
         # Set the credentials in the relation using the provides charm library.
         self.harness.charm.provider.set_response(self.rel_id, response)
 
