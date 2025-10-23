@@ -2544,7 +2544,9 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
 
         model = self.interface.build_model(relation_id, DataContractV1[responses[0].__class__])
 
-        response_map: dict[str, ResourceProviderModel] = {response.request_id: response for response in responses if response.request_id}
+        response_map: dict[str, ResourceProviderModel] = {
+            response.request_id: response for response in responses if response.request_id
+        }
 
         # Update all the already existing keys
         for index, _response in enumerate(model.requests):
@@ -2562,9 +2564,7 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
 
     def requests(self, relation: Relation) -> Sequence[RequirerCommonModel]:
         """Returns the list of requests that we got."""
-        repository = OpsRelationRepository(
-            self.model, relation, component=relation.app
-        )
+        repository = OpsRelationRepository(self.model, relation, component=relation.app)
 
         # Don't do anything until we get some data
         if not repository.get_data():
@@ -2579,7 +2579,9 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
             request_model = build_model(repository, RequirerDataContractV1[self.request_model])
             return request_model.requests
 
-    def responses(self, relation: Relation, model: type[ResourceProviderModel]) -> list[ResourceProviderModel]:
+    def responses(
+        self, relation: Relation, model: type[ResourceProviderModel]
+    ) -> list[ResourceProviderModel]:
         """Returns the list of responses that we currently have."""
         repository = self.interface.repository(relation.id, component=relation.app)
 
@@ -2589,9 +2591,6 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
             return [self.interface.build_model(relation.id, DataContractV0)]
 
         return self.interface.build_model(relation.id, DataContractV1[model]).requests
-
-
-
 
 
 class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel]):
