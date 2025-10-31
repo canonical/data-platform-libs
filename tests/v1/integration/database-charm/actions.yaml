@@ -3,6 +3,9 @@
 change-admin-password:
   description: Change the admin password to a new, generated value
 
+set-tls:
+  description: Set TLS field in the relation
+
 set-secret:
   description: Change the value of a particular secret
   params:
@@ -139,9 +142,3 @@ get-other-peer-relation-field:
       type: string
       description: Relation field
 
-set-tls:
-  description: Set TLS field in the relation
-  params:
-    relation_id:
-      type: integer
-      description: The relation's unique ID

@@ -669,6 +669,7 @@ async def test_postgresql_plugin(ops_test: OpsTest):
     assert action.results.get("plugin-status") == "enabled"
 
 
+@pytest.mark.abort_on_fail
 async def test_tls_integration_after_initial_integration(ops_test: OpsTest):
     """Test that adding TLS to the database after the initial integration does trigger an auth updated event in the client."""
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
@@ -676,9 +677,7 @@ async def test_tls_integration_after_initial_integration(ops_test: OpsTest):
 
     rel_id = pytest.first_database_relation.id
 
-    action = await ops_test.model.units.get(unit_name).run_action(
-        "set-tls", **{"relation_id": rel_id}
-    )
+    action = await ops_test.model.units.get(unit_name).run_action("set-tls")
     await action.wait()
 
     app_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)

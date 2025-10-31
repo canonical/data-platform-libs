@@ -266,12 +266,12 @@ class DatabaseCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     def _on_set_tls_action(self, event: ActionEvent):
-        relation = self._get_relation(event.params["relation_id"])
-        model = self.database.interface.build_model(relation.id, DataContract)
-        for request in model.requests:
-            request.tls = True
-            request.tls_ca = "deadbeef"
-        self.database.interface.write_model(relation.id, model)
+        for relation in self.database.interface.relations:
+            model = self.database.interface.build_model(relation.id, DataContract)
+            for request in model.requests:
+                request.tls = True
+                request.tls_ca = "deadbeef"
+            self.database.interface.write_model(relation.id, model)
 
     def _on_resource_entity_requested(self, event: ResourceEntityRequestedEvent) -> None:
         """Event triggered when a new database entity is requested."""
