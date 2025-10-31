@@ -685,7 +685,7 @@ async def test_tls_integration_after_initial_integration(ops_test: OpsTest):
     app_unit_name = f"{APPLICATION_APP_NAME}/{app_id}"
 
     assert (
-        ops_test.model.units.get(unit_name).workload_status_message
+        ops_test.model.units.get(app_unit_name).workload_status_message
         == "first_database_authentication_updated"
     )
 
