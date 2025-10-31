@@ -675,8 +675,6 @@ async def test_tls_integration_after_initial_integration(ops_test: OpsTest):
     leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
     unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
 
-    rel_id = pytest.first_database_relation.id
-
     action = await ops_test.model.units.get(unit_name).run_action("set-tls")
     await action.wait()
 
