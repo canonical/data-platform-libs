@@ -18,6 +18,7 @@ from ops.model import ActiveStatus
 from pydantic import Field
 
 from charms.data_platform_libs.v1.data_interfaces import (
+    AuthenticationUpdatedEvent,
     ExtraSecretStr,
     KafkaRequestModel,
     KafkaResponseModel,
@@ -92,6 +93,10 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(
             self.first_database_roles.on.resource_entity_created,
             self._on_first_database_entity_created,
+        )
+        self.framework.observe(
+            self.first_database.on.authentication_updated,
+            self._on_first_database_auth_updated,
         )
 
         # Events related to the second database that is requested
@@ -385,6 +390,12 @@ class ApplicationCharm(CharmBase):
         # Retrieve the credentials using the charm library.
         logger.info(f"first database entity credentials: {event.response.entity_name}")
         self.unit.status = ActiveStatus("received entity credentials of the first database")
+
+    def _on_first_database_auth_updated(self, event: AuthenticationUpdatedEvent) -> None:
+        """Event triggered when a database entity was created for this application."""
+        # Retrieve the credentials using the charm library.
+        logger.info(f"first database tls credentials: {event.response.tls}")
+        self.unit.status = ActiveStatus("first_database_authentication_updated")
 
     # Second database events observers.
     def _on_second_database_created(self, event: ResourceCreatedEvent) -> None:

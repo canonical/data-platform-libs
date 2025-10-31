@@ -669,6 +669,27 @@ async def test_postgresql_plugin(ops_test: OpsTest):
     assert action.results.get("plugin-status") == "enabled"
 
 
+async def test_tls_integration_after_initial_integration(ops_test: OpsTest):
+    """Test that adding TLS to the database after the initial integration does trigger an auth updated event in the client."""
+    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
+
+    rel_id = pytest.first_database_relation.id
+
+    action = await ops_test.model.units.get(unit_name).run_action(
+        "set-tls", **{"relation_id": rel_id}
+    )
+    await action.wait()
+
+    app_id = await get_leader_id(ops_test, APPLICATION_APP_NAME)
+    app_unit_name = f"{APPLICATION_APP_NAME}/{app_id}"
+
+    assert (
+        ops_test.model.units.get(unit_name).workload_status_message
+        == "first_database_authentication_updated"
+    )
+
+
 async def test_two_applications_dont_share_the_same_relation_data(
     ops_test: OpsTest, application_charm
 ):

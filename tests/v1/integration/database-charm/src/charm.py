@@ -139,6 +139,8 @@ class DatabaseCharm(CharmBase):
             self.on.get_other_peer_relation_field_action, self._on_get_other_peer_relation_field
         )
 
+        self.framework.observe(self.on.set_tls_action, self._on_set_tls_action)
+
     @property
     def peer_relation(self) -> Optional[Relation]:
         """The cluster peer relation."""
@@ -258,11 +260,18 @@ class DatabaseCharm(CharmBase):
             password=password,
             username=username,
             endpoints=f"{self.model.get_binding('database').network.bind_address}:5432",
-            tls=False,
             version=version,
         )
         self.database.set_response(event.relation.id, response)
         self.unit.status = ActiveStatus()
+
+    def _on_set_tls_action(self, event: ActionEvent):
+        relation = self._get_relation(event.params["relation_id"])
+        model = self.database.interface.build_model(relation.id, DataContract)
+        for request in model.requests:
+            request.tls = True
+            request.tls_ca = "deadbeef"
+        self.database.interface.write_model(relation.id, model)
 
     def _on_resource_entity_requested(self, event: ResourceEntityRequestedEvent) -> None:
         """Event triggered when a new database entity is requested."""

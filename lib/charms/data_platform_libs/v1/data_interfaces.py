@@ -834,9 +834,7 @@ class BaseCommonModel(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def serialize_model(
-        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
-    ):  # noqa: C901
+    def serialize_model(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo):  # noqa: C901
         """Serializes the model writing the secrets in their respective secrets."""
         if not info.context or not isinstance(info.context.get("repository"), AbstractRepository):
             logger.debug("No secret parsing serialization as we're lacking context here.")
@@ -2951,4 +2949,12 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                 event.relation, app=event.app, unit=event.unit, response=response
             )
             self._emit_aliased_event(event, "read_only_endpoints_changed", response)
+            return
+
+        if "secret-tls" in _diff.changed:
+            logger.info(f"auth updated for {response.resource} at {datetime.now()}")
+            getattr(self.on, "authentication_updated").emit(
+                event.relation, app=event.app, unit=event.unit, response=response
+            )
+            self._emit_aliased_event(event, "authentication_updated", response)
             return

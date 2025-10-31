@@ -138,3 +138,10 @@ get-other-peer-relation-field:
     field:
       type: string
       description: Relation field
+
+set-tls:
+  description: Set TLS field in the relation
+  params:
+    relation_id:
+      type: integer
+      description: The relation's unique ID
