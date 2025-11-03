@@ -219,6 +219,12 @@ class DatabaseCharm(CharmBase):
                     username = key
                     password = val
                     break
+        # Prefix check
+        if DATA_INTERFACES_VERSION >= 56 and database[-1] == "*":
+            databases = [f"{database[:-1]}1", f"{database[:-1]}2"]
+            username = username or f"juju_{database[:-1]}"
+        else:
+            databases = [database]
 
         # Generate a username and a password for the application.
         username = username or f"juju_{database}"
@@ -232,13 +238,14 @@ class DatabaseCharm(CharmBase):
         connection = psycopg2.connect(connection_string)
         connection.autocommit = True
         cursor = connection.cursor()
-        # Create the database, user and password. Also gives the user access to the database.
-        cursor.execute(f"CREATE DATABASE {database};")
         cursor.execute(f"CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';")
-        cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {database} TO {username};")
-        # Add the roles to the user.
-        if extra_user_roles:
-            cursor.execute(f"ALTER USER {username} {extra_user_roles.replace(',', ' ')};")
+        for database in databases:
+            # Create the database, user and password. Also gives the user access to the database.
+            cursor.execute(f"CREATE DATABASE {database};")
+            cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {database} TO {username};")
+            # Add the roles to the user.
+            if extra_user_roles:
+                cursor.execute(f"ALTER USER {username} {extra_user_roles.replace(',', ' ')};")
         # Get the database version.
         cursor.execute("SELECT version();")
         version = cursor.fetchone()[0]
@@ -270,6 +277,9 @@ class DatabaseCharm(CharmBase):
         # Share additional information with the application.
         self.database.set_tls(event.relation.id, "False")
         self.database.set_version(event.relation.id, version)
+
+        if len(databases) > 1:
+            self.database.set_prefix_databases(event.relation.id, databases)
 
         self.unit.status = ActiveStatus()
 

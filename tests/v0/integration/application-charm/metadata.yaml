@@ -37,3 +37,5 @@ requires:
     interface: connect_client
   database-with-status:
     interface: database_client
+  database-with-prefix:
+    interface: database_client
