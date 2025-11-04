@@ -164,6 +164,14 @@ class ApplicationCharm(CharmBase):
             self.database_clusters.on.endpoints_changed,
             self._on_cluster_endpoints_changed,
         )
+        if DATA_INTERFACES_VERSION > 55:
+            self.database_prefixes = DatabaseRequires(
+                charm=self,
+                relation_name="database-with-prefix",
+                database_name="testdb*",
+                extra_user_roles=EXTRA_USER_ROLES,
+                prefix_matching="all",
+            )
 
         # Multiple database clusters charm events (defined dynamically
         # in the database requires charm library, using the provided cluster/relation aliases).
