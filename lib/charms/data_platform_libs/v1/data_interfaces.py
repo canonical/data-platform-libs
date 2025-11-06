@@ -309,7 +309,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 0
+LIBPATCH = 1
 
 PYDEPS = ["ops>=2.0.0", "pydantic>=2.11"]
 
@@ -728,7 +728,7 @@ class PeerModel(BaseModel):
 
                 value = getattr(self, field)
 
-                if value and not isinstance(value, str):
+                if (value is not None) and not isinstance(value, str):
                     value = json.dumps(value)
 
                 if secret is None:
@@ -864,7 +864,7 @@ class BaseCommonModel(BaseModel):
 
                 value = getattr(self, field)
 
-                if value and not isinstance(value, str):
+                if (value is not None) and not isinstance(value, str):
                     value = json.dumps(value)
 
                 if secret is None:
@@ -2951,4 +2951,12 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                 event.relation, app=event.app, unit=event.unit, response=response
             )
             self._emit_aliased_event(event, "read_only_endpoints_changed", response)
+            return
+
+        if "secret-tls" in _diff.added or "secret-tls" in _diff.changed:
+            logger.info(f"auth updated for {response.resource} at {datetime.now()}")
+            getattr(self.on, "authentication_updated").emit(
+                event.relation, app=event.app, unit=event.unit, response=response
+            )
+            self._emit_aliased_event(event, "authentication_updated", response)
             return
