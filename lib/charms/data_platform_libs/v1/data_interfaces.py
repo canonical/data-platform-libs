@@ -248,6 +248,8 @@ import logging
 import pickle
 import random
 import string
+from os import PathLike
+from pathlib import Path
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
@@ -260,6 +262,7 @@ from typing import (
     NamedTuple,
     NewType,
     TypeAlias,
+    TypedDict,
     TypeVar,
     overload,
 )
@@ -332,6 +335,7 @@ RESOURCE_ALIASES = [
 ]
 
 SECRET_PREFIX = "secret-"
+STATUS_FIELD = "status"
 
 
 ##############################################################################
@@ -481,6 +485,8 @@ OptionalSecretBool: TypeAlias = bool | None
 
 OptionalSecrets = (OptionalSecretStr, OptionalSecretBool)
 
+OptionalPathLike = PathLike | str | None
+
 UserSecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "user"]
 TlsSecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "tls"]
 TlsSecretBool = Annotated[OptionalSecretBool, Field(exclude=True, default=None), "tls"]
@@ -494,6 +500,14 @@ class Scope(Enum):
 
     APP = "app"
     UNIT = "unit"
+
+
+class RelationStatusDict(TypedDict):
+    """Base type for dict representation of `RelationStatus` dataclass."""
+
+    code: int
+    message: str
+    resolution: str
 
 
 class CachedSecret:
@@ -1119,6 +1133,29 @@ class KafkaResponseModel(ResourceProviderModel):
 
     consumer_group_prefix: ExtraSecretStr = Field(default=None)
     zookeeper_uris: ExtraSecretStr = Field(default=None)
+
+
+class RelationStatus(BaseModel):
+    """Base model for status propagation on charm relations."""
+
+    code: int
+    message: str
+    resolution: str
+
+    @property
+    def is_informational(self) -> bool:
+        """Is this an informational status?"""
+        return self.code // 1000 == 1
+
+    @property
+    def is_transitory(self) -> bool:
+        """Is this a transitory status?"""
+        return self.code // 1000 == 4
+
+    @property
+    def is_fatal(self) -> bool:
+        """Is this a fatal status, requiring removing the relation?"""
+        return self.code // 1000 == 5
 
 
 ##############################################################################
@@ -2063,6 +2100,58 @@ class ResourceRequiresEvents(CharmEvents, Generic[TResourceProviderModel]):
     authentication_updated = EventSource(AuthenticationUpdatedEvent)
 
 
+# Error Propagation Events
+
+
+class StatusEventBase(RelationEvent):
+    """Base class for relation status change events."""
+
+    def __init__(
+        self,
+        handle: Handle,
+        relation: Relation,
+        status: RelationStatus,
+        app: Application | None = None,
+        unit: Unit | None = None,
+    ):
+        super().__init__(handle, relation, app=app, unit=unit)
+        self.status = status
+
+    def snapshot(self) -> dict:
+        """Return a snapshot of the event."""
+        return super().snapshot() | {"status": json.dumps(self.status.model_dump())}
+
+    def restore(self, snapshot: dict):
+        """Restore the event from a snapshot."""
+        super().restore(snapshot)
+        self.status = RelationStatus(**json.loads(snapshot["status"]))
+
+    @property
+    def active_statuses(self) -> list[RelationStatus]:
+        """Returns a list of all currently active statuses on this relation."""
+        if not self.relation.app:
+            return []
+
+        raw = json.loads(self.relation.data[self.relation.app].get(STATUS_FIELD, "[]"))
+
+        return [RelationStatus(**item) for item in raw]
+
+
+class StatusRaisedEvent(StatusEventBase):
+    """Event emitted on the requirer when a new status is being raised by the provider on relation."""
+
+
+class StatusResolvedEvent(StatusEventBase):
+    """Event emitted on the requirer when a status is marked as resolved by the provider on relation."""
+
+
+class RequirerCharmEvents(CharmEvents):
+    """Base events for data requirer charms."""
+
+    status_raised = EventSource(StatusRaisedEvent)
+    status_resolved = EventSource(StatusResolvedEvent)
+
+
 ##############################################################################
 # Event Handlers
 ##############################################################################
@@ -2243,6 +2332,7 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         unique_key: str = "",
         mtls_enabled: bool = False,
         bulk_event: bool = False,
+        status_schema_path: OptionalPathLike = None,
     ):
         """Builds a resource provider event handler.
 
@@ -2260,6 +2350,26 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         self.interface = OpsRelationRepositoryInterface(charm.model, relation_name, request_model)
         self.mtls_enabled = mtls_enabled
         self.bulk_event = bulk_event
+
+        self._status_schema = (
+            {} if not status_schema_path else self._load_status_schema(Path(status_schema_path))
+        )
+
+    def _load_status_schema(self, schema_path: Path) -> dict[int, RelationStatus]:
+        """Load JSON schema defining status codes and their details.
+        Args:
+            schema_path: JSON schema file path.
+        Raises:
+            FileNotFoundError: If the provided path is invalid/inaccessible.
+        Returns:
+            dict[int, RelationStatusDict]: Mapping of status code to RelationStatus data objects.
+        """
+        if not schema_path.exists():
+            raise FileNotFoundError(f"Can't locate status schema file: {schema_path}")
+
+        content = json.load(open(schema_path, "r"))
+
+        return {s["code"]: RelationStatus(**s) for s in content.get("statuses", [])}
 
     @staticmethod
     def _validate_diff(event: RelationEvent, _diff: Diff) -> None:
@@ -2592,6 +2702,103 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
 
         return self.interface.build_model(relation.id, DataContractV1[model]).requests
 
+    def get_statuses(self, relation_id: int) -> dict[int, RelationStatus]:
+        """Return all currently active statuses on this relation. Can only be called on leader units.
+        Args:
+            relation_id (int): the identifier for a particular relation.
+        Returns:
+            Dict[int, RelationStatus]: A mapping of status code to RelationStatus instances.
+        """
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+
+        if not relation:
+            raise ValueError("Missing relation.")
+
+        raw = relation.data[self.charm.app].get(STATUS_FIELD, "[]")
+
+        return {item["code"]: RelationStatus(**item) for item in json.loads(raw)}
+
+    @overload
+    def raise_status(self, relation_id: int, status: int) -> None: ...
+
+    @overload
+    def raise_status(self, relation_id: int, status: RelationStatusDict) -> None: ...
+
+    @overload
+    def raise_status(self, relation_id: int, status: RelationStatus) -> None: ...
+
+    def raise_status(
+        self, relation_id: int, status: RelationStatus | RelationStatusDict | int
+    ) -> None:
+        """Raise a status on the relation. Can only be called on leader units.
+        Args:
+            relation_id (int): the identifier for a particular relation.
+            status (RelationStatus | RelationStatusDict | int): A representation of the status being raised,
+                which could be either a RelationStatus, an appropriate dict, or the numeric status code.
+        Raises:
+            ValueError: If the status provided is not correctly formatted.
+        """
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+
+        if not relation:
+            raise ValueError("Missing relation.")
+
+        if isinstance(status, int):
+            # we expect the status schema to be defined in this case.
+            if status not in self._status_schema:
+                raise KeyError(f"Status code [{status}] not defined.")
+            _status = self._status_schema[status]
+        elif isinstance(status, dict):
+            _status = RelationStatus(**status)
+        elif isinstance(status, RelationStatus):
+            _status = status
+        else:
+            raise ValueError(
+                "The status should be either a RelationStatus, an appropriate dict, or the numeric status code."
+            )
+
+        statuses = self.get_statuses(relation_id)
+        statuses.update({_status.code: _status})
+        serialized = json.dumps([statuses[k].model_dump() for k in sorted(statuses)])
+
+        repository = OpsRelationRepository(self.model, relation, component=relation.app)
+        repository.write_field(STATUS_FIELD, serialized)
+
+    def resolve_status(self, relation_id: int, status_code: int) -> None:
+        """Set a previously raised status as resolved.
+        Args:
+            relation_id (int): the identifier for a particular relation.
+            status_code (int): the numeric code of the resolved status.
+        """
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+
+        if not relation:
+            raise ValueError("Missing relation.")
+
+        statuses = self.get_statuses(relation_id)
+        if status_code not in statuses:
+            logger.error(f"Status [{status_code}] has never been raised before.")
+            return
+
+        statuses.pop(status_code)
+        serialized = json.dumps([statuses[k].model_dump() for k in sorted(statuses)])
+
+        repository = OpsRelationRepository(self.model, relation, component=relation.app)
+        repository.write_field(STATUS_FIELD, serialized)
+
+    def clear_statuses(self, relation_id: int) -> None:
+        """Clear all previously raised statuses.
+        Args:
+            relation_id (int): the identifier for a particular relation.
+        """
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+
+        if not relation:
+            raise ValueError("Missing relation.")
+
+        repository = OpsRelationRepository(self.model, relation, component=relation.app)
+        repository.delete_field(STATUS_FIELD)
+
 
 class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel]):
     """Event Handler for resource requirer."""
@@ -2901,6 +3108,41 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                     f"No request matching the response with response_id {response_id}"
                 )
             self._handle_event(event, repository, request, response)
+
+        # Retrieve old statuses from "data"
+        old_data = json.loads(data or "{}")
+        old_statuses = json.loads(old_data.get(STATUS_FIELD, "[]"))
+        previous_codes = {status.get("code") for status in old_statuses}
+
+        # Compute current statuses
+        current_statuses = json.loads(repository.get_field(STATUS_FIELD) or "[]")
+        current_codes = {status.get("code") for status in current_statuses}
+
+        # Detect changes
+        raised = current_codes - previous_codes
+        resolved = previous_codes - current_codes
+
+        for status_code in raised:
+            logger.info(f"########## Status [{status_code}] raised")
+            _status = next(s for s in current_statuses if s["code"] == status_code)
+            _status_instance = RelationStatus(**_status)
+            getattr(self.on, "status_raised").emit(
+                event.relation,
+                status=_status_instance,
+                app=event.app,
+                unit=event.unit,
+            )
+
+        for status_code in resolved:
+            logger.info(f"######### Status [{status_code}] resolved")
+            _status = next(s for s in old_statuses if s["code"] == status_code)
+            _status_instance = RelationStatus(**_status)
+            getattr(self.on, "status_resolved").emit(
+                event.relation,
+                status=_status_instance,
+                app=event.app,
+                unit=event.unit,
+            )
 
     ##############################################################################
     # Methods to handle specificities of relation events
