@@ -248,12 +248,12 @@ import logging
 import pickle
 import random
 import string
-from os import PathLike
-from pathlib import Path
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
+from os import PathLike
+from pathlib import Path
 from typing import (
     Annotated,
     Any,
@@ -449,6 +449,7 @@ def store_new_data(
     component: Unit | Application,
     new_data: dict[str, str],
     short_uuid: str | None = None,
+    global_data: dict[str, Any] = {},
 ):
     """Stores the new data in the databag for diff computation.
 
@@ -457,13 +458,15 @@ def store_new_data(
         component: The component databag to write data to
         new_data: a dictionary containing the data to write
         short_uuid: Only present in V1, the request-id of that data to write.
+        global_data: request-independent, global state data to be written.
     """
+    global_data = {k: v for k, v in global_data.items() if v}
     # First, the case for V0
     if not short_uuid:
-        relation.data[component].update({"data": json.dumps(new_data)})
+        relation.data[component].update({"data": json.dumps(new_data | global_data)})
     # Then the case for V1, where we have a ShortUUID
     else:
-        data = json.loads(relation.data[component].get("data", "{}"))
+        data = json.loads(relation.data[component].get("data", "{}")) | global_data
         if not isinstance(data, dict):
             raise ValueError
         data[short_uuid] = new_data
@@ -2087,19 +2090,6 @@ class AuthenticationUpdatedEvent(ResourceRequirerEvent[TResourceProviderModel]):
     pass
 
 
-class ResourceRequiresEvents(CharmEvents, Generic[TResourceProviderModel]):
-    """Database events.
-
-    This class defines the events that the database can emit.
-    """
-
-    resource_created = EventSource(ResourceCreatedEvent)
-    resource_entity_created = EventSource(ResourceEntityCreatedEvent)
-    endpoints_changed = EventSource(ResourceEndpointsChangedEvent)
-    read_only_endpoints_changed = EventSource(ResourceReadOnlyEndpointsChangedEvent)
-    authentication_updated = EventSource(AuthenticationUpdatedEvent)
-
-
 # Error Propagation Events
 
 
@@ -2145,9 +2135,17 @@ class StatusResolvedEvent(StatusEventBase):
     """Event emitted on the requirer when a status is marked as resolved by the provider on relation."""
 
 
-class RequirerCharmEvents(CharmEvents):
-    """Base events for data requirer charms."""
+class ResourceRequiresEvents(CharmEvents, Generic[TResourceProviderModel]):
+    """Database events.
 
+    This class defines the events that the database can emit.
+    """
+
+    resource_created = EventSource(ResourceCreatedEvent)
+    resource_entity_created = EventSource(ResourceEntityCreatedEvent)
+    endpoints_changed = EventSource(ResourceEndpointsChangedEvent)
+    read_only_endpoints_changed = EventSource(ResourceReadOnlyEndpointsChangedEvent)
+    authentication_updated = EventSource(AuthenticationUpdatedEvent)
     status_raised = EventSource(StatusRaisedEvent)
     status_resolved = EventSource(StatusResolvedEvent)
 
@@ -2201,6 +2199,26 @@ class EventHandlers(Object):
                 remote_unit = unit
                 break
         return remote_unit
+
+    def get_statuses(self, relation_id: int) -> dict[int, RelationStatus]:
+        """Return all currently active statuses on this relation. Can only be called on leader units.
+
+        Args:
+            relation_id (int): the identifier for a particular relation.
+
+        Returns:
+            Dict[int, RelationStatus]: A mapping of status code to RelationStatus instances.
+        """
+        relation = self.charm.model.get_relation(self.relation_name, relation_id)
+
+        if not relation:
+            raise ValueError("Missing relation.")
+
+        component = self.charm.app if isinstance(self.component, Application) else relation.app
+
+        raw = relation.data[component].get(STATUS_FIELD, "[]")
+
+        return {int(item["code"]): RelationStatus(**item) for item in json.loads(raw)}
 
     # Event handlers
 
@@ -2286,7 +2304,18 @@ class EventHandlers(Object):
 
         if store:
             # Update the databag with the new data for later diff computations
-            store_new_data(relation, self.component, new_data, short_uuid=request.request_id)
+            store_new_data(
+                relation,
+                self.component,
+                new_data,
+                short_uuid=request.request_id,
+                global_data={
+                    STATUS_FIELD: {
+                        code: status.model_dump()
+                        for code, status in self.get_statuses(relation.id).items()
+                    }
+                },
+            )
 
         return _diff
 
@@ -2343,6 +2372,7 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
             unique_key: An optional unique key for that object.
             mtls_enabled: If True, means the server supports MTLS integration.
             bulk_event: If this is true, only one event will be emitted with all requests in the case of a v1 requirer.
+            status_schema_path: Path to the JSON file defining status/error codes and their definitions.
         """
         super().__init__(charm, relation_name, unique_key)
         self.component = self.charm.app
@@ -2357,10 +2387,13 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
 
     def _load_status_schema(self, schema_path: Path) -> dict[int, RelationStatus]:
         """Load JSON schema defining status codes and their details.
+
         Args:
             schema_path: JSON schema file path.
+
         Raises:
             FileNotFoundError: If the provided path is invalid/inaccessible.
+
         Returns:
             dict[int, RelationStatusDict]: Mapping of status code to RelationStatus data objects.
         """
@@ -2702,22 +2735,6 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
 
         return self.interface.build_model(relation.id, DataContractV1[model]).requests
 
-    def get_statuses(self, relation_id: int) -> dict[int, RelationStatus]:
-        """Return all currently active statuses on this relation. Can only be called on leader units.
-        Args:
-            relation_id (int): the identifier for a particular relation.
-        Returns:
-            Dict[int, RelationStatus]: A mapping of status code to RelationStatus instances.
-        """
-        relation = self.charm.model.get_relation(self.relation_name, relation_id)
-
-        if not relation:
-            raise ValueError("Missing relation.")
-
-        raw = relation.data[self.charm.app].get(STATUS_FIELD, "[]")
-
-        return {item["code"]: RelationStatus(**item) for item in json.loads(raw)}
-
     @overload
     def raise_status(self, relation_id: int, status: int) -> None: ...
 
@@ -2731,10 +2748,12 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         self, relation_id: int, status: RelationStatus | RelationStatusDict | int
     ) -> None:
         """Raise a status on the relation. Can only be called on leader units.
+
         Args:
             relation_id (int): the identifier for a particular relation.
             status (RelationStatus | RelationStatusDict | int): A representation of the status being raised,
                 which could be either a RelationStatus, an appropriate dict, or the numeric status code.
+
         Raises:
             ValueError: If the status provided is not correctly formatted.
         """
@@ -2761,11 +2780,12 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         statuses.update({_status.code: _status})
         serialized = json.dumps([statuses[k].model_dump() for k in sorted(statuses)])
 
-        repository = OpsRelationRepository(self.model, relation, component=relation.app)
+        repository = OpsRelationRepository(self.model, relation, component=self.charm.app)
         repository.write_field(STATUS_FIELD, serialized)
 
     def resolve_status(self, relation_id: int, status_code: int) -> None:
         """Set a previously raised status as resolved.
+
         Args:
             relation_id (int): the identifier for a particular relation.
             status_code (int): the numeric code of the resolved status.
@@ -2783,11 +2803,12 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         statuses.pop(status_code)
         serialized = json.dumps([statuses[k].model_dump() for k in sorted(statuses)])
 
-        repository = OpsRelationRepository(self.model, relation, component=relation.app)
+        repository = OpsRelationRepository(self.model, relation, component=self.charm.app)
         repository.write_field(STATUS_FIELD, serialized)
 
     def clear_statuses(self, relation_id: int) -> None:
         """Clear all previously raised statuses.
+
         Args:
             relation_id (int): the identifier for a particular relation.
         """
@@ -2796,7 +2817,7 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         if not relation:
             raise ValueError("Missing relation.")
 
-        repository = OpsRelationRepository(self.model, relation, component=relation.app)
+        repository = OpsRelationRepository(self.model, relation, component=self.charm.app)
         repository.delete_field(STATUS_FIELD)
 
 
@@ -3111,8 +3132,8 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
 
         # Retrieve old statuses from "data"
         old_data = json.loads(data or "{}")
-        old_statuses = json.loads(old_data.get(STATUS_FIELD, "[]"))
-        previous_codes = {status.get("code") for status in old_statuses}
+        old_statuses = old_data.get(STATUS_FIELD, {})
+        previous_codes = {int(k) for k in old_statuses.keys()}
 
         # Compute current statuses
         current_statuses = json.loads(repository.get_field(STATUS_FIELD) or "[]")
@@ -3123,7 +3144,7 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
         resolved = previous_codes - current_codes
 
         for status_code in raised:
-            logger.info(f"########## Status [{status_code}] raised")
+            logger.debug(f"Status [{status_code}] raised")
             _status = next(s for s in current_statuses if s["code"] == status_code)
             _status_instance = RelationStatus(**_status)
             getattr(self.on, "status_raised").emit(
@@ -3134,8 +3155,9 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
             )
 
         for status_code in resolved:
-            logger.info(f"######### Status [{status_code}] resolved")
-            _status = next(s for s in old_statuses if s["code"] == status_code)
+            logger.debug(f"Status [{status_code}] resolved")
+            # Because JSON keys are always string, we should convert the int code to str.
+            _status = old_statuses[str(status_code)]
             _status_instance = RelationStatus(**_status)
             getattr(self.on, "status_resolved").emit(
                 event.relation,
@@ -3143,6 +3165,11 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                 app=event.app,
                 unit=event.unit,
             )
+
+        if not any([raised, resolved]):
+            return
+
+        self.compute_diff(event.relation, response, repository, store=True)
 
     ##############################################################################
     # Methods to handle specificities of relation events

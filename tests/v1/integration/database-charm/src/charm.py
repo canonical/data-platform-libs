@@ -94,7 +94,9 @@ class DatabaseCharm(CharmBase):
 
         # Charm events defined in the database provides charm library.
         # self.database = DatabaseProvides(self, relation_name="database")
-        self.database = ResourceProviderEventHandler(self, "database", RequirerCommonModel)
+        self.database = ResourceProviderEventHandler(
+            self, "database", RequirerCommonModel, status_schema_path="src/status-schema.json"
+        )
         self.framework.observe(self.database.on.resource_requested, self._on_resource_requested)
         self.framework.observe(
             self.database.on.resource_entity_requested, self._on_resource_entity_requested
@@ -140,6 +142,15 @@ class DatabaseCharm(CharmBase):
         )
 
         self.framework.observe(self.on.set_tls_action, self._on_set_tls_action)
+
+        self.framework.observe(self.on.raise_status_action, self._on_raise_status)
+        self.framework.observe(self.on.resolve_status_action, self._on_resolve_status)
+        self.framework.observe(self.on.clear_statuses_action, self._on_clear_statuses)
+
+        self.framework.observe(self.on.update_status, self._on_update_status)
+
+    def _on_update_status(self, event):
+        logger.info("Update status")
 
     @property
     def peer_relation(self) -> Optional[Relation]:
@@ -487,6 +498,32 @@ class DatabaseCharm(CharmBase):
 
         if secret:
             secret.remove_all_revisions()
+
+    def _on_raise_status(self, event: ActionEvent):
+        """Raise a status using action parameters."""
+        status_code = int(event.params["status-code"])
+        relation_id = int(event.params["relation-id"])
+
+        self.database.raise_status(relation_id, status_code)
+
+        event.set_results({"result": f"successfully raised {status_code}"})
+
+    def _on_resolve_status(self, event: ActionEvent):
+        """Resolve a status using action parameters."""
+        status_code = int(event.params["status-code"])
+        relation_id = int(event.params["relation-id"])
+
+        self.database.resolve_status(relation_id, status_code)
+
+        event.set_results({"result": f"successfully resolved {status_code}"})
+
+    def _on_clear_statuses(self, event: ActionEvent):
+        """Clear all statuses on a relation using action parameters."""
+        relation_id = int(event.params["relation-id"])
+
+        self.database.clear_statuses(relation_id)
+
+        event.set_results({"result": f"cleared all statuses on {relation_id}"})
 
 
 if __name__ == "__main__":
