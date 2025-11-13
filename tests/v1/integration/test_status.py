@@ -48,9 +48,7 @@ async def test_deploy_charms(
         ops_test.model.deploy(
             database_charm,
             resources={
-                "database-image": DATABASE_APP_METADATA["resources"]["database-image"][
-                    "upstream-source"
-                ]
+                "database-image": DATABASE_APP_METADATA["resources"]["database-image"]["upstream-source"]  # fmt: skip
             },
             application_name=DATABASE_APP_NAME,
             num_units=1,
