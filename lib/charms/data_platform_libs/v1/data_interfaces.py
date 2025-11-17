@@ -309,7 +309,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 3
 
 PYDEPS = ["ops>=2.0.0", "pydantic>=2.11"]
 
@@ -834,9 +834,7 @@ class BaseCommonModel(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def serialize_model(
-        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
-    ):  # noqa: C901
+    def serialize_model(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo):  # noqa: C901
         """Serializes the model writing the secrets in their respective secrets."""
         if not info.context or not isinstance(info.context.get("repository"), AbstractRepository):
             logger.debug("No secret parsing serialization as we're lacking context here.")
@@ -2275,7 +2273,6 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
         for key in [
             "resource",
             "entity-type",
-            "entity-permissions",
             "extra-user-roles",
             "extra-group-roles",
         ]:
