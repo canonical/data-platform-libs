@@ -13,9 +13,9 @@ from .helpers import (
 
 logger = logging.getLogger(__name__)
 
-APPLICATION_APP_1 = "appi"
-APPLICATION_APP_2 = "appii"
-DATABASE_APP_NAME = "database"
+APPLICATION_APP_1 = "app-v1-i"
+APPLICATION_APP_2 = "app-v1-ii"
+DATABASE_APP_NAME = "database-v1"
 APP_NAMES = [APPLICATION_APP_1, APPLICATION_APP_2, DATABASE_APP_NAME]
 DATABASE_APP_METADATA = yaml.safe_load(
     Path("./tests/v0/integration/database-charm/metadata.yaml").read_text()
@@ -127,8 +127,6 @@ async def test_raise_status(ops_test: OpsTest):
         original = status_schema_map.get(obj["code"], {})
         assert obj["message"] == original["message"]
         assert obj["resolution"] == original["resolution"]
-
-    # TODO:
 
 
 @pytest.mark.abort_on_fail
