@@ -3169,7 +3169,20 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
         if not any([raised, resolved]):
             return
 
-        self.compute_diff(event.relation, response, repository, store=True)
+        # Store new state of the statuses in the "data" field
+        data = get_encoded_dict(event.relation, self.component, "data") or {}
+        store_new_data(
+            event.relation,
+            self.component,
+            data,
+            short_uuid=None,
+            global_data={
+                STATUS_FIELD: {
+                    code: status.model_dump()
+                    for code, status in self.get_statuses(event.relation.id).items()
+                }
+            },
+        )
 
     ##############################################################################
     # Methods to handle specificities of relation events
