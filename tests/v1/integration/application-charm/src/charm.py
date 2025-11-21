@@ -29,6 +29,8 @@ from charms.data_platform_libs.v1.data_interfaces import (
     ResourceEntityCreatedEvent,
     ResourceProviderModel,
     ResourceRequirerEventHandler,
+    StatusRaisedEvent,
+    StatusResolvedEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -319,6 +321,14 @@ class ApplicationCharm(CharmBase):
             self.opensearch_roles,
         ]
 
+        self.framework.observe(self.first_database.on.status_raised, self._on_status_raised)
+        self.framework.observe(self.first_database.on.status_resolved, self._on_status_resolved)
+
+        self.framework.observe(self.on.update_status, self._on_update_status)
+
+    def _on_update_status(self, event):
+        logger.info("Update status")
+
     def _get_relation(self, relation_id: int) -> tuple[ResourceRequirerEventHandler, Relation]:
         """Retrieve a relation by ID, together with the corresponding endpoint object ('Requires')."""
         for source in self._relation_endpoints:
@@ -518,6 +528,18 @@ class ApplicationCharm(CharmBase):
             response.mtls_cert = cert
         self.kafka_split_pattern.interface.write_model(relation.id, model)
         event.set_results({"mtls-cert": cert})
+
+    def _on_status_raised(self, event: StatusRaisedEvent):
+        logger.info(f"Status raised: {event.status}")
+        self.unit.status = ActiveStatus(
+            f"Active Statuses: {[s.code for s in event.active_statuses]}"
+        )
+
+    def _on_status_resolved(self, event: StatusResolvedEvent):
+        logger.info(f"Status resolved: {event.status}")
+        self.unit.status = ActiveStatus(
+            f"Active Statuses: {[s.code for s in event.active_statuses]}"
+        )
 
 
 if __name__ == "__main__":
