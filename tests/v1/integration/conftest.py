@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from subprocess import check_call, check_output
 
+import jubilant
 import pytest
 from pytest_operator.plugin import OpsTest
 
@@ -221,3 +222,10 @@ def fetch_old_versions():
 
     os.chdir(cwd)
     shutil.rmtree(tmp_path)
+
+
+@pytest.fixture(scope="module")
+def juju():
+    with jubilant.temp_model() as juju:
+        juju.wait_timeout = 1000
+        yield juju
