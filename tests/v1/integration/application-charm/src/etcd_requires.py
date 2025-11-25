@@ -38,28 +38,6 @@ def _get_common_name_from_chain(mtls_cert: str) -> str:
     return Certificate.from_string(cert).common_name
 
 
-def _on_endpoints_changed(event: ResourceEndpointsChangedEvent[ResourceProviderModel]) -> None:
-    """Handle etcd client relation data changed event."""
-    response = event.response
-    logger.info("Endpoints changed: %s", response.endpoints)
-    if not response.endpoints:
-        logger.error("No endpoints available")
-
-
-def _on_resource_created(event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
-    """Handle resource created event."""
-    logger.info("Resource created")
-    response = event.response
-    if not response.tls_ca:
-        logger.error("No server CA chain available")
-        return
-    if not response.username:
-        logger.error("No username available")
-        return
-    Path(ETCD_SNAP_DIR).mkdir(exist_ok=True)
-    Path(f"{ETCD_SNAP_DIR}/ca.pem").write_text(response.tls_ca)
-
-
 class EtcdRequiresV1(ops.framework.Object):
     """EtcdRequires implementation for data interfaces version 1."""
 
@@ -76,8 +54,8 @@ class EtcdRequiresV1(ops.framework.Object):
             response_model=ResourceProviderModel,
         )
 
-        self.framework.observe(self.etcd_interface.on.endpoints_changed, _on_endpoints_changed)
-        self.framework.observe(self.etcd_interface.on.resource_created, _on_resource_created)
+        self.framework.observe(self.etcd_interface.on.endpoints_changed, self._on_endpoints_changed)
+        self.framework.observe(self.etcd_interface.on.resource_created, self._on_resource_created)
 
     def update_mtls_certs(self, cert: str) -> None:
         """Set the mtls cert in the relation data bag."""
@@ -111,6 +89,26 @@ class EtcdRequiresV1(ops.framework.Object):
 
         local_model.requests = requests_to_send
         self.etcd_interface.interface.write_model(self.etcd_relation.id, local_model)
+
+    def _on_endpoints_changed(self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]) -> None:
+        """Handle etcd client relation data changed event."""
+        response = event.response
+        logger.info("Endpoints changed: %s", response.endpoints)
+        if not response.endpoints:
+            logger.error("No endpoints available")
+
+    def _on_resource_created(self, event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
+        """Handle resource created event."""
+        logger.info("Resource created")
+        response = event.response
+        if not response.tls_ca:
+            logger.error("No server CA chain available")
+            return
+        if not response.username:
+            logger.error("No username available")
+            return
+        Path(ETCD_SNAP_DIR).mkdir(exist_ok=True)
+        Path(f"{ETCD_SNAP_DIR}/ca.pem").write_text(response.tls_ca)
 
     @property
     def etcd_relation(self) -> ops.Relation | None:

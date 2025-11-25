@@ -73,30 +73,6 @@ class RefreshTLSCertificatesEvent(ops.EventBase):
     """Event for refreshing peer TLS certificates."""
 
 
-def _on_etcd_endpoints_changed(
-    event: ResourceEndpointsChangedEvent[ResourceProviderModel],
-) -> None:
-    """Handle etcd client relation data changed event."""
-    response = event.response
-    logger.info("Endpoints changed: %s", response.endpoints)
-    if not response.endpoints:
-        logger.error("No endpoints available")
-
-
-def _on_etcd_client_created(event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
-    """Handle resource created event."""
-    logger.info("Resource created")
-    response = event.response
-    if not response.tls_ca:
-        logger.error("No server CA chain available")
-        return
-    if not response.username:
-        logger.error("No username available")
-        return
-    Path(ETCD_SNAP_DIR).mkdir(exist_ok=True)
-    Path(f"{ETCD_SNAP_DIR}/ca.pem").write_text(response.tls_ca)
-
-
 class ApplicationCharm(CharmBase):
     """Application charm that connects to database charms."""
 
@@ -370,12 +346,11 @@ class ApplicationCharm(CharmBase):
 
         self.framework.observe(self.on.reset_unit_status_action, self._on_reset_unit_status)
         self.framework.observe(self.on.set_mtls_cert_action, self._on_set_mtls_cert)
-        self.framework.observe(self.on.update_mtls_certs_action, self._on_update_action)
-        self.framework.observe(self.on.put_action, self._on_put_action)
-        self.framework.observe(self.on.get_action, self._on_get_action)
+        self.framework.observe(self.on.update_mtls_cert_action, self._on_update_action)
+        self.framework.observe(self.on.put_etcd_action, self._on_put_etcd_action)
+        self.framework.observe(self.on.get_etcd_action, self._on_get_etcd_action)
         self.framework.observe(self.on.get_credentials_action, self._on_get_credentials_action)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.get_certificates_action, self._on_get_certificates_action)
+        self.framework.observe(self.on.get_certificate_action, self._on_get_certificate_action)
 
         # Get/set/delete fields on second-database relations
         self.framework.observe(self.on.get_relation_field_action, self._on_get_relation_field)
@@ -403,6 +378,7 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(self.first_database.on.status_resolved, self._on_status_resolved)
 
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.config_changed, self._on_certificate_available)
 
     def _on_update_status(self, event):
         logger.info("Update status")
@@ -619,6 +595,27 @@ class ApplicationCharm(CharmBase):
             f"Active Statuses: {[s.code for s in event.active_statuses]}"
         )
 
+    # def _on_etcd_endpoints_changed(self, event: ResourceEndpointsChangedEvent[ResourceProviderModel],
+    # ) -> None:
+    #     """Handle etcd client relation data changed event."""
+    #     response = event.response
+    #     logger.info("Endpoints changed: %s", response.endpoints)
+    #     if not response.endpoints:
+    #         logger.error("No endpoints available")
+    #
+    # def _on_etcd_client_created(self, event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
+    #     """Handle resource created event."""
+    #     logger.info("Resource created")
+    #     response = event.response
+    #     if not response.tls_ca:
+    #         logger.error("No server CA chain available")
+    #         return
+    #     if not response.username:
+    #         logger.error("No username available")
+    #         return
+    #     Path(ETCD_SNAP_DIR).mkdir(exist_ok=True)
+    #     Path(f"{ETCD_SNAP_DIR}/ca.pem").write_text(response.tls_ca)
+
     @property
     def common_names(self) -> list[str]:
         """Return the common names for the client certificates."""
@@ -682,7 +679,7 @@ class ApplicationCharm(CharmBase):
         """Handle config changed event."""
         self.refresh_tls_certificates_event.emit()
 
-    def _on_put_action(self, event: ops.ActionEvent) -> None:
+    def _on_put_etcd_action(self, event: ops.ActionEvent) -> None:
         """Handle put action."""
         if not self.etcd.etcd_relation:
             event.fail("The action can be run only after relation is created.")
@@ -739,7 +736,7 @@ class ApplicationCharm(CharmBase):
             }
         )
 
-    def _on_get_action(self, event: ops.ActionEvent) -> None:
+    def _on_get_etcd_action(self, event: ops.ActionEvent) -> None:
         """Handle get action."""
         certs, private_key = self.certificates.get_assigned_certificates()
         if not certs or not private_key:
@@ -821,7 +818,7 @@ class ApplicationCharm(CharmBase):
             }
         )
 
-    def _on_get_certificates_action(self, event: ops.ActionEvent) -> None:
+    def _on_get_certificate_action(self, event: ops.ActionEvent) -> None:
         """Return the certificate an action response."""
         certs, _ = self.certificates.get_assigned_certificates()
         if not certs:
