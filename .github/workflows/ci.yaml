@@ -171,12 +171,14 @@ jobs:
           - series: jammy 
             bases-index: 0
         tox-environments:
+          - setup-integration
           - integration-db-v1
           - integration-opensearch-v1
           - integration-kafka-v1
           - integration-kafka-connect-v1
           - integration-backward-compatibility-v1
           - integration-status-v1
+          - integration-etcd-v1
         juju-version:
           - juju-bootstrap-option: "3.6.1"
             juju-snap-channel: "3.6/stable"
