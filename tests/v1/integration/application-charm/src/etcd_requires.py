@@ -54,7 +54,9 @@ class EtcdRequiresV1(ops.framework.Object):
             response_model=ResourceProviderModel,
         )
 
-        self.framework.observe(self.etcd_interface.on.endpoints_changed, self._on_endpoints_changed)
+        self.framework.observe(
+            self.etcd_interface.on.endpoints_changed, self._on_endpoints_changed
+        )
         self.framework.observe(self.etcd_interface.on.resource_created, self._on_resource_created)
 
     def update_mtls_certs(self, cert: str) -> None:
@@ -90,7 +92,9 @@ class EtcdRequiresV1(ops.framework.Object):
         local_model.requests = requests_to_send
         self.etcd_interface.interface.write_model(self.etcd_relation.id, local_model)
 
-    def _on_endpoints_changed(self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]) -> None:
+    def _on_endpoints_changed(
+        self, event: ResourceEndpointsChangedEvent[ResourceProviderModel]
+    ) -> None:
         """Handle etcd client relation data changed event."""
         response = event.response
         logger.info("Endpoints changed: %s", response.endpoints)
