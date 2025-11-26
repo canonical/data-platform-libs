@@ -47,4 +47,33 @@ delete-relation-field:
 
 set-mtls-cert:
   description: Sets the MTLS cert for the requirer application.
- 
+
+update-mtls-cert:
+  description: Update the mtls certificate
+  params:
+    chain:
+      description: The mtls certificate
+      type: string
+
+put-etcd:
+  description: Put a key value pair in etcd
+  params:
+    key:
+      description: The key to put in etcd
+      type: string
+    value:
+      description: The value to put in etcd
+      type: string
+
+get-etcd:
+  description: Get a key value pair from etcd
+  params:
+    key:
+      description: The key to get from etcd
+      type: string
+
+get-credentials:
+  description: Action for fetching all available credentials from relations.
+
+get-certificate:
+  description: Get the certificate of the app

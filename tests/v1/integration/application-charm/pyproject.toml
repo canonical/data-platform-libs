@@ -12,6 +12,8 @@ psycopg2 = "^2.9.10"
 ops = ">=2.0.0"
 pydantic = ">=2.11"
 psycopg2 = "^2.9.10"
+cryptography = "==44.0.2"
+cosl = ">= 0.0.50"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.8"
