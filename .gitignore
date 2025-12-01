@@ -24,5 +24,7 @@ tests/v1/integration/backward-compatibility-charm/lib/charms/data_platform_libs/
 tests/v1/integration/opensearch-charm/lib/charms/data_platform_libs/v1/data_interfaces.py
 tests/v1/integration/kafka-connect-charm/lib/charms/data_platform_libs/v1/data_interfaces.py
 tests/v1/integration/dummy-database-charm/lib/charms/data_platform_libs/v1/data_interfaces.py
+tests/v1/integration/application-charm/lib/charms/operator_libs_linux/v2/snap.py
+tests/v1/integration/application-charm/lib/charms/tls_certificates_interface/v4/tls_certificates.py
 .vscode/
 .idea/
