@@ -217,13 +217,29 @@ jobs:
             echo "mark_expression=not unstable" >> $GITHUB_OUTPUT
           fi
       - name: Prepare requirer charm
+        shell: bash
         run: |
           # Install etcdctl to support get & put with etcd
-          sudo apt install wget -y
-          sh -c "mkdir -p /tmp/etcd_install"
-          sh -c 'if [ "$(uname -m)" = "aarch64" ]; then wget https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-arm64.tar.gz -O /tmp/etcd_install/etcd.tar.gz; else wget https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-amd64.tar.gz -O /tmp/etcd_install/etcd.tar.gz; fi'
+          set -euxo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y wget
+        
+          mkdir -p /tmp/etcd_install
+        
+          ARCH=$(uname -m)
+          if [[ "${ARCH}" == "aarch64" ]]; then
+            URL="https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-arm64.tar.gz"
+          else
+            URL="https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-amd64.tar.gz"
+          fi
+        
+          wget "${URL}" -O /tmp/etcd_install/etcd.tar.gz
           tar -xvf /tmp/etcd_install/etcd.tar.gz -C /tmp/etcd_install
-          sh -c 'sudo mv /tmp/etcd_install/etcd-v3.4.35-linux-*/etcdctl /usr/local/bin'
+          sudo mv /tmp/etcd_install/etcd-v3.4.35-linux-*/etcdctl /usr/local/bin/
+      - name: Verify etcdctl
+        run: |
+          etcdctl version
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
