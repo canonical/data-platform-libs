@@ -223,8 +223,9 @@ jobs:
           set -euxo pipefail
 
           sudo apt-get update
+          sudo apt-get install snapd
           sudo apt-get install -y wget
-        
+          
           mkdir -p /tmp/etcd_install
         
           ARCH=$(uname -m)
@@ -237,9 +238,10 @@ jobs:
           wget "${URL}" -O /tmp/etcd_install/etcd.tar.gz
           tar -xvf /tmp/etcd_install/etcd.tar.gz -C /tmp/etcd_install
           sudo mv /tmp/etcd_install/etcd-v3.4.35-linux-*/etcdctl /usr/local/bin/
-      - name: Verify etcdctl
+      - name: Verify snapd and etcdctl
         run: |
           etcdctl version
+          snap version
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
