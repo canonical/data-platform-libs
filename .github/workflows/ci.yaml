@@ -171,7 +171,6 @@ jobs:
           - series: jammy 
             bases-index: 0
         tox-environments:
-          - setup-integration
           - integration-db-v1
           - integration-opensearch-v1
           - integration-kafka-v1
@@ -216,32 +215,35 @@ jobs:
             echo Skipping unstable tests
             echo "mark_expression=not unstable" >> $GITHUB_OUTPUT
           fi
+      - name: Verify snapd
+        run: |
+          snap version
       - name: Prepare requirer charm
         shell: bash
         run: |
-          # Install etcdctl to support get & put with etcd
-          set -euxo pipefail
-
-          sudo apt-get update
-          sudo apt-get install snapd
-          sudo apt-get install -y wget
-          
-          mkdir -p /tmp/etcd_install
-        
-          ARCH=$(uname -m)
-          if [[ "${ARCH}" == "aarch64" ]]; then
-            URL="https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-arm64.tar.gz"
-          else
-            URL="https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-amd64.tar.gz"
-          fi
-        
-          wget "${URL}" -O /tmp/etcd_install/etcd.tar.gz
-          tar -xvf /tmp/etcd_install/etcd.tar.gz -C /tmp/etcd_install
-          sudo mv /tmp/etcd_install/etcd-v3.4.35-linux-*/etcdctl /usr/local/bin/
-      - name: Verify snapd and etcdctl
+          # Install charmed-etcd, to support get & put with etcdctl
+          sudo snap install charmed-etcd
+#          set -euxo pipefail
+#
+#          sudo apt-get update
+#          sudo apt-get install snapd
+#          sudo apt-get install -y wget
+#
+#          mkdir -p /tmp/etcd_install
+#
+#          ARCH=$(uname -m)
+#          if [[ "${ARCH}" == "aarch64" ]]; then
+#            URL="https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-arm64.tar.gz"
+#          else
+#            URL="https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-amd64.tar.gz"
+#          fi
+#
+#          wget "${URL}" -O /tmp/etcd_install/etcd.tar.gz
+#          tar -xvf /tmp/etcd_install/etcd.tar.gz -C /tmp/etcd_install
+#          sudo mv /tmp/etcd_install/etcd-v3.4.35-linux-*/etcdctl /usr/local/bin/
+      - name: Verify etcdctl
         run: |
-          etcdctl version
-          snap version
+          charmed-etcd.etcdctl version
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
