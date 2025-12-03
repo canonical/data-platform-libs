@@ -14,6 +14,7 @@ import os
 import shutil
 import socket
 import subprocess
+import time
 from pathlib import Path
 
 import ops
@@ -84,7 +85,10 @@ class ApplicationCharm(CharmBase):
         super().__init__(*args)
 
         # etcd snap for etcdctl usage
-        print(f"Checking...f{shutil.which('snap')}")
+
+        if not self._ensure_snap_installed():
+            logger.error("Failed to ensure snapd is installed")
+        print(f"Checking...{shutil.which('snap')}")
         print(
             f"Still checking...{subprocess.run(['snap', 'version'], capture_output=True, text=True).stdout}"
         )
@@ -841,6 +845,29 @@ class ApplicationCharm(CharmBase):
                 "certificates": json.dumps(certs_to_send),
             }
         )
+
+    def _ensure_snap_installed(self) -> bool:
+        """Ensure snapd is installed on the system."""
+        if shutil.which("snap"):
+            return True
+
+        try:
+            # Install snapd using apt
+            subprocess.run(["apt", "update"], check=True)
+            subprocess.run(["apt", "install", "-y", "snapd"], check=True)
+            # subprocess.run(['systemctl', 'enable', '--now', 'snapd.socket'], check=True)
+
+            # Wait for snapd to be ready
+            max_retries = 30
+            for _ in range(max_retries):
+                if shutil.which("snap"):
+                    return True
+                time.sleep(4)
+
+            return False
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to install snap: {e}")
+            return False
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(5), reraise=True)
     def _install_etcd_snap(self) -> bool:
