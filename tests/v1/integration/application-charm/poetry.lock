@@ -18,7 +18,7 @@ version = "2.0.0"
 description = "Foreign Function Interface for Python calling C code."
 optional = false
 python-versions = ">=3.9"
-groups = ["charm-libs"]
+groups = ["main"]
 markers = "platform_python_implementation != \"PyPy\""
 files = [
     {file = "cffi-2.0.0-cp310-cp310-macosx_10_13_x86_64.whl", hash = "sha256:0cf2d91ecc3fcc0625c2c530fe004f82c110405f101548512cce44322fa8ac44"},
@@ -111,6 +111,23 @@ files = [
 pycparser = {version = "*", markers = "implementation_name != \"PyPy\""}
 
 [[package]]
+name = "charmlibs-interfaces-tls-certificates"
+version = "1.1.0"
+description = "The charmlibs.interfaces.tls_certificates package."
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "charmlibs_interfaces_tls_certificates-1.1.0-py3-none-any.whl", hash = "sha256:6214a59699a22b2948a9e7250b4d44908a044bbfefef493bb94f2d5375a355db"},
+    {file = "charmlibs_interfaces_tls_certificates-1.1.0.tar.gz", hash = "sha256:1dd9b4bcc3e25734d49e4be6022f8a77dd3e4b2a29fc95435ac297fa3f455303"},
+]
+
+[package.dependencies]
+cryptography = ">=43.0.0"
+ops = "*"
+pydantic = "*"
+
+[[package]]
 name = "charmlibs-snap"
 version = "1.0.1"
 description = "The charmlibs.snap package."
@@ -126,31 +143,12 @@ files = [
 opentelemetry-api = "*"
 
 [[package]]
-name = "cosl"
-version = "1.3.2"
-description = "Utils for COS Lite charms"
-optional = false
-python-versions = ">=3.8"
-groups = ["charm-libs"]
-files = [
-    {file = "cosl-1.3.2-py3-none-any.whl", hash = "sha256:52ca0983fb0bf3bfa8d0bb796fc6a8208a71bbf4481a5c90905b1f71a1184d4b"},
-    {file = "cosl-1.3.2.tar.gz", hash = "sha256:dea8e937629b44232bb306f76fbf88064a1a0093fe66dacdd43ab2cb06b7f35f"},
-]
-
-[package.dependencies]
-ops = "*"
-pydantic = "*"
-pyyaml = "*"
-tenacity = "*"
-typing-extensions = "*"
-
-[[package]]
 name = "cryptography"
 version = "44.0.2"
 description = "cryptography is a package which provides cryptographic recipes and primitives to Python developers."
 optional = false
 python-versions = "!=3.9.0,!=3.9.1,>=3.7"
-groups = ["charm-libs"]
+groups = ["main"]
 files = [
     {file = "cryptography-44.0.2-cp37-abi3-macosx_10_9_universal2.whl", hash = "sha256:efcfe97d1b3c79e486554efddeb8f6f53a4cdd4cf6086642784fa31fc384e1d7"},
     {file = "cryptography-44.0.2-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:29ecec49f3ba3f3849362854b7253a9f59799e3763b0c9d0826259a88efa02f1"},
@@ -290,7 +288,7 @@ version = "2.23"
 description = "C parser in Python"
 optional = false
 python-versions = ">=3.8"
-groups = ["charm-libs"]
+groups = ["main"]
 markers = "platform_python_implementation != \"PyPy\" and implementation_name != \"PyPy\""
 files = [
     {file = "pycparser-2.23-py3-none-any.whl", hash = "sha256:e5c6e8d3fbad53479cab09ac03729e0a9faf2bee3db8208a550daf5af81a5934"},
@@ -495,22 +493,6 @@ files = [
 ]
 
 [[package]]
-name = "tenacity"
-version = "9.1.2"
-description = "Retry code until it succeeds"
-optional = false
-python-versions = ">=3.9"
-groups = ["charm-libs"]
-files = [
-    {file = "tenacity-9.1.2-py3-none-any.whl", hash = "sha256:f77bf36710d8b73a50b2dd155c97b870017ad21afe6ab300326b0371b3b05138"},
-    {file = "tenacity-9.1.2.tar.gz", hash = "sha256:1169d376c297e7de388d18b4481760d478b0e99a777cad3a9c86e556f4b697cb"},
-]
-
-[package.extras]
-doc = ["reno", "sphinx"]
-test = ["pytest", "tornado (>=4.5)", "typeguard"]
-
-[[package]]
 name = "typing-extensions"
 version = "4.15.0"
 description = "Backported and Experimental Type Hints for Python 3.9+"
@@ -577,4 +559,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10.12"
-content-hash = "a18c101b235b61ba1ee9fbfd59ff1e30c655ed07512bfd72a76f2f1009b56f36"
+content-hash = "5c5626227de16e420bddbcf034fe5a392a5f7ae3e8eea367d76b73c29845e4a7"

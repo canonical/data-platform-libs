@@ -8,13 +8,14 @@ ops = ">=2.0.0,<3.0.0"
 pydantic = ">=2.11"
 psycopg2 = "^2.9.10"
 charmlibs-snap = ">=1.0.1"
+charmlibs-interfaces-tls-certificates = ">=1.1.0"
 
 [tool.poetry.group.charm-libs.dependencies]
 ops = ">=2.0.0"
 pydantic = ">=2.11"
 psycopg2 = "^2.9.10"
-cryptography = "==44.0.2"
-cosl = ">= 0.0.50"
+#cryptography = "==44.0.2"
+#cosl = ">= 0.0.50"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.8"

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import ops
 from charmlibs import snap
-from charms.tls_certificates_interface.v4.tls_certificates import (
+from charmlibs.interfaces.tls_certificates import (
     CertificateAvailableEvent,
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
@@ -74,11 +74,15 @@ class ExtendedRequirerCommonModel(RequirerCommonModel):
 class RefreshTLSCertificatesEvent(ops.EventBase):
     """Event for refreshing peer TLS certificates."""
 
+
 def verify_snapd():
     print(f"Checking...f{shutil.which('snap')}")
-    print(f"Still checking...{subprocess.run(['snap', 'version'], capture_output=True, text=True).stdout}")
+    print(
+        f"Still checking...{subprocess.run(['snap', 'version'], capture_output=True, text=True).stdout}"
+    )
     print(f"Here isfile: {os.path.isfile('/usr/bin/snap')}")
     print(f"Here: {os.path.exists('/snap')}")
+
 
 class ApplicationCharm(CharmBase):
     """Application charm that connects to database charms."""
