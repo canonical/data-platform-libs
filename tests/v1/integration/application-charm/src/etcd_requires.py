@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import ops
-from charms.tls_certificates_interface.v4.tls_certificates import Certificate
+from charmlibs.interfaces.tls_certificates import Certificate
 
 from charms.data_platform_libs.v1.data_interfaces import (
     DataContractV1,
