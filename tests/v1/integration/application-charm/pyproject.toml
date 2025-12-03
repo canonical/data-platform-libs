@@ -7,6 +7,7 @@ python = "^3.10.12"
 ops = ">=2.0.0,<3.0.0"
 pydantic = ">=2.11"
 psycopg2 = "^2.9.10"
+charmlibs-snap = ">=1.0.1"
 
 [tool.poetry.group.charm-libs.dependencies]
 ops = ">=2.0.0"

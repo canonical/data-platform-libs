@@ -10,12 +10,14 @@ of the libraries in this repository.
 
 import json
 import logging
+import os
+import shutil
 import socket
 import subprocess
 from pathlib import Path
 
 import ops
-from charms.operator_libs_linux.v2 import snap
+from charmlibs import snap
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateAvailableEvent,
     CertificateRequestAttributes,
@@ -72,6 +74,11 @@ class ExtendedRequirerCommonModel(RequirerCommonModel):
 class RefreshTLSCertificatesEvent(ops.EventBase):
     """Event for refreshing peer TLS certificates."""
 
+def verify_snapd():
+    print(f"Checking...f{shutil.which('snap')}")
+    print(f"Still checking...{subprocess.run(['snap', 'version'], capture_output=True, text=True).stdout}")
+    print(f"Here isfile: {os.path.isfile('/usr/bin/snap')}")
+    print(f"Here: {os.path.exists('/snap')}")
 
 class ApplicationCharm(CharmBase):
     """Application charm that connects to database charms."""
@@ -82,6 +89,7 @@ class ApplicationCharm(CharmBase):
         super().__init__(*args)
 
         # etcd snap for etcdctl usage
+        verify_snapd()
         self.etcd_snap = snap.SnapCache()[ETCD_SNAP_NAME]
 
         # Default charm events.
