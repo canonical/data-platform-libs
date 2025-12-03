@@ -84,6 +84,12 @@ class ApplicationCharm(CharmBase):
         super().__init__(*args)
 
         # etcd snap for etcdctl usage
+        print(f"Checking...f{shutil.which('snap')}")
+        print(
+            f"Still checking...{subprocess.run(['snap', 'version'], capture_output=True, text=True).stdout}"
+        )
+        print(f"Here isfile: {os.path.isfile('/usr/bin/snap')}")
+        print(f"Here: {os.path.exists('/snap')}")
         self.etcd_snap = snap.SnapCache()[ETCD_SNAP_NAME]
 
         # Default charm events.
@@ -643,12 +649,6 @@ class ApplicationCharm(CharmBase):
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Handle install event."""
         # install the etcd snap
-        print(f"Checking...f{shutil.which('snap')}")
-        print(
-            f"Still checking...{subprocess.run(['snap', 'version'], capture_output=True, text=True).stdout}"
-        )
-        print(f"Here isfile: {os.path.isfile('/usr/bin/snap')}")
-        print(f"Here: {os.path.exists('/snap')}")
         if not self._install_etcd_snap():
             self.unit.status = ops.BlockedStatus("Failed to install etcd snap")
             return
