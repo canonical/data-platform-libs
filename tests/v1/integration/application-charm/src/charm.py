@@ -86,8 +86,8 @@ class ApplicationCharm(CharmBase):
 
         # etcd snap for etcdctl usage
 
-        if not self._ensure_snap_installed():
-            logger.error("Failed to ensure snapd is installed")
+        # if not self._ensure_snap_installed():
+        #     logger.error("Failed to ensure snapd is installed")
         print(f"Checking...{shutil.which('snap')}")
         print(
             f"Still checking...{subprocess.run(['snap', 'version'], capture_output=True, text=True).stdout}"
