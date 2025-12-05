@@ -33,3 +33,7 @@ requires:
     interface: connect_client
   connect-sink:
     interface: connect_client
+  etcd-client:
+    interface: etcd_client
+  certificates:
+    interface: tls-certificates
