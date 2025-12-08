@@ -379,10 +379,6 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
-    def _on_config_changed(self, event) -> None:
-        """Handle config changed event."""
-        self.refresh_tls_certificates_event.emit()
-
     def _on_update_status(self, event):
         logger.info("Update status")
 
@@ -598,27 +594,6 @@ class ApplicationCharm(CharmBase):
             f"Active Statuses: {[s.code for s in event.active_statuses]}"
         )
 
-    # def _on_etcd_endpoints_changed(self, event: ResourceEndpointsChangedEvent[ResourceProviderModel],
-    # ) -> None:
-    #     """Handle etcd client relation data changed event."""
-    #     response = event.response
-    #     logger.info("Endpoints changed: %s", response.endpoints)
-    #     if not response.endpoints:
-    #         logger.error("No endpoints available")
-    #
-    # def _on_etcd_client_created(self, event: ResourceCreatedEvent[ResourceProviderModel]) -> None:
-    #     """Handle resource created event."""
-    #     logger.info("Resource created")
-    #     response = event.response
-    #     if not response.tls_ca:
-    #         logger.error("No server CA chain available")
-    #         return
-    #     if not response.username:
-    #         logger.error("No username available")
-    #         return
-    #     Path(ETCD_SNAP_DIR).mkdir(exist_ok=True)
-    #     Path(f"{ETCD_SNAP_DIR}/ca.pem").write_text(response.tls_ca)
-
     @property
     def common_names(self) -> list[str]:
         """Return the common names for the client certificates."""
@@ -677,7 +652,7 @@ class ApplicationCharm(CharmBase):
                 [cert.ca if self.send_ca_option else cert.certificate for cert in certs]
             )
 
-    def _on_config_changed(self) -> None:
+    def _on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
         """Handle config changed event."""
         self.refresh_tls_certificates_event.emit()
 
