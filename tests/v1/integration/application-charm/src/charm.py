@@ -15,6 +15,7 @@ import platform
 import shutil
 import socket
 import subprocess
+import urllib.request
 from pathlib import Path
 
 import ops
@@ -832,12 +833,12 @@ class ApplicationCharm(CharmBase):
         )
 
     def _install_etcdctl(self):
-        """Install etcdctl using wget and tar, handling architecture."""
+        """Install etcdctl using Python urllib and tar, handling architecture."""
         etcdctl_path = "/usr/local/bin/etcdctl"
         if shutil.which("etcdctl"):
             logger.info("etcdctl already installed.")
             return
-        logger.info("Installing etcdctl via wget...")
+        logger.info("Installing etcdctl via Python urllib...")
         arch = platform.machine()
         if arch == "aarch64":
             url = "https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-arm64.tar.gz"
@@ -846,17 +847,30 @@ class ApplicationCharm(CharmBase):
         tmp_dir = "/tmp/etcd_install"
         os.makedirs(tmp_dir, exist_ok=True)
         tar_path = os.path.join(tmp_dir, "etcd.tar.gz")
-        subprocess.run(["sudo", "apt", "install", "wget", "-y"], check=True)
-        subprocess.run(["wget", url, "-O", tar_path], check=True)
-        subprocess.run(["tar", "-xvf", tar_path, "-C", tmp_dir], check=True)
+        # Download tarball using urllib
+        try:
+            with urllib.request.urlopen(url) as response, open(tar_path, "wb") as out_file:
+                shutil.copyfileobj(response, out_file)
+        except Exception as e:
+            logger.error(f"Failed to download etcdctl tarball: {e}")
+            return
+        # Extract tarball
+        try:
+            subprocess.run(["tar", "-xvf", tar_path, "-C", tmp_dir], check=True)
+        except Exception as e:
+            logger.error(f"Failed to extract etcdctl tarball: {e}")
+            return
         # Find the extracted etcdctl binary
         for entry in os.listdir(tmp_dir):
             if entry.startswith("etcd-v3.4.35-linux-"):
                 etcdctl_src = os.path.join(tmp_dir, entry, "etcdctl")
                 if os.path.isfile(etcdctl_src):
-                    subprocess.run(["sudo", "mv", etcdctl_src, etcdctl_path], check=True)
-                    subprocess.run(["sudo", "chmod", "+x", etcdctl_path], check=True)
-                    logger.info(f"etcdctl installed at {etcdctl_path}")
+                    try:
+                        shutil.move(etcdctl_src, etcdctl_path)
+                        os.chmod(etcdctl_path, 0o755)
+                        logger.info(f"etcdctl installed at {etcdctl_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to move etcdctl binary: {e}")
                     break
         else:
             logger.error("Failed to find etcdctl binary after extraction.")
