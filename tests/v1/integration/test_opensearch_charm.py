@@ -27,10 +27,10 @@ async def test_deploy_charms(ops_test: OpsTest, application_charm, opensearch_ch
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm, application_name=APPLICATION_APP_NAME, num_units=1, series="noble"
+            application_charm, application_name=APPLICATION_APP_NAME, num_units=1, series="jammy"
         ),
         ops_test.model.deploy(
-            opensearch_charm, application_name=OPENSEARCH_APP_NAME, num_units=1, series="noble"
+            opensearch_charm, application_name=OPENSEARCH_APP_NAME, num_units=1, series="jammy"
         ),
     )
     await asyncio.gather(

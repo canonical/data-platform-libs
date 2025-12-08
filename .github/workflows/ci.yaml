@@ -168,8 +168,8 @@ jobs:
       matrix:
         ubuntu-versions:
           # Update whenever charmcraft.yaml is changed
-          - series: noble
-            bases-index: 1
+          - series: jammy
+            bases-index: 0
         tox-environments:
           - integration-db-v1
           - integration-opensearch-v1

@@ -11,14 +11,13 @@ of the libraries in this repository.
 import json
 import logging
 import os
+import platform
 import shutil
 import socket
 import subprocess
-import time
 from pathlib import Path
 
 import ops
-from charmlibs import snap
 from charmlibs.interfaces.tls_certificates import (
     CertificateAvailableEvent,
     CertificateRequestAttributes,
@@ -30,7 +29,6 @@ from ops.charm import ActionEvent, CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 from pydantic import Field
-from tenacity import retry, stop_after_attempt, wait_fixed
 
 from charms.data_platform_libs.v1.data_interfaces import (
     AuthenticationUpdatedEvent,
@@ -56,7 +54,7 @@ EXTRA_USER_ROLES_KAFKA = "producer,consumer"
 EXTRA_USER_ROLES_OPENSEARCH = "admin,default"
 CONSUMER_GROUP_PREFIX = "test-prefix"
 BAD_URL = "http://badurl"
-ETCD_SNAP_DIR = "/var/snap/charmed-etcd/common"
+ETCD_DATA_DIR = "/var/lib/application-charm/etcd"
 ETCD_SNAP_NAME = "charmed-etcd"
 
 
@@ -83,18 +81,6 @@ class ApplicationCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-
-        # etcd snap for etcdctl usage
-
-        # if not self._ensure_snap_installed():
-        #     logger.error("Failed to ensure snapd is installed")
-        print(f"Checking...{shutil.which('snap')}")
-        print(
-            f"Still checking...{subprocess.run(['snap', 'version'], capture_output=True, text=True).stdout}"
-        )
-        print(f"Here isfile: {os.path.isfile('/usr/bin/snap')}")
-        print(f"Here: {os.path.exists('/snap')}")
-        self.etcd_snap = snap.SnapCache()[ETCD_SNAP_NAME]
 
         # Default charm events.
         self.framework.observe(self.on.start, self._on_start)
@@ -640,7 +626,7 @@ class ApplicationCharm(CharmBase):
     def server_ca_chain(self) -> str | None:
         """Return the server CA chain."""
         try:
-            ca_chain = Path(f"{ETCD_SNAP_DIR}/ca.pem").read_text().strip()
+            ca_chain = Path(f"{ETCD_DATA_DIR}/ca.pem").read_text().strip()
         except FileNotFoundError:
             return None
         return ca_chain
@@ -653,9 +639,8 @@ class ApplicationCharm(CharmBase):
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Handle install event."""
         # install the etcd snap
-        if not self._install_etcd_snap():
-            self.unit.status = ops.BlockedStatus("Failed to install etcd snap")
-            return
+        # workaround for snapd not being ready during install: let's install etcdctl directly using wget
+        self._install_etcdctl()
 
     def _on_update_action(self, event: ops.ActionEvent) -> None:
         """Handle update mtls certificate action."""
@@ -718,9 +703,9 @@ class ApplicationCharm(CharmBase):
 
         results = {}
         for cert in certs:
-            Path(ETCD_SNAP_DIR).mkdir(exist_ok=True)
-            Path(f"{ETCD_SNAP_DIR}/client.pem").write_text(cert.certificate.raw)
-            Path(f"{ETCD_SNAP_DIR}/client.key").write_text(private_key.raw)
+            Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
+            Path(f"{ETCD_DATA_DIR}/client.pem").write_text(cert.certificate.raw)
+            Path(f"{ETCD_DATA_DIR}/client.key").write_text(private_key.raw)
             key = (
                 orig_key
                 if orig_key.startswith("/")
@@ -774,9 +759,9 @@ class ApplicationCharm(CharmBase):
 
         results = {}
         for cert in certs:
-            Path(ETCD_SNAP_DIR).mkdir(exist_ok=True)
-            Path(f"{ETCD_SNAP_DIR}/client.pem").write_text(cert.certificate.raw)
-            Path(f"{ETCD_SNAP_DIR}/client.key").write_text(private_key.raw)
+            Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
+            Path(f"{ETCD_DATA_DIR}/client.pem").write_text(cert.certificate.raw)
+            Path(f"{ETCD_DATA_DIR}/client.key").write_text(private_key.raw)
             key = (
                 orig_key
                 if orig_key.startswith("/")
@@ -846,39 +831,35 @@ class ApplicationCharm(CharmBase):
             }
         )
 
-    def _ensure_snap_installed(self) -> bool:
-        """Ensure snapd is installed on the system."""
-        if shutil.which("snap"):
-            return True
-
-        try:
-            # Install snapd using apt
-            subprocess.run(["apt", "update"], check=True)
-            subprocess.run(["apt", "install", "-y", "snapd"], check=True)
-            # subprocess.run(['systemctl', 'enable', '--now', 'snapd.socket'], check=True)
-
-            # Wait for snapd to be ready
-            max_retries = 30
-            for _ in range(max_retries):
-                if shutil.which("snap"):
-                    return True
-                time.sleep(4)
-
-            return False
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to install snap: {e}")
-            return False
-
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(5), reraise=True)
-    def _install_etcd_snap(self) -> bool:
-        """Install the etcd snap."""
-        try:
-            self.etcd_snap.ensure(snap.SnapState.Present, channel="3.6/edge")
-            self.etcd_snap.hold()
-            return True
-        except snap.SnapError as e:
-            logger.error(str(e))
-            return False
+    def _install_etcdctl(self):
+        """Install etcdctl using wget and tar, handling architecture."""
+        etcdctl_path = "/usr/local/bin/etcdctl"
+        if shutil.which("etcdctl"):
+            logger.info("etcdctl already installed.")
+            return
+        logger.info("Installing etcdctl via wget...")
+        arch = platform.machine()
+        if arch == "aarch64":
+            url = "https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-arm64.tar.gz"
+        else:
+            url = "https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-amd64.tar.gz"
+        tmp_dir = "/tmp/etcd_install"
+        os.makedirs(tmp_dir, exist_ok=True)
+        tar_path = os.path.join(tmp_dir, "etcd.tar.gz")
+        subprocess.run(["sudo", "apt", "install", "wget", "-y"], check=True)
+        subprocess.run(["wget", url, "-O", tar_path], check=True)
+        subprocess.run(["tar", "-xvf", tar_path, "-C", tmp_dir], check=True)
+        # Find the extracted etcdctl binary
+        for entry in os.listdir(tmp_dir):
+            if entry.startswith("etcd-v3.4.35-linux-"):
+                etcdctl_src = os.path.join(tmp_dir, entry, "etcdctl")
+                if os.path.isfile(etcdctl_src):
+                    subprocess.run(["sudo", "mv", etcdctl_src, etcdctl_path], check=True)
+                    subprocess.run(["sudo", "chmod", "+x", etcdctl_path], check=True)
+                    logger.info(f"etcdctl installed at {etcdctl_path}")
+                    break
+        else:
+            logger.error("Failed to find etcdctl binary after extraction.")
 
     def get_certificate_of_common_name(self, common_name: str) -> str | None:
         """Return the certificate for a given common name."""
@@ -894,25 +875,24 @@ class ApplicationCharm(CharmBase):
 def _put(endpoints: str, key: str, value: str) -> str | None:
     """Put a key value pair in etcd."""
     if (
-        not Path(f"{ETCD_SNAP_DIR}/client.pem").exists()
-        or not Path(f"{ETCD_SNAP_DIR}/client.key").exists()
-        or not Path(f"{ETCD_SNAP_DIR}/ca.pem").exists()
+        not Path(f"{ETCD_DATA_DIR}/client.pem").exists()
+        or not Path(f"{ETCD_DATA_DIR}/client.key").exists()
+        or not Path(f"{ETCD_DATA_DIR}/ca.pem").exists()
     ):
         logger.error("No client certificates available")
         return None
-
     try:
         output = subprocess.check_output(
             [
-                "charmed-etcd.etcdctl",
+                "etcdctl",
                 "--endpoints",
                 endpoints,
                 "--cert",
-                f"{ETCD_SNAP_DIR}/client.pem",
+                f"{ETCD_DATA_DIR}/client.pem",
                 "--key",
-                f"{ETCD_SNAP_DIR}/client.key",
+                f"{ETCD_DATA_DIR}/client.key",
                 "--cacert",
-                f"{ETCD_SNAP_DIR}/ca.pem",
+                f"{ETCD_DATA_DIR}/ca.pem",
                 "put",
                 key,
                 value,
@@ -921,32 +901,30 @@ def _put(endpoints: str, key: str, value: str) -> str | None:
     except subprocess.CalledProcessError:
         logger.error("etcdctl put failed")
         return None
-
     return output.decode("utf-8").strip()
 
 
 def _get(endpoints: str, key: str) -> str | None:
     """Get a key value pair from etcd."""
     if (
-        not Path(f"{ETCD_SNAP_DIR}/client.pem").exists()
-        or not Path(f"{ETCD_SNAP_DIR}/client.key").exists()
-        or not Path(f"{ETCD_SNAP_DIR}/ca.pem").exists()
+        not Path(f"{ETCD_DATA_DIR}/client.pem").exists()
+        or not Path(f"{ETCD_DATA_DIR}/client.key").exists()
+        or not Path(f"{ETCD_DATA_DIR}/ca.pem").exists()
     ):
         logger.error("No client certificates available")
         return None
-
     try:
         output = subprocess.check_output(
             [
-                "charmed-etcd.etcdctl",
+                "etcdctl",
                 "--endpoints",
                 endpoints,
                 "--cert",
-                f"{ETCD_SNAP_DIR}/client.pem",
+                f"{ETCD_DATA_DIR}/client.pem",
                 "--key",
-                f"{ETCD_SNAP_DIR}/client.key",
+                f"{ETCD_DATA_DIR}/client.key",
                 "--cacert",
-                f"{ETCD_SNAP_DIR}/ca.pem",
+                f"{ETCD_DATA_DIR}/ca.pem",
                 "get",
                 key,
             ],
@@ -954,7 +932,6 @@ def _get(endpoints: str, key: str) -> str | None:
     except subprocess.CalledProcessError:
         logger.error("etcdctl get failed")
         return None
-
     return output.decode("utf-8").strip()
 
 
