@@ -56,7 +56,6 @@ EXTRA_USER_ROLES_OPENSEARCH = "admin,default"
 CONSUMER_GROUP_PREFIX = "test-prefix"
 BAD_URL = "http://badurl"
 ETCD_DATA_DIR = "/var/lib/application-charm/etcd"
-ETCD_SNAP_NAME = "charmed-etcd"
 
 
 class ExtendedResponseModel(ResourceProviderModel):

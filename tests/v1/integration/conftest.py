@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-
+import json
 import logging
 import os
 import shutil
@@ -229,3 +229,19 @@ def juju():
     with jubilant.temp_model() as juju:
         juju.wait_timeout = 1000
         yield juju
+
+
+@pytest.fixture(scope="module")
+def lxd_cloud(juju: jubilant.Juju):
+    clouds = json.loads(juju.cli("clouds", "--format", "json", include_model=False))
+    for cloud, details in clouds.items():
+        if "lxd" == details.get("type"):
+            logger.info(f"Identified LXD cloud: {cloud}")
+            yield cloud
+
+
+@pytest.fixture(scope="module")
+def juju_lxd_model(lxd_cloud: str):
+    with jubilant.temp_model(cloud=lxd_cloud) as juju_lxd:
+        juju_lxd.wait_timeout = 1000
+        yield juju_lxd
