@@ -238,7 +238,7 @@ def lxd_cloud(juju: jubilant.Juju):
     for cloud, details in clouds.items():
         if "lxd" == details.get("type"):
             logger.info(f"Identified LXD cloud: {cloud}")
-            yield cloud
+            yield f"{cloud}/localhost"
 
 
 @pytest.fixture(scope="module")
