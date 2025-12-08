@@ -377,7 +377,11 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(self.first_database.on.status_resolved, self._on_status_resolved)
 
         self.framework.observe(self.on.update_status, self._on_update_status)
-        self.framework.observe(self.on.config_changed, self._on_certificate_available)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
+
+    def _on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
+        """Handle config changed event."""
+        self.refresh_tls_certificates_event.emit()
 
     def _on_update_status(self, event):
         logger.info("Update status")

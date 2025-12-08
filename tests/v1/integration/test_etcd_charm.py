@@ -90,7 +90,7 @@ def generate_mtls_chain(common_name: str) -> tuple[str, str]:
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_charms(juju: Juju, application_charm, etcd_charm):
+async def test_deploy_charms(juju: Juju, application_charm):
     """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
