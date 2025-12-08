@@ -234,6 +234,7 @@ def juju():
 @pytest.fixture(scope="module")
 def lxd_cloud(juju: jubilant.Juju):
     clouds = json.loads(juju.cli("clouds", "--format", "json", include_model=False))
+    logger.info(f"Available clouds: {clouds}")
     for cloud, details in clouds.items():
         if "lxd" == details.get("type"):
             logger.info(f"Identified LXD cloud: {cloud}")
