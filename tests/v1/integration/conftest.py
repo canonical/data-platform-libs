@@ -11,6 +11,7 @@ from subprocess import check_call, check_output
 
 import jubilant
 import pytest
+from jubilant import Juju
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -238,11 +239,31 @@ def lxd_cloud(juju: jubilant.Juju):
     for cloud, details in clouds.items():
         if "lxd" == details.get("type"):
             logger.info(f"Identified LXD cloud: {cloud}")
-            yield f"{cloud}/localhost"
+            yield cloud
 
 
 @pytest.fixture(scope="module")
-def juju_lxd_model(lxd_cloud: str):
-    with jubilant.temp_model(cloud=lxd_cloud) as juju_lxd:
+def k8s_cloud(juju: jubilant.Juju):
+    clouds = json.loads(juju.cli("clouds", "--format", "json", include_model=False))
+    logger.info(f"Available clouds: {clouds}")
+    for cloud, details in clouds.items():
+        if "k8s" == details.get("type"):
+            logger.info(f"Identified K8s cloud: {cloud}")
+            yield cloud
+
+
+@pytest.fixture(scope="module")
+def k8s_controller(k8s_cloud: str, juju: Juju):
+    controllers = json.loads(juju.cli("controllers", "--format", "json", include_model=False))
+    logger.info(f"Available controllers: {controllers}")
+    for controller, details in controllers.get("controllers").items():
+        if k8s_cloud == details.get("cloud"):
+            logger.info(f"Identified K8s controller: {controller}")
+            yield controller
+
+
+@pytest.fixture(scope="module")
+def juju_lxd_model(lxd_cloud: str, k8s_controller: str):
+    with jubilant.temp_model(cloud=lxd_cloud, controller=k8s_controller) as juju_lxd:
         juju_lxd.wait_timeout = 1000
         yield juju_lxd
