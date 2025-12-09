@@ -265,7 +265,17 @@ def k8s_controller(k8s_cloud: str, juju: Juju):
 @pytest.fixture(scope="module")
 def juju_lxd_model(juju: Juju, lxd_cloud: str, k8s_controller: str):
     clouds_known = juju.cli("list-clouds", "--controller", k8s_controller, include_model=False)
-    logger.info(f"Known clouds: {clouds_known}")
+    logger.info(f"Known clouds before explicitly adding: {clouds_known}")
+    juju.cli("add-cloud", "--controller", k8s_controller, lxd_cloud, include_model=False)
+    clouds_known = juju.cli("list-clouds", "--controller", k8s_controller, include_model=False)
+    logger.info(f"Known clouds after adding: {clouds_known}")
     with jubilant.temp_model(cloud=lxd_cloud, controller=k8s_controller) as juju_lxd:
         juju_lxd.wait_timeout = 1000
         yield juju_lxd
+
+
+@pytest.fixture(scope="module")
+def juju_k8s_model(juju: Juju, lxd_cloud: str, k8s_cloud: str, k8s_controller: str):
+    with jubilant.temp_model(cloud=k8s_cloud, controller=k8s_controller) as juju_k8s:
+        juju_k8s.wait_timeout = 1000
+        yield juju_k8s
