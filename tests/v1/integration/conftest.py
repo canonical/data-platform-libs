@@ -271,7 +271,7 @@ def k8s_controller(k8s_cloud: str, juju: Juju):
             return
 
     logger.info(f"No controller with k8s cloud found. Available controllers: {controllers}")
-    logger.info("Provisioning new k8s controller.")
+    logger.info("Bootstrapping new k8s controller.")
     juju.bootstrap(k8s_cloud, controller=K8S_CONTROLLER)
     yield K8S_CONTROLLER
 
@@ -296,7 +296,7 @@ def lxd_controller(lxd_cloud: str, juju: Juju):
             return
 
     logger.info(f"No controller with LXD cloud found. Available controllers: {controllers}")
-    logger.info("Provisioning new LXD controller.")
+    logger.info("Bootstrapping new LXD controller.")
     juju.bootstrap(lxd_cloud, controller=LXD_CONTROLLER)
     yield LXD_CONTROLLER
 

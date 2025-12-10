@@ -107,21 +107,36 @@ def test_deploy_charms(juju_lxd_model: Juju, juju_k8s_model: Juju, application_c
     juju_lxd_model.integrate(f"{ETCD_APP_NAME}:peer-certificates", TLS_NAME)
     juju_lxd_model.integrate(f"{ETCD_APP_NAME}:client-certificates", TLS_NAME)
     juju_k8s_model.integrate(REQUIRER_APP_NAME, REQUIRER_TLS_NAME)
-    juju_lxd_model.wait(
-        lambda status: apps_active_and_agents_idle(status, ETCD_APP_NAME, TLS_NAME)
-    )
+    try:
+        juju_lxd_model.wait(
+            lambda status: apps_active_and_agents_idle(status, ETCD_APP_NAME, TLS_NAME),
+            timeout=1800,
+        )
+    except TimeoutError as e:
+        for unit, unit_status in juju_lxd_model.status().get_units(ETCD_APP_NAME).items():
+            logger.error(f"Unit {unit} status: {unit_status}")
+        raise e
     juju_k8s_model.wait(
         lambda status: apps_active_and_agents_idle(status, REQUIRER_APP_NAME, REQUIRER_TLS_NAME)
     )
 
 
 @pytest.mark.abort_on_fail
-def test_relate_client_charm(juju_lxd_model: Juju, juju_k8s_model: Juju) -> None:
+def test_relate_client_charm(
+    juju_lxd_model: Juju, juju_k8s_model: Juju, lxd_controller: str
+) -> None:
     """Test normal client charm relation."""
-    juju_lxd_model.offer(app=ETCD_APP_NAME, endpoint=ETCD_APP_CLIENT_ENDPOINT)
+    juju_lxd_model_name = juju_lxd_model.model.split(":")[1]
 
-    juju_k8s_model_name = juju_k8s_model.model.split(":")[1]
-    juju_k8s_model.consume(model_and_app=f"{juju_k8s_model_name}.{REQUIRER_APP_NAME}")
+    juju_lxd_model.offer(
+        app=f"{juju_lxd_model_name}.{ETCD_APP_NAME}",
+        endpoint=ETCD_APP_CLIENT_ENDPOINT,
+        controller=lxd_controller,
+    )
+
+    juju_k8s_model.consume(
+        model_and_app=f"{juju_lxd_model_name}.{ETCD_APP_NAME}", controller=lxd_controller
+    )
 
     juju_k8s_model.integrate(
         f"{ETCD_APP_NAME}.{ETCD_APP_CLIENT_ENDPOINT}",
