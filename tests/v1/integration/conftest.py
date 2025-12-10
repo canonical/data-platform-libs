@@ -263,33 +263,44 @@ def k8s_controller(k8s_cloud: str, juju: Juju):
 
 
 @pytest.fixture(scope="module")
-def juju_lxd_model(juju: Juju, lxd_cloud: str, k8s_controller: str):
-    clouds_known = juju.cli("list-clouds", "--controller", k8s_controller, include_model=False)
+def lxd_controller(lxd_cloud: str, juju: Juju):
+    juju.bootstrap(lxd_cloud, controller="lxd-controller")
+    controllers = json.loads(juju.cli("controllers", "--format", "json", include_model=False))
+    logger.info(f"Available controllers: {controllers}")
+    for controller, details in controllers.get("controllers").items():
+        if lxd_cloud == details.get("cloud"):
+            logger.info(f"Identified LXD controller: {controller}")
+            yield controller
+
+
+@pytest.fixture(scope="module")
+def juju_lxd_model(juju: Juju, lxd_cloud: str, lxd_controller: str):
+    clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
     logger.info(f"Known clouds before explicitly adding: {clouds_known}")
-    juju.cli("add-cloud", "--controller", k8s_controller, lxd_cloud, include_model=False)
-    clouds_known = juju.cli("list-clouds", "--controller", k8s_controller, include_model=False)
-    logger.info(f"Known clouds after adding: {clouds_known}")
-    credentials = juju.cli("list-credentials", "--controller", k8s_controller, include_model=False)
+    # juju.cli("add-cloud", "--controller", lxd_controller, lxd_cloud, include_model=False)
+    # clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
+    # logger.info(f"Known clouds after adding: {clouds_known}")
+    credentials = juju.cli("list-credentials", "--controller", lxd_controller, include_model=False)
     logger.info(f"Known credentials: {credentials}")
-    juju.cli("add-credential", lxd_cloud, "--controller", k8s_controller, include_model=False)
-    credentials = juju.cli("list-credentials", "--controller", k8s_controller, include_model=False)
-    logger.info(f"Known credentials post: {credentials}")
+    # juju.cli("add-credential", lxd_cloud, "--controller", lxd_controller, include_model=False)
+    # credentials = juju.cli("list-credentials", "--controller", lxd_controller, include_model=False)
+    # logger.info(f"Known credentials post: {credentials}")
     credentials_details = juju.cli(
         "show-credential",
         "--controller",
-        k8s_controller,
+        lxd_controller,
         lxd_cloud,
         lxd_cloud,
         include_model=False,
     )
     logger.info(f"Credential details: {credentials_details}")
-    with jubilant.temp_model(cloud=lxd_cloud, controller=k8s_controller) as juju_lxd:
+    with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller) as juju_lxd:
         juju_lxd.wait_timeout = 1000
         yield juju_lxd
 
 
 @pytest.fixture(scope="module")
-def juju_k8s_model(juju: Juju, lxd_cloud: str, k8s_cloud: str, k8s_controller: str):
+def juju_k8s_model(juju: Juju, k8s_cloud: str, k8s_controller: str):
     with jubilant.temp_model(cloud=k8s_cloud, controller=k8s_controller) as juju_k8s:
         juju_k8s.wait_timeout = 1000
         yield juju_k8s
