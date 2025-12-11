@@ -344,11 +344,11 @@ class ApplicationCharm(CharmBase):
 
         self.framework.observe(self.on.reset_unit_status_action, self._on_reset_unit_status)
         self.framework.observe(self.on.set_mtls_cert_action, self._on_set_mtls_cert)
-        self.framework.observe(self.on.update_mtls_cert_action, self._on_update_action)
+        self.framework.observe(self.on.update_mtls_certs_action, self._on_update_action)
         self.framework.observe(self.on.put_etcd_action, self._on_put_etcd_action)
         self.framework.observe(self.on.get_etcd_action, self._on_get_etcd_action)
         self.framework.observe(self.on.get_credentials_action, self._on_get_credentials_action)
-        self.framework.observe(self.on.get_certificate_action, self._on_get_certificate_action)
+        self.framework.observe(self.on.get_certificates_action, self._on_get_certificates_action)
 
         # Get/set/delete fields on second-database relations
         self.framework.observe(self.on.get_relation_field_action, self._on_get_relation_field)
@@ -794,7 +794,7 @@ class ApplicationCharm(CharmBase):
             }
         )
 
-    def _on_get_certificate_action(self, event: ops.ActionEvent) -> None:
+    def _on_get_certificates_action(self, event: ops.ActionEvent) -> None:
         """Return the certificate an action response."""
         certs, _ = self.certificates.get_assigned_certificates()
         if not certs:

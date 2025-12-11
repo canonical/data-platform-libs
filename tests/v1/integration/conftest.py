@@ -248,44 +248,6 @@ def lxd_cloud(juju: jubilant.Juju):
 
 
 @pytest.fixture(scope="module")
-def k8s_cloud(juju: jubilant.Juju):
-    clouds = json.loads(juju.cli("clouds", "--format", "json", include_model=False))
-    logger.debug(f"Available clouds: {clouds}")
-    for cloud, details in clouds.items():
-        if "k8s" == details.get("type"):
-            logger.info(f"Identified K8s cloud: {cloud}")
-            yield cloud
-            return
-
-    logger.error("No K8s cloud found in Juju clouds. Available clouds: {clouds}")
-
-
-@pytest.fixture(scope="module")
-def k8s_controller(k8s_cloud: str, juju: Juju):
-    controllers = json.loads(juju.cli("controllers", "--format", "json", include_model=False))
-    logger.debug(f"Available controllers: {controllers}")
-    for controller, details in controllers.get("controllers").items():
-        if k8s_cloud == details.get("cloud"):
-            logger.info(f"Identified K8s controller: {controller}")
-            yield controller
-            return
-
-    logger.info(f"No controller with k8s cloud found. Available controllers: {controllers}")
-    logger.info("Bootstrapping new k8s controller.")
-    juju.bootstrap(k8s_cloud, controller=K8S_CONTROLLER)
-    yield K8S_CONTROLLER
-
-    juju.cli(
-        "destroy-controller",
-        K8S_CONTROLLER,
-        "--destroy-all-models",
-        "--destroy-storage",
-        "--no-prompt",
-        "--force",
-    )
-
-
-@pytest.fixture(scope="module")
 def lxd_controller(lxd_cloud: str, juju: Juju):
     controllers = json.loads(juju.cli("controllers", "--format", "json", include_model=False))
     logger.debug(f"Available controllers: {controllers}")
@@ -328,10 +290,3 @@ def juju_lxd_model(juju: Juju, lxd_cloud: str, lxd_controller: str):
     with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller) as juju_lxd:
         juju_lxd.wait_timeout = 1000
         yield juju_lxd
-
-
-@pytest.fixture(scope="module")
-def juju_k8s_model(juju: Juju, k8s_cloud: str, k8s_controller: str):
-    with jubilant.temp_model(cloud=k8s_cloud, controller=k8s_controller) as juju_k8s:
-        juju_k8s.wait_timeout = 1000
-        yield juju_k8s

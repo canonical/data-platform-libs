@@ -2,6 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 import logging
+import random
 from datetime import timedelta
 
 import pytest
@@ -91,14 +92,14 @@ def generate_mtls_chain(common_name: str) -> tuple[str, str]:
 
 
 @pytest.mark.abort_on_fail
-def test_deploy_charms(juju_lxd_model: Juju, juju_k8s_model: Juju, application_charm):
+def test_deploy_charms(juju_lxd_model: Juju, application_charm):
     """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
-    juju_k8s_model.deploy(application_charm, app=REQUIRER_APP_NAME, num_units=1)
+    juju_lxd_model.deploy(application_charm, app=REQUIRER_APP_NAME, num_units=1)
     juju_lxd_model.deploy(ETCD_APP_NAME, channel="3.6/stable", num_units=3)
     juju_lxd_model.deploy(TLS_NAME, channel="1/edge", config={"ca-common-name": "etcd"})
-    juju_k8s_model.deploy(
+    juju_lxd_model.deploy(
         TLS_NAME, app=REQUIRER_TLS_NAME, channel="1/edge", config={"ca-common-name": "etcd"}
     )
 
@@ -106,43 +107,27 @@ def test_deploy_charms(juju_lxd_model: Juju, juju_k8s_model: Juju, application_c
     logger.info("Integrating peer-certificates and client-certificates relations")
     juju_lxd_model.integrate(f"{ETCD_APP_NAME}:peer-certificates", TLS_NAME)
     juju_lxd_model.integrate(f"{ETCD_APP_NAME}:client-certificates", TLS_NAME)
-    juju_k8s_model.integrate(REQUIRER_APP_NAME, REQUIRER_TLS_NAME)
-    try:
-        juju_lxd_model.wait(
-            lambda status: apps_active_and_agents_idle(status, ETCD_APP_NAME, TLS_NAME),
-            timeout=1800,
-        )
-    except TimeoutError as e:
-        for unit, unit_status in juju_lxd_model.status().get_units(ETCD_APP_NAME).items():
-            logger.error(f"Unit {unit} status: {unit_status}")
-        raise e
-    juju_k8s_model.wait(
-        lambda status: apps_active_and_agents_idle(status, REQUIRER_APP_NAME, REQUIRER_TLS_NAME)
+    juju_lxd_model.integrate(REQUIRER_APP_NAME, TLS_NAME)
+    juju_lxd_model.wait(
+        lambda status: apps_active_and_agents_idle(
+            status, ETCD_APP_NAME, TLS_NAME, REQUIRER_APP_NAME, REQUIRER_TLS_NAME, idle_period=10
+        ),
+        timeout=1200,
+        successes=1,
     )
 
 
 @pytest.mark.abort_on_fail
 def test_relate_client_charm(
-    juju_lxd_model: Juju, juju_k8s_model: Juju, lxd_controller: str
+    juju_lxd_model: Juju,
+    lxd_controller: str,
 ) -> None:
     """Test normal client charm relation."""
-    juju_lxd_model_name = juju_lxd_model.model.split(":")[1]
-
-    juju_lxd_model.offer(
-        app=f"{juju_lxd_model_name}.{ETCD_APP_NAME}",
-        endpoint=ETCD_APP_CLIENT_ENDPOINT,
-        controller=lxd_controller,
+    juju_lxd_model.integrate(
+        ETCD_APP_NAME,
+        REQUIRER_APP_NAME,
     )
-
-    juju_k8s_model.consume(
-        model_and_app=f"{juju_lxd_model_name}.{ETCD_APP_NAME}", controller=lxd_controller
-    )
-
-    juju_k8s_model.integrate(
-        f"{ETCD_APP_NAME}.{ETCD_APP_CLIENT_ENDPOINT}",
-        f"{REQUIRER_APP_NAME}.{REQUIRER_ETCD_CLIENT_ENDPOINT}",
-    )
-    juju_k8s_model.wait(lambda status: apps_active_and_agents_idle(status, *APPS, idle_period=10))
+    juju_lxd_model.wait(lambda status: apps_active_and_agents_idle(status, *APPS, idle_period=10))
 
     endpoints = get_cluster_endpoints(juju_lxd_model, ETCD_APP_NAME, tls_enabled=True)
     download_client_certificate_from_unit(juju_lxd_model)
@@ -154,7 +139,7 @@ def test_relate_client_charm(
     password = secret.get(f"{INTERNAL_USER}-password")
 
     # check if user and role are created for the common name and that the role is assigned to the user
-    common_name = get_requirer_common_name(juju_k8s_model)
+    common_name = get_requirer_common_name(juju_lxd_model)
     logger.info(f"Requirer has common name: {common_name}")
     user_roles = get_user(
         endpoints, common_name, user=INTERNAL_USER, password=password, tls_enabled=True
@@ -174,7 +159,7 @@ def test_relate_client_charm(
 
     # get client ca from every unit and check if it includes the mtls cert
 
-    mtls_cert = get_requirer_mtls_certificate(juju_k8s_model)
+    mtls_cert = get_requirer_mtls_certificate(juju_lxd_model)
     assert mtls_cert, "failed to get mtls cert from requirer TLS provider"
     for unit_name in juju_lxd_model.status().get_units(ETCD_APP_NAME):
         client_cas = get_certificate_from_unit(
@@ -184,72 +169,72 @@ def test_relate_client_charm(
         assert mtls_cert in client_cas, f"mtls cert not in trusted CAs for {unit_name}"
 
 
-# @pytest.mark.abort_on_fail
-# async def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
-#     """Test write and read to the key prefix with the requirer charm."""
-#     requirer_unit = next(iter(juju_lxd_model.status().get_units(REQUIRER_APP_NAME)))
-#
-#     # write to the key prefix
-#     action = juju_lxd_model.run(
-#         requirer_unit, "put-etcd", **{"key": TEST_KEY, "value": TEST_VALUE}
-#     )
-#
-#     assert (
-#         action.status == "failed" and "permission denied" in action.results["stderr"]
-#     ), "Action should fail because user does not have permission to write to the key prefix"
-#
-#     # write to authorized key prefix
-#     key = "/test/foo"
-#     action = juju_lxd_model.run(requirer_unit, "put-etcd", **{"key": key, "value": TEST_VALUE})
-#     assert action.status == "completed", "Action should succeed"
-#
-#     # read from the key prefix
-#     action = juju_lxd_model.run(requirer_unit, "get-etcd", **{"key": key})
-#     assert action.status == "completed", "Action should succeed"
-#     assert action.results["message"] == f"{key}\n{TEST_VALUE}", "Action should return the value"
-#
-#
-# @pytest.mark.abort_on_fail
-# async def test_update_mtls_cert(juju_lxd_model: Juju) -> None:
-#     """Test updating the common name used by the requirer app."""
-#     # generate new mtls cert
-#     # new common name, randomly generated
-#     new_common_name = f"new-common-name-{random.randint(1000, 9999)}"
-#     mtls_cert, mtls_ca = generate_mtls_chain(new_common_name)
-#
-#     # run juju action to update the common name
-#     requirer_unit = next(iter(juju_lxd_model.status().get_units(REQUIRER_APP_NAME)))
-#     # we send all chain to test that etcd only stores the leaf certificate
-#     juju_lxd_model.run(
-#         requirer_unit, "update-mtls-cert", **{"chain": "\n".join([mtls_cert, mtls_ca])}
-#     )
-#
-#     # wait for model to settle
-#     juju_lxd_model.wait(
-#         lambda status: apps_active_and_agents_idle(
-#             status, ETCD_APP_NAME, REQUIRER_APP_NAME, idle_period=10
-#         )
-#     )
-#     # await wait_until(ops_test, apps=[APP_NAME, REQUIRER_APP_NAME], idle_period=10)
-#
-#     # get client ca from every unit and check if it includes the new_ca
-#     # model = ops_test.model_full_name
-#     # assert ops_test.model
-#     # assert ops_test.model.applications[APP_NAME] is not None
-#
-#     # get common name from the requirer charm
-#     common_name = get_requirer_common_name(juju_lxd_model)
-#     assert common_name == new_common_name, "common name not updated"
-#
-#     old_mtls_cert = get_requirer_mtls_certificate(juju_lxd_model)
-#     assert old_mtls_cert, "failed to get the old mtls cert from requirer TLS provider"
-#     for unit_name in juju_lxd_model.status().get_units(ETCD_APP_NAME):
-#         client_cas = get_certificate_from_unit(
-#             juju_lxd_model, unit_name, TLSType.CLIENT, is_ca=True
-#         )
-#         assert client_cas, f"failed to get client CAs for {unit_name}"
-#         assert mtls_cert in client_cas, f"new mtls cert not in trusted CAs for {unit_name}"
-#         assert mtls_ca not in client_cas, f"new mtls ca is in trusted CAs for {unit_name}"
-#         assert (
-#             old_mtls_cert not in client_cas
-#         ), f"old mtls certificate still in trusted CAs for {unit_name}"
+@pytest.mark.abort_on_fail
+async def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
+    """Test write and read to the key prefix with the requirer charm."""
+    requirer_unit = next(iter(juju_lxd_model.status().get_units(REQUIRER_APP_NAME)))
+
+    # write to the key prefix
+    action = juju_lxd_model.run(
+        requirer_unit, "put-etcd", **{"key": TEST_KEY, "value": TEST_VALUE}
+    )
+
+    assert (
+        action.status == "failed" and "permission denied" in action.results["stderr"]
+    ), "Action should fail because user does not have permission to write to the key prefix"
+
+    # write to authorized key prefix
+    key = "/test/foo"
+    action = juju_lxd_model.run(requirer_unit, "put-etcd", **{"key": key, "value": TEST_VALUE})
+    assert action.status == "completed", "Action should succeed"
+
+    # read from the key prefix
+    action = juju_lxd_model.run(requirer_unit, "get-etcd", **{"key": key})
+    assert action.status == "completed", "Action should succeed"
+    assert action.results["message"] == f"{key}\n{TEST_VALUE}", "Action should return the value"
+
+
+@pytest.mark.abort_on_fail
+async def test_update_mtls_cert(juju_lxd_model: Juju) -> None:
+    """Test updating the common name used by the requirer app."""
+    # generate new mtls cert
+    # new common name, randomly generated
+    new_common_name = f"new-common-name-{random.randint(1000, 9999)}"
+    mtls_cert, mtls_ca = generate_mtls_chain(new_common_name)
+
+    # run juju action to update the common name
+    requirer_unit = next(iter(juju_lxd_model.status().get_units(REQUIRER_APP_NAME)))
+    # we send all chain to test that etcd only stores the leaf certificate
+    juju_lxd_model.run(
+        requirer_unit, "update-mtls-cert", **{"chain": "\n".join([mtls_cert, mtls_ca])}
+    )
+
+    # wait for model to settle
+    juju_lxd_model.wait(
+        lambda status: apps_active_and_agents_idle(
+            status, ETCD_APP_NAME, REQUIRER_APP_NAME, idle_period=10
+        )
+    )
+    # await wait_until(ops_test, apps=[APP_NAME, REQUIRER_APP_NAME], idle_period=10)
+
+    # get client ca from every unit and check if it includes the new_ca
+    # model = ops_test.model_full_name
+    # assert ops_test.model
+    # assert ops_test.model.applications[APP_NAME] is not None
+
+    # get common name from the requirer charm
+    common_name = get_requirer_common_name(juju_lxd_model)
+    assert common_name == new_common_name, "common name not updated"
+
+    old_mtls_cert = get_requirer_mtls_certificate(juju_lxd_model)
+    assert old_mtls_cert, "failed to get the old mtls cert from requirer TLS provider"
+    for unit_name in juju_lxd_model.status().get_units(ETCD_APP_NAME):
+        client_cas = get_certificate_from_unit(
+            juju_lxd_model, unit_name, TLSType.CLIENT, is_ca=True
+        )
+        assert client_cas, f"failed to get client CAs for {unit_name}"
+        assert mtls_cert in client_cas, f"new mtls cert not in trusted CAs for {unit_name}"
+        assert mtls_ca not in client_cas, f"new mtls ca is in trusted CAs for {unit_name}"
+        assert (
+            old_mtls_cert not in client_cas
+        ), f"old mtls certificate still in trusted CAs for {unit_name}"

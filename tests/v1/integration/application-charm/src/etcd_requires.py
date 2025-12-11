@@ -23,8 +23,9 @@ from charms.data_platform_libs.v1.data_interfaces import (
 )
 
 if TYPE_CHECKING:
-    from charm import ETCD_DATA_DIR, ApplicationCharm
+    from charm import ApplicationCharm
 
+ETCD_DATA_DIR = "/var/lib/application-charm/etcd"
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ class EtcdRequiresV1(ops.framework.Object):
         if not response.username:
             logger.error("No username available")
             return
-        Path(ETCD_DATA_DIR).mkdir(exist_ok=True)
+        Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
         Path(f"{ETCD_DATA_DIR}/ca.pem").write_text(response.tls_ca)
 
     @property
