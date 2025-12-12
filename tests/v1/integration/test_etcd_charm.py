@@ -37,7 +37,7 @@ PEER_RELATION = "etcd-peers"
 INTERNAL_USER = "root"
 APPS = [ETCD_APP_NAME, REQUIRER_APP_NAME, TLS_NAME]
 key_prefix = "/test/"
-TEST_KEY = "test_key"
+TEST_KEY = "/test_key"
 TEST_VALUE = "42"
 
 
@@ -179,7 +179,7 @@ async def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
 
     # write to authorized key prefix
     # every user will write the key to their own prefix
-    key = "/test/foo"
+    key = "test/foo"
     action = juju_lxd_model.run(
         requirer_unit, "put-etcd", params={"key": key, "value": TEST_VALUE}
     )
