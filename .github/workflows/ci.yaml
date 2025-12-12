@@ -168,7 +168,7 @@ jobs:
       matrix:
         ubuntu-versions:
           # Update whenever charmcraft.yaml is changed
-          - series: jammy 
+          - series: jammy
             bases-index: 0
         tox-environments:
           - integration-db-v1
@@ -177,6 +177,7 @@ jobs:
           - integration-kafka-connect-v1
           - integration-backward-compatibility-v1
           - integration-status-v1
+          - integration-etcd-v1
         juju-version:
           - juju-bootstrap-option: "3.6.1"
             juju-snap-channel: "3.6/stable"
