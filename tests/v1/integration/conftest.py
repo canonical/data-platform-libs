@@ -7,6 +7,7 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
+from platform import machine
 from subprocess import check_call, check_output
 
 import jubilant
@@ -226,6 +227,25 @@ def fetch_old_versions():
 
     os.chdir(cwd)
     shutil.rmtree(tmp_path)
+
+
+@pytest.fixture(scope="package")
+def arch() -> str:
+    """Fixture to provide the platform architecture for testing."""
+    platforms = {
+        "x86_64": "amd64",
+        "aarch64": "arm64",
+    }
+    return platforms.get(machine(), "amd64")
+
+
+@pytest.fixture
+def etcd_charm(arch: str) -> str:
+    """Path to the charm file to use for testing."""
+    # Return str instead of pathlib.Path since python-libjuju's model.deploy(), juju deploy, and
+    # juju bundle files expect local charms to begin with `./` or `/` to distinguish them from
+    # Charmhub charms.
+    return f"./charmed-etcd_ubuntu@24.04-{arch}.charm"
 
 
 @pytest.fixture(scope="module")
