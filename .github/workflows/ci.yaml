@@ -191,7 +191,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup operator environment
+      - name: Setup k8s controller
         # TODO: Replace with custom image on self-hosted runner
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -200,6 +200,11 @@ jobs:
           bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "3.x/stable"
+      - name: Setup lxd controller
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: lxd
+          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
       - name: Download packed charm(s)
         uses: actions/download-artifact@v4
         with:

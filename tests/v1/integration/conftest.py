@@ -288,6 +288,7 @@ def lxd_controller(lxd_cloud: str, juju: Juju):
         "--destroy-storage",
         "--no-prompt",
         "--force",
+        include_model=False
     )
 
 
