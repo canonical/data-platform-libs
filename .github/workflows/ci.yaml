@@ -200,11 +200,11 @@ jobs:
           bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "3.x/stable"
-      - name: Setup lxd controller
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: lxd
-          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
+#      - name: Setup lxd controller
+#        uses: charmed-kubernetes/actions-operator@main
+#        with:
+#          provider: lxd
+#          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
       - name: Disk usage
         timeout-minutes: 1
         run: df --human-readable
