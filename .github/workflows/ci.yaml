@@ -189,13 +189,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - name: Disk usage
-        timeout-minutes: 1
-        run: df --human-readable
-      - name: Check for old snapshots/images on lxd
-        run: |
-          lxc list
-          lxc image list
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup k8s controller
@@ -212,6 +205,13 @@ jobs:
         with:
           provider: lxd
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
+      - name: Disk usage
+        timeout-minutes: 1
+        run: df --human-readable
+      - name: Check for old snapshots/images on lxd
+        run: |
+          lxc list
+          lxc image list
       - name: Download packed charm(s)
         uses: actions/download-artifact@v4
         with:
