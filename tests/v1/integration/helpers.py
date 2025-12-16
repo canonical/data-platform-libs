@@ -407,10 +407,7 @@ def get_user(
     if password:
         etcd_command = f"{etcd_command} --password={password}"
     if tls_enabled:
-        etcd_command = f"{etcd_command} \
-            --cacert client_ca.pem \
-            --cert client.pem \
-            --key client.key"
+        etcd_command = f"{etcd_command} --cacert client_ca.pem --cert client.pem --key client.key"
 
     try:
         result = subprocess.getoutput(etcd_command)
@@ -434,10 +431,7 @@ def get_role(
     if password:
         etcd_command = f"{etcd_command} --password={password}"
     if tls_enabled:
-        etcd_command = f"{etcd_command} \
-            --cacert client_ca.pem \
-            --cert client.pem \
-            --key client.key"
+        etcd_command = f"{etcd_command} --cacert client_ca.pem --cert client.pem --key client.key"
     try:
         result = json.loads(subprocess.getoutput(etcd_command))["perm"]
         return [
