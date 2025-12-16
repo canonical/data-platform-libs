@@ -17,7 +17,6 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-K8S_CONTROLLER = "k8s-controller"
 LXD_CONTROLLER = "lxd-controller"
 
 
