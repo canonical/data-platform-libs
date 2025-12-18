@@ -171,25 +171,33 @@ jobs:
           - series: jammy
             bases-index: 0
         tox-environment:
-          - test: integration-db-v1
+          - integration-db-v1
+          - integration-opensearch-v1
+          - integration-kafka-v1
+          - integration-kafka-connect-v1
+          - integration-backward-compatibility-v1
+          - integration-status-v1
+          - integration-etcd-v1
+        include:
+          - tox-environment: integration-db-v1
             provider: microk8s
-          - test: integration-opensearch-v1
+          - tox-environment: integration-opensearch-v1
             provider: microk8s
-          - test: integration-kafka-v1
+          - tox-environment: integration-kafka-v1
             provider: microk8s
-          - test: integration-kafka-connect-v1
+          - tox-environment: integration-kafka-connect-v1
             provider: microk8s
-          - test: integration-backward-compatibility-v1
+          - tox-environment: integration-backward-compatibility-v1
             provider: microk8s
-          - test: integration-status-v1
+          - tox-environment: integration-status-v1
             provider: microk8s
-          - test: integration-etcd-v1
+          - tox-environment: integration-etcd-v1
             provider: lxd
         juju-version:
           - juju-bootstrap-option: "3.6.1"
             juju-snap-channel: "3.6/stable"
             libjuju-version: "3.6.1.0"
-    name: V1 -- ${{ matrix.tox-environment.test }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
+    name: V1 -- ${{ matrix.tox-environment }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
     needs:
       - lint
       - unit-test
@@ -232,7 +240,7 @@ jobs:
           fi
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox run -e ${{ matrix.tox-environment.test }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
+        run: tox run -e ${{ matrix.tox-environment }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
