@@ -287,17 +287,6 @@ def lxd_controller(lxd_cloud: str, juju: Juju):
 def juju_lxd_model(juju: Juju, lxd_cloud: str, lxd_controller: str):
     clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
     logger.debug(f"Known clouds: {clouds_known}")
-    credentials = juju.cli("list-credentials", "--controller", lxd_controller, include_model=False)
-    logger.debug(f"Known credentials: {credentials}")
-    credentials_details = juju.cli(
-        "show-credential",
-        "--controller",
-        lxd_controller,
-        lxd_cloud,
-        lxd_cloud,
-        include_model=False,
-    )
-    logger.debug(f"Credential details: {credentials_details}")
     with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller) as juju_lxd:
         juju_lxd.wait_timeout = 1000
         yield juju_lxd
