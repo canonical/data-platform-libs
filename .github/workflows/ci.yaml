@@ -199,7 +199,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup k8s controller
-        if: 'microk8s' == matrix.tests.provider
+        if: ${{ 'microk8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -209,7 +209,7 @@ jobs:
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "3.x/stable"
       - name: Setup lxd controller
-        if: 'lxd' == matrix.tests.provider
+        if: ${{ 'lxd' == matrix.tests.provider }}
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: lxd
