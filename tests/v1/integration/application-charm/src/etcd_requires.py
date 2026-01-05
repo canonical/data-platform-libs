@@ -63,6 +63,7 @@ class EtcdRequiresV1(ops.framework.Object):
     def update_mtls_certs(self, cert: str) -> None:
         """Set the mtls cert in the relation data bag."""
         if not self.etcd_relation:
+            logger.warning("Relation isn't available yet")
             return
         local_model = self.etcd_relation_local_model
         local_model.requests[0].mtls_cert = cert
@@ -71,6 +72,7 @@ class EtcdRequiresV1(ops.framework.Object):
     def update_requests_from_certs(self, certs: list[Certificate]) -> None:
         """Update the requests in the relation data bag from the assigned certificates."""
         if not self.etcd_relation:
+            logger.warning("Relation isn't available yet")
             return
         local_model = self.etcd_relation_local_model
 
@@ -145,6 +147,7 @@ class EtcdRequiresV1(ops.framework.Object):
     def remote_responses(self) -> list[ResourceProviderModel] | None:
         """Return the remote response model."""
         if not self.etcd_relation:
+            logger.warning("Relation isn't available yet")
             return None
 
         return build_model(
