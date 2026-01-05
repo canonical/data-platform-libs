@@ -86,3 +86,10 @@ parts:
       - lib/
     organize:
       "*-linux-gnu/libpq.so*": lib/
+
+config:
+  options:
+    send-ca-cert:
+      description: Send the CA certificate instead of end-entity certificate
+      type: boolean
+      default: false

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-# Copyright 2022 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 import json
 import logging
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from charmlibs.interfaces.tls_certificates import (
@@ -14,7 +15,7 @@ from charmlibs.interfaces.tls_certificates import (
 )
 from jubilant import Juju, TaskError
 
-from tests.v1.integration.helpers import (
+from tests.v1.integration.jubilant_helpers import (
     TLSType,
     apps_active_and_agents_idle,
     download_client_certificate_from_unit,
@@ -88,7 +89,7 @@ def generate_mtls_chain(common_name: str) -> tuple[str, str]:
 
 
 @pytest.mark.abort_on_fail
-def test_deploy_charms(juju_lxd_model: Juju, application_charm):
+def test_deploy_charms(juju_lxd_model: Juju, application_charm: Path) -> None:
     """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
@@ -191,10 +192,11 @@ async def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
     common_names = get_requirer_common_names(juju_lxd_model)
     results = json.loads(action.results["results"])
     for common_name in common_names:
-        assert (
-            common_name in results
-            and results[common_name] == f"/{common_name}/{key}\n{TEST_VALUE}"
-        )
+        assert common_name in results
+        lines = results[common_name].splitlines()
+        assert len(lines) == 2
+        assert lines[0] == f"/{common_name}/{key}"
+        assert lines[1] == TEST_VALUE
 
 
 @pytest.mark.abort_on_fail

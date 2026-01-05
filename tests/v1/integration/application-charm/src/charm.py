@@ -56,6 +56,8 @@ EXTRA_USER_ROLES_OPENSEARCH = "admin,default"
 CONSUMER_GROUP_PREFIX = "test-prefix"
 BAD_URL = "http://badurl"
 ETCD_DATA_DIR = "/var/lib/application-charm/etcd"
+CLIENT_CERT_PATH = f"{ETCD_DATA_DIR}/client.pem"
+CLIENT_KEY_PATH = f"{ETCD_DATA_DIR}/client.key"
 
 
 class ExtendedResponseModel(ResourceProviderModel):
@@ -347,7 +349,9 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(self.on.update_mtls_certs_action, self._on_update_action)
         self.framework.observe(self.on.put_etcd_action, self._on_put_etcd_action)
         self.framework.observe(self.on.get_etcd_action, self._on_get_etcd_action)
-        self.framework.observe(self.on.get_credentials_action, self._on_get_credentials_action)
+        self.framework.observe(
+            self.on.get_credentials_action, self._on_get_credentials_action_etcd
+        )
         self.framework.observe(self.on.get_certificates_action, self._on_get_certificates_action)
 
         # Get/set/delete fields on second-database relations
@@ -683,8 +687,8 @@ class ApplicationCharm(CharmBase):
         results = {}
         for cert in certs:
             Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
-            Path(f"{ETCD_DATA_DIR}/client.pem").write_text(cert.certificate.raw)
-            Path(f"{ETCD_DATA_DIR}/client.key").write_text(private_key.raw)
+            Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
+            Path(CLIENT_KEY_PATH).write_text(private_key.raw)
             key = (
                 orig_key
                 if orig_key.startswith("/")
@@ -739,8 +743,8 @@ class ApplicationCharm(CharmBase):
         results = {}
         for cert in certs:
             Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
-            Path(f"{ETCD_DATA_DIR}/client.pem").write_text(cert.certificate.raw)
-            Path(f"{ETCD_DATA_DIR}/client.key").write_text(private_key.raw)
+            Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
+            Path(CLIENT_KEY_PATH).write_text(private_key.raw)
             key = (
                 orig_key
                 if orig_key.startswith("/")
@@ -768,7 +772,7 @@ class ApplicationCharm(CharmBase):
             }
         )
 
-    def _on_get_credentials_action(self, event: ops.ActionEvent) -> None:
+    def _on_get_credentials_action_etcd(self, event: ops.ActionEvent) -> None:
         """Return the credentials an action response."""
         if not self.server_ca_chain:
             event.fail(
@@ -867,8 +871,8 @@ class ApplicationCharm(CharmBase):
 def _put(endpoints: str, key: str, value: str) -> str | None:
     """Put a key value pair in etcd."""
     if (
-        not Path(f"{ETCD_DATA_DIR}/client.pem").exists()
-        or not Path(f"{ETCD_DATA_DIR}/client.key").exists()
+        not Path(CLIENT_CERT_PATH).exists()
+        or not Path(CLIENT_KEY_PATH).exists()
         or not Path(f"{ETCD_DATA_DIR}/ca.pem").exists()
     ):
         logger.error("No client certificates available")
@@ -880,9 +884,9 @@ def _put(endpoints: str, key: str, value: str) -> str | None:
                 "--endpoints",
                 endpoints,
                 "--cert",
-                f"{ETCD_DATA_DIR}/client.pem",
+                CLIENT_CERT_PATH,
                 "--key",
-                f"{ETCD_DATA_DIR}/client.key",
+                CLIENT_KEY_PATH,
                 "--cacert",
                 f"{ETCD_DATA_DIR}/ca.pem",
                 "put",
@@ -899,8 +903,8 @@ def _put(endpoints: str, key: str, value: str) -> str | None:
 def _get(endpoints: str, key: str) -> str | None:
     """Get a key value pair from etcd."""
     if (
-        not Path(f"{ETCD_DATA_DIR}/client.pem").exists()
-        or not Path(f"{ETCD_DATA_DIR}/client.key").exists()
+        not Path(CLIENT_CERT_PATH).exists()
+        or not Path(CLIENT_KEY_PATH).exists()
         or not Path(f"{ETCD_DATA_DIR}/ca.pem").exists()
     ):
         logger.error("No client certificates available")
@@ -912,9 +916,9 @@ def _get(endpoints: str, key: str) -> str | None:
                 "--endpoints",
                 endpoints,
                 "--cert",
-                f"{ETCD_DATA_DIR}/client.pem",
+                CLIENT_CERT_PATH,
                 "--key",
-                f"{ETCD_DATA_DIR}/client.key",
+                CLIENT_KEY_PATH,
                 "--cacert",
                 f"{ETCD_DATA_DIR}/ca.pem",
                 "get",
