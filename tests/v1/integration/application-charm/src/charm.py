@@ -380,7 +380,7 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(self.first_database.on.status_resolved, self._on_status_resolved)
 
         self.framework.observe(self.on.update_status, self._on_update_status)
-        # self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
 
     def _on_update_status(self, event):
         logger.info("Update status")
@@ -655,9 +655,9 @@ class ApplicationCharm(CharmBase):
                 [cert.ca if self.send_ca_option else cert.certificate for cert in certs]
             )
 
-    # def _on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
-    #     """Handle config changed event."""
-    #     self.refresh_tls_certificates_event.emit()
+    def _on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
+        """Handle config changed event."""
+        self.refresh_tls_certificates_event.emit()
 
     def _on_put_etcd_action(self, event: ops.ActionEvent) -> None:
         """Handle put action."""
