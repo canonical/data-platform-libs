@@ -72,14 +72,14 @@ class ExtendedRequirerCommonModel(RequirerCommonModel):
     new_field: str | None = Field(default=None)
 
 
-class RefreshTLSCertificatesEvent(ops.EventBase):
-    """Event for refreshing peer TLS certificates."""
+# class RefreshTLSCertificatesEvent(ops.EventBase):
+#     """Event for refreshing peer TLS certificates."""
 
 
 class ApplicationCharm(CharmBase):
     """Application charm that connects to database charms."""
 
-    refresh_tls_certificates_event = ops.EventSource(RefreshTLSCertificatesEvent)
+    # refresh_tls_certificates_event = ops.EventSource(RefreshTLSCertificatesEvent)
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -331,7 +331,7 @@ class ApplicationCharm(CharmBase):
                 )
                 for common_name in self.common_names
             ],
-            refresh_events=[self.refresh_tls_certificates_event],
+            # refresh_events=[self.refresh_tls_certificates_event],
         )
 
         self.framework.observe(
