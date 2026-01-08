@@ -58,6 +58,7 @@ BAD_URL = "http://badurl"
 ETCD_DATA_DIR = "/var/lib/application-charm/etcd"
 CLIENT_CERT_PATH = f"{ETCD_DATA_DIR}/client.pem"
 CLIENT_KEY_PATH = f"{ETCD_DATA_DIR}/client.key"
+CA_CERT_PATH = f"{ETCD_DATA_DIR}/ca.pem"
 
 
 class ExtendedResponseModel(ResourceProviderModel):
@@ -601,7 +602,7 @@ class ApplicationCharm(CharmBase):
     def server_ca_chain(self) -> str | None:
         """Return the server CA chain."""
         try:
-            ca_chain = Path(f"{ETCD_DATA_DIR}/ca.pem").read_text().strip()
+            ca_chain = Path(CA_CERT_PATH).read_text().strip()
         except FileNotFoundError:
             return None
         return ca_chain
@@ -861,7 +862,7 @@ def _put(endpoints: str, key: str, value: str) -> str | None:
     if (
         not Path(CLIENT_CERT_PATH).exists()
         or not Path(CLIENT_KEY_PATH).exists()
-        or not Path(f"{ETCD_DATA_DIR}/ca.pem").exists()
+        or not Path(CA_CERT_PATH).exists()
     ):
         logger.error("No client certificates available")
         return None
@@ -876,7 +877,7 @@ def _put(endpoints: str, key: str, value: str) -> str | None:
                 "--key",
                 CLIENT_KEY_PATH,
                 "--cacert",
-                f"{ETCD_DATA_DIR}/ca.pem",
+                CA_CERT_PATH,
                 "put",
                 key,
                 value,
@@ -893,7 +894,7 @@ def _get(endpoints: str, key: str) -> str | None:
     if (
         not Path(CLIENT_CERT_PATH).exists()
         or not Path(CLIENT_KEY_PATH).exists()
-        or not Path(f"{ETCD_DATA_DIR}/ca.pem").exists()
+        or not Path(CA_CERT_PATH).exists()
     ):
         logger.error("No client certificates available")
         return None
@@ -908,7 +909,7 @@ def _get(endpoints: str, key: str) -> str | None:
                 "--key",
                 CLIENT_KEY_PATH,
                 "--cacert",
-                f"{ETCD_DATA_DIR}/ca.pem",
+                CA_CERT_PATH,
                 "get",
                 key,
             ],
