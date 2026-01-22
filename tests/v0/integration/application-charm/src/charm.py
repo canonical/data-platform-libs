@@ -7,6 +7,7 @@
 This charm is meant to be used only for testing
 of the libraries in this repository.
 """
+
 import json
 import logging
 import os
