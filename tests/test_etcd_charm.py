@@ -15,7 +15,7 @@ from charmlibs.interfaces.tls_certificates import (
 )
 from jubilant import Juju, TaskError
 
-from tests.v1.integration.jubilant_helpers import (
+from tests.jubilant_helpers import (
     TLSType,
     apps_active_and_agents_idle,
     download_client_certificate_from_unit,
@@ -89,11 +89,23 @@ def generate_mtls_chain(common_name: str) -> tuple[str, str]:
 
 
 @pytest.mark.abort_on_fail
-def test_deploy_charms(juju_lxd_model: Juju, application_charm: Path) -> None:
+@pytest.mark.parametrize(
+    "data_interfaces_version",
+    [pytest.param("0", marks=pytest.mark.v0), pytest.param("1", marks=pytest.mark.v1)],
+)
+def test_deploy_charms(
+    juju_lxd_model: Juju,
+    application_charm_v0: Path,
+    application_charm_v1: Path,
+    data_interfaces_version: str,
+) -> None:
     """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
-    juju_lxd_model.deploy(application_charm, app=REQUIRER_APP_NAME, num_units=1)
+    if "0" == data_interfaces_version:
+        juju_lxd_model.deploy(application_charm_v0, app=REQUIRER_APP_NAME, num_units=1)
+    else:
+        juju_lxd_model.deploy(application_charm_v1, app=REQUIRER_APP_NAME, num_units=1)
     juju_lxd_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
     juju_lxd_model.deploy(TLS_NAME, channel="1/edge", config={"ca-common-name": "etcd"})
 

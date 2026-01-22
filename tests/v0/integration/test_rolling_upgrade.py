@@ -59,12 +59,12 @@ async def upgrade_to_secrets(ops_test, app_name):
 
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(
-    ops_test: OpsTest, application_charm, database_charm, dp_libs_ubuntu_series
+    ops_test: OpsTest, application_charm_v0, database_charm, dp_libs_ubuntu_series
 ):
     """Deploy both charms (application and database) to use in the tests."""
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm,
+            application_charm_v0,
             application_name=APPLICATION_APP_NAME,
             num_units=1,
             series=dp_libs_ubuntu_series,

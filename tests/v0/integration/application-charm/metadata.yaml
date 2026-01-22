@@ -39,3 +39,7 @@ requires:
     interface: database_client
   database-with-prefix:
     interface: database_client
+  etcd-client:
+    interface: etcd_client
+  certificates:
+    interface: tls-certificates
