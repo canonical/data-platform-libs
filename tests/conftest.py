@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
+import argparse
 import json
 import logging
 from pathlib import Path
@@ -15,6 +16,32 @@ logger = logging.getLogger(__name__)
 
 
 LXD_CONTROLLER = "lxd-controller"
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--os-series", help="Ubuntu series for dp libs charm (e.g. jammy)", default="jammy"
+    )
+    parser.addoption(
+        "--build-bases-index",
+        type=int,
+        help="Index of charmcraft.yaml base that matches --os-series",
+        default=0,
+    )
+
+
+def pytest_configure(config):
+    if (config.option.os_series is None) ^ (config.option.build_bases_index is None):
+        raise argparse.ArgumentError(
+            None,
+            "--os-series and --build-bases-index must be given together",
+        )
+    # Note: Update defaults whenever charmcraft.yaml is changed
+    valid_combinations = [(0, "jammy"), (1, "focal"), (1, "noble")]
+    if (config.option.build_bases_index, config.option.os_series) not in valid_combinations:
+        raise argparse.ArgumentError(
+            None, f"Only base index combinations {valid_combinations} are accepted."
+        )
 
 
 @pytest.fixture(scope="session")
