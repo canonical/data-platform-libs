@@ -13,12 +13,6 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="session")
-def dp_libs_ubuntu_series(pytestconfig) -> str:
-    if pytestconfig.option.os_series:
-        return pytestconfig.option.os_series
-
-
 @pytest.fixture(scope="module", autouse=True)
 def copy_v0_data_interfaces_library_into_charm(ops_test: OpsTest):
     """Copy the data_interfaces library to the different charm folder."""

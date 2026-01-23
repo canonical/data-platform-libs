@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 LXD_CONTROLLER = "lxd-controller"
 
 
+@pytest.fixture(scope="session")
+def dp_libs_ubuntu_series(pytestconfig) -> str:
+    if pytestconfig.option.os_series:
+        return pytestconfig.option.os_series
+
+
 @pytest.fixture(scope="module")
 def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
     """Re-defining OpsTest.build_charm in a way that it takes CI caching and build parameters into account.
