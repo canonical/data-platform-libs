@@ -95,17 +95,13 @@ def generate_mtls_chain(common_name: str) -> tuple[str, str]:
 )
 def test_deploy_charms(
     juju_lxd_model: Juju,
-    application_charm_v0: Path,
-    application_charm_v1: Path,
+    application_charm: Path,
     data_interfaces_version: str,
 ) -> None:
     """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
-    if "0" == data_interfaces_version:
-        juju_lxd_model.deploy(application_charm_v0, app=REQUIRER_APP_NAME, num_units=1)
-    else:
-        juju_lxd_model.deploy(application_charm_v1, app=REQUIRER_APP_NAME, num_units=1)
+    juju_lxd_model.deploy(application_charm, app=REQUIRER_APP_NAME, num_units=1)
     juju_lxd_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
     juju_lxd_model.deploy(TLS_NAME, channel="1/edge", config={"ca-common-name": "etcd"})
 

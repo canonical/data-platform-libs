@@ -74,6 +74,16 @@ def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
 
 
 @pytest.fixture(scope="module")
+def application_charm(request) -> Path:
+    if request.node.get_closest_marker("v0"):
+        return request.getfixturevalue("application_charm_v0")
+    if request.node.get_closest_marker("v1"):
+        return request.getfixturevalue("application_charm_v1")
+
+    raise RuntimeError("No version marker (v0 or v1) applied")
+
+
+@pytest.fixture(scope="module")
 async def application_charm_v0(ops_test: OpsTest):
     """Build the application charm."""
     charm_path = "tests/v0/integration/application-charm"
