@@ -75,9 +75,9 @@ def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
 
 @pytest.fixture(scope="module")
 def application_charm(request) -> Path:
-    if request.node.get_closest_marker("v0"):
+    if request.node.get_closest_marker(pytest.mark.v0):
         return request.getfixturevalue("application_charm_v0")
-    if request.node.get_closest_marker("v1"):
+    if request.node.get_closest_marker(pytest.mark.v1):
         return request.getfixturevalue("application_charm_v1")
 
     raise RuntimeError("No version marker (v0 or v1) applied")
