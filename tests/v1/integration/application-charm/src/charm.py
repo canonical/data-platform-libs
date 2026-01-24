@@ -614,8 +614,7 @@ class ApplicationCharm(CharmBase):
 
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Handle install event."""
-        # install the etcd snap
-        # workaround for snapd not being ready during install: let's install etcdctl directly using wget
+        # workaround for snapd not being available on k8s charm: install etcdctl directly using wget
         self._install_etcdctl()
 
     def _on_update_action(self, event: ops.ActionEvent) -> None:
@@ -804,7 +803,7 @@ class ApplicationCharm(CharmBase):
         )
 
     def _install_etcdctl(self):
-        """Install etcdctl using Python urllib and tar, handling architecture."""
+        """Install etcdctl using Python urllib and tar, accounting for architecture."""
         etcdctl_path = "/usr/local/bin/etcdctl"
         if shutil.which("etcdctl"):
             logger.info("etcdctl already installed.")
