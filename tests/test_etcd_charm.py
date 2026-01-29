@@ -89,19 +89,12 @@ def generate_mtls_chain(common_name: str) -> tuple[str, str]:
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.parametrize(
-    "data_interfaces_version",
-    [pytest.param("0", marks=pytest.mark.v0), pytest.param("1", marks=pytest.mark.v1)],
-)
-def test_deploy_charms(
-    juju_lxd_model: Juju,
-    application_charm: Path,
-    data_interfaces_version: str,
-) -> None:
+@pytest.mark.v0
+def test_deploy_charms_v0(juju_lxd_model: Juju, application_charm_v0: Path) -> None:
     """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
-    juju_lxd_model.deploy(application_charm, app=REQUIRER_APP_NAME, num_units=1)
+    juju_lxd_model.deploy(application_charm_v0, app=REQUIRER_APP_NAME, num_units=1)
     juju_lxd_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
     juju_lxd_model.deploy(TLS_NAME, channel="1/edge", config={"ca-common-name": "etcd"})
 
@@ -120,6 +113,32 @@ def test_deploy_charms(
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.v1
+def test_deploy_charms_v1(juju_lxd_model: Juju, application_charm_v1: Path) -> None:
+    """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
+    # Deploy both charms (1 unit for each application to test that later they correctly
+    # set data in the relation application databag using only the leader unit).
+    juju_lxd_model.deploy(application_charm_v1, app=REQUIRER_APP_NAME, num_units=1)
+    juju_lxd_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
+    juju_lxd_model.deploy(TLS_NAME, channel="1/edge", config={"ca-common-name": "etcd"})
+
+    # enable TLS and check if the cluster is still accessible
+    logger.info("Integrating peer-certificates and client-certificates relations")
+    juju_lxd_model.integrate(f"{ETCD_APP_NAME}:peer-certificates", TLS_NAME)
+    juju_lxd_model.integrate(f"{ETCD_APP_NAME}:client-certificates", TLS_NAME)
+    juju_lxd_model.integrate(REQUIRER_APP_NAME, TLS_NAME)
+    juju_lxd_model.wait(
+        lambda status: apps_active_and_agents_idle(
+            status, ETCD_APP_NAME, TLS_NAME, REQUIRER_APP_NAME, idle_period=10
+        ),
+        timeout=1200,
+        successes=1,
+    )
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.v0
+@pytest.mark.v1
 def test_relate_client_charm(
     juju_lxd_model: Juju,
     lxd_controller: str,
@@ -173,6 +192,8 @@ def test_relate_client_charm(
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.v0
+@pytest.mark.v1
 async def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
     """Test write and read to the key prefix with the requirer charm."""
     requirer_unit = next(iter(juju_lxd_model.status().get_units(REQUIRER_APP_NAME)))
@@ -208,6 +229,8 @@ async def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.v0
+@pytest.mark.v1
 def test_update_mtls_cert(juju_lxd_model: Juju) -> None:
     """Test updating the common name used by the requirer app."""
     old_mtls_certs = get_requirer_mtls_certificates(juju_lxd_model)
