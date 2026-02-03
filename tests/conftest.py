@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 LXD_CONTROLLER = "lxd-controller"
+CONCIERGE_MODEL_NAME = "testing"
 
 
 def pytest_addoption(parser):
@@ -148,6 +149,17 @@ def lxd_controller(lxd_cloud: str, juju: Juju):
 def juju_lxd_model(juju: Juju, lxd_cloud: str, lxd_controller: str):
     clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
     logger.debug(f"Known clouds: {clouds_known}")
+
+    # if concierge model ("testing") is found, such as on CI, proceed with this. Else setup temp model.
+    models = json.loads(juju.cli("models", "--format", "json", include_model=False))
+    for model in models["models"]:
+        if CONCIERGE_MODEL_NAME == model["short-name"]:
+            juju_lxd = jubilant.Juju(
+                model=f"{lxd_controller}:{CONCIERGE_MODEL_NAME}", wait_timeout=1000
+            )
+            yield juju_lxd
+            return
+
     with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller) as juju_lxd:
         juju_lxd.wait_timeout = 1000
         yield juju_lxd
