@@ -243,6 +243,10 @@ jobs:
           provider: lxd
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "3.x/stable"
+      - name: Setup tmate session to inspect available models
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
       - name: Download packed charm(s)
         uses: actions/download-artifact@v4
         with:
