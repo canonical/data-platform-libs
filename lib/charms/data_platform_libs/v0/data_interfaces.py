@@ -4275,6 +4275,14 @@ class KafkaProviderEventHandlers(ProviderEventHandlers):
         if relation.app == self.charm.app:
             logging.info("Secret changed event ignored for Secret Owner")
 
+        if relation.name != self.relation_data.relation_name:
+            logger.info(
+                "Ignoring secret-changed from endpoint %s (expected %s)",
+                relation.name,
+                self.relation_data.relation_name,
+            )
+            return
+
         remote_unit = None
         for unit in relation.units:
             if unit.app != self.charm.app:
@@ -5568,6 +5576,14 @@ class EtcdProviderEventHandlers(ProviderEventHandlers):
         if not relation:
             logging.info(
                 f"Received secret {event.secret.label} but couldn't parse, seems irrelevant"
+            )
+            return
+
+        if relation.name != self.relation_data.relation_name:
+            logger.info(
+                "Ignoring secret-changed from endpoint %s (expected %s)",
+                relation.name,
+                self.relation_data.relation_name,
             )
             return
 
