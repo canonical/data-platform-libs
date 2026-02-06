@@ -4276,7 +4276,7 @@ class KafkaProviderEventHandlers(ProviderEventHandlers):
             logging.info("Secret changed event ignored for Secret Owner")
 
         if relation.name != self.relation_data.relation_name:
-            logger.info(
+            logger.debug(
                 "Ignoring secret-changed from endpoint %s (expected %s)",
                 relation.name,
                 self.relation_data.relation_name,
@@ -5310,7 +5310,7 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
             return
 
         if relation.name != self.relation_data.relation_name:
-            logger.info(
+            logger.debug(
                 "Ignoring secret-changed from endpoint %s (expected %s)",
                 relation.name,
                 self.relation_data.relation_name,
@@ -5580,7 +5580,7 @@ class EtcdProviderEventHandlers(ProviderEventHandlers):
             return
 
         if relation.name != self.relation_data.relation_name:
-            logger.info(
+            logger.debug(
                 "Ignoring secret-changed from endpoint %s (expected %s)",
                 relation.name,
                 self.relation_data.relation_name,
@@ -5733,7 +5733,7 @@ class EtcdRequirerEventHandlers(RequirerEventHandlers):
             logging.info("Secret changed event ignored for Secret Owner")
 
         if relation.name != self.relation_data.relation_name:
-            logger.info(
+            logger.debug(
                 "Ignoring secret-changed from endpoint %s (expected %s)",
                 relation.name,
                 self.relation_data.relation_name,
