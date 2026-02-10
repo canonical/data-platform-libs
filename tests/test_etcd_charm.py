@@ -88,7 +88,6 @@ def generate_mtls_chain(common_name: str) -> tuple[str, str]:
     return client_cert.raw, ca_cert.raw
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.v0
 def test_deploy_charms_v0(juju_lxd_model: Juju, application_charm_v0: Path) -> None:
     """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
@@ -112,7 +111,6 @@ def test_deploy_charms_v0(juju_lxd_model: Juju, application_charm_v0: Path) -> N
     )
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.v1
 def test_deploy_charms_v1(juju_lxd_model: Juju, application_charm_v1: Path) -> None:
     """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
@@ -136,7 +134,6 @@ def test_deploy_charms_v1(juju_lxd_model: Juju, application_charm_v1: Path) -> N
     )
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.v0
 @pytest.mark.v1
 def test_relate_client_charm(
@@ -191,7 +188,6 @@ def test_relate_client_charm(
             assert mtls_cert in client_cas, f"mtls cert not in trusted CAs for {unit_name}"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.v0
 @pytest.mark.v1
 async def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
@@ -228,7 +224,6 @@ async def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
         assert lines[1] == TEST_VALUE
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.v0
 @pytest.mark.v1
 def test_update_mtls_cert(juju_lxd_model: Juju) -> None:

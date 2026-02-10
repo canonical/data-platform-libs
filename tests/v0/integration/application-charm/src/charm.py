@@ -335,7 +335,17 @@ class ApplicationCharm(CharmBase):
 
         # Etcd events
 
-        self.etcd = EtcdRequiresV0(self)
+        if self.model.juju_version.has_secrets:
+            self.etcd = EtcdRequiresV0(self)
+            self.framework.observe(self.on.update_mtls_certs_action, self._on_update_action)
+            self.framework.observe(self.on.put_etcd_action, self._on_put_etcd_action)
+            self.framework.observe(self.on.get_etcd_action, self._on_get_etcd_action)
+            self.framework.observe(
+                self.on.get_credentials_action, self._on_get_credentials_action_etcd
+            )
+            self.framework.observe(
+                self.on.get_certificates_action, self._on_get_certificates_action
+            )
 
         # Status/Error Propagation
         if DATA_INTERFACES_VERSION > 54:
@@ -366,13 +376,6 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(
             self.on.delete_relation_field_action, self._on_delete_relation_field
         )
-        self.framework.observe(self.on.update_mtls_certs_action, self._on_update_action)
-        self.framework.observe(self.on.put_etcd_action, self._on_put_etcd_action)
-        self.framework.observe(self.on.get_etcd_action, self._on_get_etcd_action)
-        self.framework.observe(
-            self.on.get_credentials_action, self._on_get_credentials_action_etcd
-        )
-        self.framework.observe(self.on.get_certificates_action, self._on_get_certificates_action)
         self._relation_endpoints = [
             self.first_database,
             self.second_database,

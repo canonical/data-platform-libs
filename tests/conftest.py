@@ -32,6 +32,14 @@ def pytest_addoption(parser):
 
 
 def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "v0: marks tests to deploy application-charm using data interfaces v0 as requirer",
+    )
+    config.addinivalue_line(
+        "markers",
+        "v1: marks tests to deploy application-charm using data interfaces v1 as requirer",
+    )
     if (config.option.os_series is None) ^ (config.option.build_bases_index is None):
         raise argparse.ArgumentError(
             None,
@@ -152,6 +160,7 @@ def juju_lxd_model(juju: Juju, lxd_cloud: str, lxd_controller: str):
 
     # if concierge model ("testing") is found, such as on CI, proceed with this. Else setup temp model.
     models = json.loads(juju.cli("models", "--format", "json", include_model=False))
+    logger.info(f"Models found: {models}")
     for model in models["models"]:
         if CONCIERGE_MODEL_NAME == model["short-name"]:
             juju_lxd = jubilant.Juju(
