@@ -25,7 +25,6 @@ from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
 )
-from etcd_requires import EtcdRequiresV0
 from ops import JujuVersion, Relation
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
@@ -50,6 +49,9 @@ if DATA_INTERFACES_VERSION > 34:
         KafkaRequirerData,
         KafkaRequirerEventHandlers,
     )
+
+if DATA_INTERFACES_VERSION > 44:
+    from etcd_requires import EtcdRequiresV0
 
 if DATA_INTERFACES_VERSION > 49:
     from charms.data_platform_libs.v0.data_interfaces import (
@@ -335,7 +337,7 @@ class ApplicationCharm(CharmBase):
 
         # Etcd events
 
-        if self.model.juju_version.has_secrets:
+        if self.model.juju_version.has_secrets and DATA_INTERFACES_VERSION > 44:
             self.etcd = EtcdRequiresV0(self)
             self.framework.observe(self.on.update_mtls_certs_action, self._on_update_action)
             self.framework.observe(self.on.put_etcd_action, self._on_put_etcd_action)
