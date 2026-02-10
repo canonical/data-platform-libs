@@ -20,11 +20,6 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import ops
-from charmlibs.interfaces.tls_certificates import (
-    CertificateAvailableEvent,
-    CertificateRequestAttributes,
-    TLSCertificatesRequiresV4,
-)
 from ops import JujuVersion, Relation
 from ops.charm import ActionEvent, CharmBase
 from ops.main import main
@@ -51,6 +46,10 @@ if DATA_INTERFACES_VERSION > 34:
     )
 
 if DATA_INTERFACES_VERSION > 44:
+    from charms.tls_certificates_interface.v4.tls_certificates import (
+        CertificateRequestAttributes,
+        TLSCertificatesRequiresV4,
+    )
     from etcd_requires import EtcdRequiresV0
 
 if DATA_INTERFACES_VERSION > 49:
@@ -316,28 +315,28 @@ class ApplicationCharm(CharmBase):
                 self._on_opensearch_entity_created,
             )
 
-        # TLS certificates (required to test etcd client).
-
-        self.certificates = TLSCertificatesRequiresV4(
-            self,
-            "certificates",
-            certificate_requests=[
-                CertificateRequestAttributes(
-                    common_name=common_name,
-                    sans_ip=frozenset({socket.gethostbyname(socket.gethostname())}),
-                    sans_dns=frozenset({self.unit.name, socket.gethostname()}),
-                )
-                for common_name in self.common_names
-            ],
-        )
-
-        self.framework.observe(
-            self.certificates.on.certificate_available, self._on_certificate_available
-        )
-
         # Etcd events
 
         if self.model.juju_version.has_secrets and DATA_INTERFACES_VERSION > 44:
+            # TLS certificates (required to test etcd client).
+
+            self.certificates = TLSCertificatesRequiresV4(
+                self,
+                "certificates",
+                certificate_requests=[
+                    CertificateRequestAttributes(
+                        common_name=common_name,
+                        sans_ip=frozenset({socket.gethostbyname(socket.gethostname())}),
+                        sans_dns=frozenset({self.unit.name, socket.gethostname()}),
+                    )
+                    for common_name in self.common_names
+                ],
+            )
+            self.framework.observe(
+                self.certificates.on.certificate_available, self._on_certificate_available
+            )
+
+            # Etcd interface and related events
             self.etcd = EtcdRequiresV0(self)
             self.framework.observe(self.on.update_mtls_certs_action, self._on_update_action)
             self.framework.observe(self.on.put_etcd_action, self._on_put_etcd_action)
@@ -637,7 +636,7 @@ class ApplicationCharm(CharmBase):
 
         event.set_results({"message": "certificates renewed"})
 
-    def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
+    def _on_certificate_available(self) -> None:
         """Handle certificate available event."""
         logger.info("Certificate available")
         certs, private_key = self.certificates.get_assigned_certificates()

@@ -169,6 +169,6 @@ def juju_lxd_model(juju: Juju, lxd_cloud: str, lxd_controller: str):
             yield juju_lxd
             return
 
-    with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller) as juju_lxd:
+    with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller, keep=True) as juju_lxd:
         juju_lxd.wait_timeout = 1000
         yield juju_lxd
