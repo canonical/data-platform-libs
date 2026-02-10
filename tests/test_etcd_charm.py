@@ -119,6 +119,13 @@ def test_deploy_charms_v1(juju_lxd_model: Juju, application_charm_v1: Path) -> N
     juju_lxd_model.deploy(application_charm_v1, app=REQUIRER_APP_NAME, num_units=1)
     juju_lxd_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
     juju_lxd_model.deploy(TLS_NAME, channel="1/edge", config={"ca-common-name": "etcd"})
+    juju_lxd_model.wait(
+        lambda status: apps_active_and_agents_idle(
+            status, ETCD_APP_NAME, TLS_NAME, REQUIRER_APP_NAME, idle_period=10
+        ),
+        timeout=1200,
+        successes=1,
+    )
 
     # enable TLS and check if the cluster is still accessible
     logger.info("Integrating peer-certificates and client-certificates relations")
