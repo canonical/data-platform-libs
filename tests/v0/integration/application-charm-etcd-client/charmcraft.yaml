@@ -12,13 +12,14 @@ bases:
     run-on:
       - name: "ubuntu"
         channel: "22.04"
-  - build-on:
-      - name: "ubuntu"
-        channel: "20.04"
-    run-on:
-      - name: "ubuntu"
-        channel: "20.04"
+
 parts:
   charm:
     charm-binary-python-packages:
       - psycopg[binary]
+config:
+  options:
+    send-ca-cert:
+      description: Send the CA certificate instead of end-entity certificate
+      type: boolean
+      default: false

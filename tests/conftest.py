@@ -98,6 +98,14 @@ async def application_charm_v1(ops_test: OpsTest):
     return charm
 
 
+@pytest.fixture(scope="module")
+async def application_charm_v0_etcd(ops_test: OpsTest):
+    """Build the application charm."""
+    charm_path = "tests/v1/integration/application-charm-etcd-client"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
 @pytest.fixture(scope="package")
 def arch() -> str:
     """Fixture to provide the platform architecture for testing."""
@@ -154,20 +162,19 @@ def lxd_controller(lxd_cloud: str, juju: Juju):
 
 
 @pytest.fixture(scope="module")
-def juju_lxd_model(juju: Juju, lxd_cloud: str, lxd_controller: str):
+def juju_lxd_model_for_v0(juju: Juju, lxd_cloud: str, lxd_controller: str):
     clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
     logger.debug(f"Known clouds: {clouds_known}")
 
-    # if concierge model ("testing") is found, such as on CI, proceed with this. Else setup temp model.
-    models = json.loads(juju.cli("models", "--format", "json", include_model=False))
-    logger.info(f"Models found: {models}")
-    for model in models["models"]:
-        if CONCIERGE_MODEL_NAME == model["short-name"]:
-            juju_lxd = jubilant.Juju(
-                model=f"{lxd_controller}:{CONCIERGE_MODEL_NAME}", wait_timeout=1000
-            )
-            yield juju_lxd
-            return
+    with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller, keep=True) as juju_lxd:
+        juju_lxd.wait_timeout = 1000
+        yield juju_lxd
+
+
+@pytest.fixture(scope="module")
+def juju_lxd_model_for_v1(juju: Juju, lxd_cloud: str, lxd_controller: str):
+    clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
+    logger.debug(f"Known clouds: {clouds_known}")
 
     with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller, keep=True) as juju_lxd:
         juju_lxd.wait_timeout = 1000
