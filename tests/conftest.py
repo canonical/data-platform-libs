@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 LXD_CONTROLLER = "lxd-controller"
-CONCIERGE_MODEL_NAME = "testing"
 
 
 def pytest_addoption(parser):
@@ -101,7 +100,7 @@ async def application_charm_v1(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def application_charm_v0_etcd(ops_test: OpsTest):
     """Build the application charm."""
-    charm_path = "tests/v1/integration/application-charm-etcd-client"
+    charm_path = "tests/v0/integration/application-charm-etcd-client"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
