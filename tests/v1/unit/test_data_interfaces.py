@@ -1010,6 +1010,7 @@ def reset_aliases():
             delattr(ResourceRequiresEvents, f"{cluster_alias}_resource_entity_created")
             delattr(ResourceRequiresEvents, f"{cluster_alias}_endpoints_changed")
             delattr(ResourceRequiresEvents, f"{cluster_alias}_read_only_endpoints_changed")
+            delattr(ResourceRequiresEvents, f"{cluster_alias}_prefix_databases_changed")
         except AttributeError:
             # Ignore the events not existing before the first test.
             pass
@@ -1089,6 +1090,27 @@ class DataRequirerBaseTests(ABC):
             RequirerCommonModel(entity_type="GROUP", extra_user_roles=EXTRA_USER_ROLES)
         with pytest.raises(ValidationError):
             KafkaRequestModel(consumer_group_prefix="*")
+
+    def test_requested_entity_consistency(self):
+        """Test consistency restrictions on direct secret usage and helper values."""
+        # Try to set both secret and entity name
+        with pytest.raises(ValueError) as e:
+            RequirerCommonModel(
+                requested_entity_secret="secret:secret", requested_entity_name="testuser"
+            )
+        assert "Unable to use provided and automated entity name secret" in str(e.value)
+
+        # Try to set both secret and password
+        with pytest.raises(ValueError) as e:
+            RequirerCommonModel(
+                requested_entity_secret="secret:secret", requested_entity_password="testpass"
+            )
+        assert "Unable to use provided and automated entity name secret" in str(e.value)
+
+        # Try to set password without entity name
+        with pytest.raises(ValueError) as e:
+            RequirerCommonModel(requested_entity_password="testpass")
+        assert "Unable to set entity password without an entity name" in str(e.value)
 
 
 class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
@@ -1197,7 +1219,11 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "external-node-connectivity": False,
                     "extra-group-roles": None,
                     "extra-user-roles": "CREATEDB,CREATEROLE",
+                    "prefix-matching": None,
                     "request-id": "c759221a6c14c72a",
+                    "requested-entity-name": None,
+                    "requested-entity-password": None,
+                    "requested-entity-secret": None,
                     "resource": "data_platform",
                     "salt": "kkkkkkkk",
                     "secret-mtls": None,
@@ -1208,7 +1234,11 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "external-node-connectivity": False,
                     "extra-group-roles": None,
                     "extra-user-roles": None,
+                    "prefix-matching": None,
                     "request-id": "9ecfabfbb5258f88",
+                    "requested-entity-name": None,
+                    "requested-entity-password": None,
+                    "requested-entity-secret": None,
                     "resource": "",
                     "salt": "xxxxxxxx",
                     "secret-mtls": None,
@@ -1459,7 +1489,11 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "entity-permissions": None,
                     "entity-type": None,
                     "salt": "kkkkkkkk",
+                    "prefix-matching": None,
                     "request-id": "c759221a6c14c72a",
+                    "requested-entity-name": None,
+                    "requested-entity-password": None,
+                    "requested-entity-secret": None,
                     "resource": "data_platform",
                     "extra-group-roles": None,
                     "extra-user-roles": "CREATEDB,CREATEROLE",
@@ -1469,7 +1503,11 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                 {
                     "entity-permissions": None,
                     "salt": "xxxxxxxx",
+                    "prefix-matching": None,
                     "request-id": "9ecfabfbb5258f88",
+                    "requested-entity-name": None,
+                    "requested-entity-password": None,
+                    "requested-entity-secret": None,
                     "resource": "",
                     "entity-type": "USER",
                     "extra-group-roles": None,

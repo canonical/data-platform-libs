@@ -217,9 +217,13 @@ class DatabaseCharm(CharmBase):
 
         resource = request.resource
         extra_user_roles = request.extra_user_roles
+        username = None
+        password = None
+        if request.requested_entity_secret:
+            pass
 
-        username = f"relation_{relation_id}_{request.request_id}"
-        password = self._new_password()
+        username = username or f"relation_{relation_id}_{request.request_id}"
+        password = password or self._new_password()
         connection_string = (
             "dbname='postgres' user='postgres' host='localhost' "
             f"password='{self._stored.password}' connect_timeout=10"

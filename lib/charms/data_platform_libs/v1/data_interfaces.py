@@ -985,6 +985,10 @@ class RequirerCommonModel(CommonModel):
     entity_permissions: list[EntityPermissionModel] | None = Field(default=None)
     secret_mtls: SecretString | None = Field(default=None)
     mtls_cert: MtlsSecretStr = Field(default=None)
+    requested_entity_secret: SecretString | None = Field(default=None)
+    requested_entity_name: str | None = Field(default=None)
+    requested_entity_password: str | None = Field(default=None)
+    prefix_matching: str | None = Field(default=None)
 
     @model_validator(mode="after")
     def validate_fields(self):
@@ -997,6 +1001,14 @@ class RequirerCommonModel(CommonModel):
 
         if self.entity_type == "GROUP" and self.extra_user_roles:
             raise ValueError("Inconsistent entity information. Use extra_group_roles instead")
+
+        if self.requested_entity_secret and (
+            self.requested_entity_name or self.requested_entity_password
+        ):
+            raise ValueError("Unable to use provided and automated entity name secret")
+
+        if self.requested_entity_password and not self.requested_entity_name:
+            raise ValueError("Unable to set entity password without an entity name")
 
         return self
 
@@ -1016,6 +1028,7 @@ class ProviderCommonModel(CommonModel):
     secret_tls: SecretString | None = Field(default=None)
     secret_extra: SecretString | None = Field(default=None)
     secret_entity: SecretString | None = Field(default=None)
+    prefix_databases: str | None = Field(default=None)
 
 
 class ResourceProviderModel(ProviderCommonModel):
