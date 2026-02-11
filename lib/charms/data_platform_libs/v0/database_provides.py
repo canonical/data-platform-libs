@@ -63,6 +63,7 @@ It's preferred to subscribe to this event instead of relation changed event to a
 creating a new database when other information other than a database name is
 exchanged in the relation databag.
 """
+
 import json
 import logging
 from collections import namedtuple
@@ -80,7 +81,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 logger = logging.getLogger(__name__)
 

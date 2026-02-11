@@ -1,0 +1,26 @@
+{
+    "version": "1.0.0",
+    "charm": "database",
+    "statuses": [
+        {
+            "code": 1000,
+            "message": "Test informational message.",
+            "resolution": "No action required."
+        },
+        {
+            "code": 4001,
+            "message": "Test transiorty issue of type 1.",
+            "resolution": "Wait for a couple of minutes."
+        },
+        {
+            "code": 4002,
+            "message": "Test transiorty issue of type 2.",
+            "resolution": "Wait for a couple of hours."
+        },
+        {
+            "code": 5000,
+            "message": "Test fatal issue.",
+            "resolution": "Remove the relation and modify the client params."
+        }
+    ]
+}

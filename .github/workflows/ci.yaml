@@ -168,19 +168,28 @@ jobs:
       matrix:
         ubuntu-versions:
           # Update whenever charmcraft.yaml is changed
-          - series: jammy 
+          - series: jammy
             bases-index: 0
-        tox-environments:
-          - integration-db-v1
-          - integration-opensearch-v1
-          - integration-kafka-v1
-          - integration-kafka-connect-v1
-          - integration-backward-compatibility-v1
+        tests:
+          - tox-environment: integration-db-v1
+            provider: microk8s
+          - tox-environment: integration-opensearch-v1
+            provider: microk8s
+          - tox-environment: integration-kafka-v1
+            provider: microk8s
+          - tox-environment: integration-kafka-connect-v1
+            provider: microk8s
+          - tox-environment: integration-backward-compatibility-v1
+            provider: microk8s
+          - tox-environment: integration-status-v1
+            provider: microk8s
+          - tox-environment: integration-etcd-v1
+            provider: lxd
         juju-version:
           - juju-bootstrap-option: "3.6.1"
             juju-snap-channel: "3.6/stable"
             libjuju-version: "3.6.1.0"
-    name: V1 -- ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
+    name: V1 -- ${{ matrix.tests.tox-environment }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
     needs:
       - lint
       - unit-test
@@ -189,13 +198,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup operator environment
+      - name: Setup k8s controller
+        if: ${{ 'microk8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
           channel: "1.27-strict/stable"
           bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
+          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
+          charmcraft-channel: "3.x/stable"
+      - name: Setup lxd controller
+        if: ${{ 'lxd' == matrix.tests.provider }}
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: lxd
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "3.x/stable"
       - name: Download packed charm(s)
@@ -215,7 +232,7 @@ jobs:
           fi
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
+        run: tox run -e ${{ matrix.tests.tox-environment }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
