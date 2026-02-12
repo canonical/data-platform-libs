@@ -37,3 +37,5 @@ requires:
     interface: etcd_client
   certificates:
     interface: tls-certificates
+  database-with-prefix:
+    interface: database_client

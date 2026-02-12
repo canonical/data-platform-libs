@@ -233,6 +233,10 @@ class DatabaseCharm(CharmBase):
         if request.requested_entity_secret:
             pass
 
+        if resource[-1] == "*":
+            resources = [f"{resource[:-1]}1", f"{resource[:-1]}2"]
+        else:
+            resources = [resource]
         username = username or f"relation_{relation_id}_{request.request_id}"
         password = password or self._new_password()
         connection_string = (
@@ -243,12 +247,13 @@ class DatabaseCharm(CharmBase):
         connection.autocommit = True
         cursor = connection.cursor()
         # Create the database, user and password. Also gives the user access to the database.
-        cursor.execute(f"CREATE DATABASE {resource};")
-        cursor.execute(f"CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';")
-        cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {resource} TO {username};")
-        # Add the roles to the user.
-        if extra_user_roles:
-            cursor.execute(f"ALTER USER {username} {extra_user_roles};")
+        for resource in resources:
+            cursor.execute(f"CREATE DATABASE {resource};")
+            cursor.execute(f"CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';")
+            cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {resource} TO {username};")
+            # Add the roles to the user.
+            if extra_user_roles:
+                cursor.execute(f"ALTER USER {username} {extra_user_roles};")
         # Get the database version.
         cursor.execute("SELECT version();")
         version = cursor.fetchone()[0]
@@ -276,7 +281,9 @@ class DatabaseCharm(CharmBase):
             username=username,
             endpoints=f"{self.model.get_binding('database').network.bind_address}:5432",
             version=version,
+            prefix_databases=resources if len(resources) > 1 else None,
         )
+
         self.database.set_response(event.relation.id, response)
         self.unit.status = ActiveStatus()
 

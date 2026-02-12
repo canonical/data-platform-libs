@@ -163,6 +163,14 @@ class ApplicationCharm(CharmBase):
             self._on_cluster_endpoints_changed,
         )
 
+        database_name = f"{self.app.name.replace('-', '_')}_first_database_db"
+        self.first_database = ResourceRequirerEventHandler(
+            charm=self,
+            relation_name="database-with-prefix",
+            requests=[RequirerCommonModel(resource="testdb*", extra_user_roles=EXTRA_USER_ROLES)],
+            response_model=ExtendedResponseModel,
+        )
+
         # Multiple database clusters charm events (defined dynamically
         # in the database requires charm library, using the provided cluster/relation aliases).
         database_name = f"{self.app.name.replace('-', '_')}_aliased_multiple_database_clusters"
