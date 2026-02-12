@@ -161,7 +161,7 @@ def lxd_controller(lxd_cloud: str, juju: Juju):
 
 
 @pytest.fixture(scope="module")
-def juju_lxd_model_for_v0(juju: Juju, lxd_cloud: str, lxd_controller: str):
+def juju_lxd_model(juju: Juju, lxd_cloud: str, lxd_controller: str):
     clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
     logger.debug(f"Known clouds: {clouds_known}")
 
@@ -170,11 +170,21 @@ def juju_lxd_model_for_v0(juju: Juju, lxd_cloud: str, lxd_controller: str):
         yield juju_lxd
 
 
-@pytest.fixture(scope="module")
-def juju_lxd_model_for_v1(juju: Juju, lxd_cloud: str, lxd_controller: str):
-    clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
-    logger.debug(f"Known clouds: {clouds_known}")
-
-    with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller, keep=True) as juju_lxd:
-        juju_lxd.wait_timeout = 1000
-        yield juju_lxd
+# @pytest.fixture(scope="module")
+# def juju_lxd_model_for_v0(juju: Juju, lxd_cloud: str, lxd_controller: str):
+#     clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
+#     logger.debug(f"Known clouds: {clouds_known}")
+#
+#     with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller, keep=True) as juju_lxd:
+#         juju_lxd.wait_timeout = 1000
+#         yield juju_lxd
+#
+#
+# @pytest.fixture(scope="module")
+# def juju_lxd_model_for_v1(juju: Juju, lxd_cloud: str, lxd_controller: str):
+#     clouds_known = juju.cli("list-clouds", "--controller", lxd_controller, include_model=False)
+#     logger.debug(f"Known clouds: {clouds_known}")
+#
+#     with jubilant.temp_model(cloud=lxd_cloud, controller=lxd_controller, keep=True) as juju_lxd:
+#         juju_lxd.wait_timeout = 1000
+#         yield juju_lxd
