@@ -130,15 +130,24 @@ def test_deploy_charms(
     )
 
 
-def test_relate_client_charm(juju_lxd_model: Juju):
+@pytest.mark.parametrize(
+    "data_interfaces_version", [pytest.param(0, id="v0"), pytest.param(1, id="v1")]
+)
+def test_relate_client_charm(juju_lxd_model: Juju, data_interfaces_version):
     _relate_client_charm(juju_lxd_model)
 
 
-def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
+@pytest.mark.parametrize(
+    "data_interfaces_version", [pytest.param(0, id="v0"), pytest.param(1, id="v1")]
+)
+def test_write_read_with_requirer(juju_lxd_model: Juju, data_interfaces_version) -> None:
     _write_read_with_requirer(juju_lxd_model)
 
 
-def test_update_mtls_cert(juju_lxd_model: Juju):
+@pytest.mark.parametrize(
+    "data_interfaces_version", [pytest.param(0, id="v0"), pytest.param(1, id="v1")]
+)
+def test_update_mtls_cert(juju_lxd_model: Juju, data_interfaces_version):
     _update_mtls_cert(juju_lxd_model)
 
 
