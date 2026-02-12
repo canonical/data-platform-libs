@@ -93,7 +93,7 @@ def generate_mtls_chain(common_name: str) -> tuple[str, str]:
 )
 def test_deploy_charms(
     juju_lxd_model: Juju,
-    # application_charm_v0_etcd: Path,
+    application_charm_v0_etcd: Path,
     application_charm_v1: Path,
     data_interfaces_version,
 ) -> None:
@@ -102,8 +102,8 @@ def test_deploy_charms(
     # set data in the relation application databag using only the leader unit).
 
     if data_interfaces_version == 1:
-        #     juju_lxd_model.deploy(application_charm_v0_etcd, app=REQUIRER_APP_NAME, num_units=1)
-        # else:
+        juju_lxd_model.deploy(application_charm_v0_etcd, app=REQUIRER_APP_NAME, num_units=1)
+    else:
         juju_lxd_model.deploy(application_charm_v1, app=REQUIRER_APP_NAME, num_units=1)
 
     juju_lxd_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
@@ -134,24 +134,6 @@ def test_deploy_charms(
     "data_interfaces_version", [pytest.param(0, id="v0"), pytest.param(1, id="v1")]
 )
 def test_relate_client_charm(juju_lxd_model: Juju, data_interfaces_version):
-    _relate_client_charm(juju_lxd_model)
-
-
-@pytest.mark.parametrize(
-    "data_interfaces_version", [pytest.param(0, id="v0"), pytest.param(1, id="v1")]
-)
-def test_write_read_with_requirer(juju_lxd_model: Juju, data_interfaces_version) -> None:
-    _write_read_with_requirer(juju_lxd_model)
-
-
-@pytest.mark.parametrize(
-    "data_interfaces_version", [pytest.param(0, id="v0"), pytest.param(1, id="v1")]
-)
-def test_update_mtls_cert(juju_lxd_model: Juju, data_interfaces_version):
-    _update_mtls_cert(juju_lxd_model)
-
-
-def _relate_client_charm(juju_lxd_model: Juju) -> None:
     """Test normal client charm relation."""
     juju_lxd_model.integrate(ETCD_APP_NAME, REQUIRER_APP_NAME)
     juju_lxd_model.wait(
@@ -200,7 +182,10 @@ def _relate_client_charm(juju_lxd_model: Juju) -> None:
             assert mtls_cert in client_cas, f"mtls cert not in trusted CAs for {unit_name}"
 
 
-def _write_read_with_requirer(juju_lxd_model: Juju) -> None:
+@pytest.mark.parametrize(
+    "data_interfaces_version", [pytest.param(0, id="v0"), pytest.param(1, id="v1")]
+)
+def test_write_read_with_requirer(juju_lxd_model: Juju, data_interfaces_version) -> None:
     """Test write and read to the key prefix with the requirer charm."""
     requirer_unit = next(iter(juju_lxd_model.status().get_units(REQUIRER_APP_NAME)))
 
@@ -234,7 +219,10 @@ def _write_read_with_requirer(juju_lxd_model: Juju) -> None:
         assert lines[1] == TEST_VALUE
 
 
-def _update_mtls_cert(juju_lxd_model: Juju) -> None:
+@pytest.mark.parametrize(
+    "data_interfaces_version", [pytest.param(0, id="v0"), pytest.param(1, id="v1")]
+)
+def test_update_mtls_cert(juju_lxd_model: Juju, data_interfaces_version):
     """Test updating the common name used by the requirer app."""
     old_mtls_certs = get_requirer_mtls_certificates(juju_lxd_model)
     assert old_mtls_certs, "failed to get the old mtls certs from requirer TLS provider"

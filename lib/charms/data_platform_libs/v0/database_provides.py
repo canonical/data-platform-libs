@@ -63,7 +63,6 @@ It's preferred to subscribe to this event instead of relation changed event to a
 creating a new database when other information other than a database name is
 exchanged in the relation databag.
 """
-
 import json
 import logging
 from collections import namedtuple
