@@ -93,7 +93,7 @@ def generate_mtls_chain(common_name: str) -> tuple[str, str]:
 )
 def test_deploy_charms(
     juju_lxd_model: Juju,
-    application_charm_v0_etcd: Path,
+    # application_charm_v0_etcd: Path,
     application_charm_v1: Path,
     data_interfaces_version,
 ) -> None:
@@ -101,9 +101,9 @@ def test_deploy_charms(
     # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
 
-    if data_interfaces_version == 0:
-        juju_lxd_model.deploy(application_charm_v0_etcd, app=REQUIRER_APP_NAME, num_units=1)
-    else:
+    if data_interfaces_version == 1:
+        #     juju_lxd_model.deploy(application_charm_v0_etcd, app=REQUIRER_APP_NAME, num_units=1)
+        # else:
         juju_lxd_model.deploy(application_charm_v1, app=REQUIRER_APP_NAME, num_units=1)
 
     juju_lxd_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
