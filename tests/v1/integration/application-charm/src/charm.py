@@ -120,6 +120,16 @@ class ApplicationCharm(CharmBase):
             self._on_first_database_auth_updated,
         )
 
+        self.first_database_username = ResourceRequirerEventHandler(
+            self,
+            "first-database-username",
+            requests=[RequirerCommonModel(resource=database_name, entity_type="USER")],
+            response_model=ExtendedResponseModel,
+        )
+        self.framework.observe(
+            self.first_database.on.resource_created, self._on_first_database_created
+        )
+
         # Events related to the second database that is requested
         # (these events are defined in the database requires charm library).
         database_name = f"{self.app.name.replace('-', '_')}_second_database_db"

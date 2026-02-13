@@ -767,6 +767,32 @@ async def test_database_roles_relation_with_charm_libraries_secrets(ops_test: Op
     assert entity_pass is not None
 
 
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_database_username(ops_test: OpsTest):
+    """Test basic functionality of database-roles relation interface."""
+    # Relate the charms and wait for them exchanging some connection data.
+
+    pytest.first_database_relation = await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{USERNAME_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    secret_uri = await get_application_relation_data(
+        ops_test,
+        APPLICATION_APP_NAME,
+        USERNAME_FIRST_DATABASE_RELATION_NAME,
+        "secret-user",
+    )
+
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    name = secret_content["username"]
+    password = secret_content["password"]
+
+    assert name == "testuser"
+    assert password is not None
+
+
 async def test_an_application_can_connect_to_multiple_database_clusters(
     ops_test: OpsTest, database_charm
 ):
