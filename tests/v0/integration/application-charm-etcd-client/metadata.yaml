@@ -1,11 +1,11 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
-name: application
+name: application-charm-etcd-client
 description: |
-  Data platform libs application charm used in etcd integration tests.
-summary: |
   Data platform libs application meant to serve as an etcd client,
-  to be used only for testing of the libs in this repository.
+  to be used only for testing of the libs- particularly etcd client interface- in this repository.
+summary: |
+  Data platform libs application charm used in etcd integration tests.
 
 requires:
   etcd-client:
