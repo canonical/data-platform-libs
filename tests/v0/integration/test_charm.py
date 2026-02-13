@@ -58,7 +58,7 @@ NUM_APP = 2
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(
     ops_test: OpsTest,
-    application_charm_v0,
+        application_charm,
     database_charm,
     dummy_database_charm,
     dp_libs_ubuntu_series,
@@ -68,7 +68,7 @@ async def test_deploy_charms(
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm_v0,
+            application_charm,
             application_name=APPLICATION_APP_NAME,
             num_units=NUM_APP,
             series=dp_libs_ubuntu_series,
@@ -745,7 +745,7 @@ async def test_postgresql_plugin(ops_test: OpsTest):
 
 
 async def test_two_applications_dont_share_the_same_relation_data(
-    ops_test: OpsTest, application_charm_v0
+    ops_test: OpsTest, application_charm
 ):
     """Test that two different application connect to the database with different credentials."""
     # Set some variables to use in this test.
@@ -755,7 +755,7 @@ async def test_two_applications_dont_share_the_same_relation_data(
 
     # Deploy another application.
     await ops_test.model.deploy(
-        application_charm_v0, application_name=another_application_app_name, series="jammy"
+        application_charm, application_name=another_application_app_name, series="jammy"
     )
     await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
 
@@ -777,7 +777,7 @@ async def test_two_applications_dont_share_the_same_relation_data(
 
 
 @pytest.mark.usefixtures("only_without_juju_secrets")
-async def test_databag_usage_correct(ops_test: OpsTest, application_charm_v0):
+async def test_databag_usage_correct(ops_test: OpsTest, application_charm):
     for field in ["username", "password"]:
         assert await get_application_relation_data(
             ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, field
@@ -785,7 +785,7 @@ async def test_databag_usage_correct(ops_test: OpsTest, application_charm_v0):
 
 
 @pytest.mark.usefixtures("only_with_juju_secrets")
-async def test_secrets_usage_correct_secrets(ops_test: OpsTest, application_charm_v0):
+async def test_secrets_usage_correct_secrets(ops_test: OpsTest, application_charm):
     for field in ["username", "password", "uris"]:
         assert (
             await get_application_relation_data(
@@ -975,7 +975,7 @@ async def test_an_application_can_connect_to_multiple_aliased_database_clusters(
 
 
 async def test_an_application_can_request_multiple_databases(
-    ops_test: OpsTest, application_charm_v0
+    ops_test: OpsTest, application_charm
 ):
     """Test that an application can request additional databases using the same interface."""
     # Relate the charms using another relation and wait for them exchanging some connection data.
@@ -997,7 +997,7 @@ async def test_an_application_can_request_multiple_databases(
     assert first_database_connection_string != second_database_connection_string
 
 
-async def test_external_node_connectivity_field(ops_test: OpsTest, application_charm_v0):
+async def test_external_node_connectivity_field(ops_test: OpsTest, application_charm):
     # Check that the flag is missing if not requested
     assert (
         await get_application_relation_data(

@@ -26,12 +26,12 @@ PROV_SECRET_PREFIX = "secret-"
     'ERROR juju.worker.meterstatus error running "meter-status-changed": charm missing from disk'
 )
 async def test_deploy_charms(
-    ops_test: OpsTest, application_charm_v1: Path, kafka_connect_charm: Path
+    ops_test: OpsTest, application_charm: Path, kafka_connect_charm: Path
 ):
     """Test deployment of Kafka Connect provider and requirer toy charms."""
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm_v1, application_name=REQUIRER_APP_NAME, num_units=1, series="jammy"
+            application_charm, application_name=REQUIRER_APP_NAME, num_units=1, series="jammy"
         ),
         ops_test.model.deploy(
             kafka_connect_charm, application_name=PROVIDER_APP_NAME, num_units=1, series="jammy"

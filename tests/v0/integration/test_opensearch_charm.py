@@ -21,13 +21,13 @@ PROV_SECRET_PREFIX = "secret-"
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_charms(ops_test: OpsTest, application_charm_v0, opensearch_charm):
+async def test_deploy_charms(ops_test: OpsTest, application_charm, opensearch_charm):
     """Deploy both charms (application and the testing opensearch app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm_v0,
+            application_charm,
             application_name=APPLICATION_APP_NAME,
             num_units=1,
             series="jammy",

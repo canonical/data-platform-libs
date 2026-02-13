@@ -200,19 +200,19 @@ jobs:
             bases-index: 0
         tests:
           - tox-environment: integration-db-v1
-            providers: [microk8s]
+            provider: microk8s
           - tox-environment: integration-opensearch-v1
-            providers: [microk8s]
+            provider: microk8s
           - tox-environment: integration-kafka-v1
-            providers: [microk8s]
+            provider: microk8s
           - tox-environment: integration-kafka-connect-v1
-            providers: [microk8s]
+            provider: microk8s
           - tox-environment: integration-backward-compatibility-v1
-            providers: [microk8s]
+            provider: microk8s
           - tox-environment: integration-status-v1
-            providers: [microk8s]
+            provider: microk8s
           - tox-environment: integration-etcd-v1
-            providers: [lxd, microk8s]
+            provider: lxd
         juju-version:
           - juju-bootstrap-option: "3.6.1"
             juju-snap-channel: "3.6/stable"
@@ -227,7 +227,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup k8s controller
-        if: ${{ contains(matrix.tests.providers, 'microk8s') }}
+        if: ${{ 'microk8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -237,7 +237,7 @@ jobs:
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "3.x/stable"
       - name: Setup lxd controller
-        if: ${{ contains(matrix.tests.providers, 'lxd') }}
+        if: ${{ 'lxd' == matrix.tests.provider }}
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: lxd

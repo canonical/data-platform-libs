@@ -6,12 +6,41 @@ import logging
 import os
 import shutil
 from datetime import datetime
+from pathlib import Path
 from subprocess import check_call, check_output
 
 import pytest
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
+
+@pytest.fixture(scope="session")
+def dp_libs_ubuntu_series(pytestconfig) -> str:
+    if pytestconfig.option.os_series:
+        return pytestconfig.option.os_series
+
+
+@pytest.fixture(scope="module")
+def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
+    """Re-defining OpsTest.build_charm in a way that it takes CI caching and build parameters into account.
+
+    Build parameters (for charms available for multiple OS versions) are considered both when building the
+    charm, or when fetching pre-built, CI cached version of it.
+    """
+    _build_charm = ops_test.build_charm
+
+    # Add bases_index option (indicating which OS version to use)
+    # when building the charm within the scope of the test run
+    async def build_charm(charm_path, bases_index: int = None) -> Path:
+        if not bases_index and pytestconfig.option.build_bases_index is not None:
+            bases_index = pytestconfig.option.build_bases_index
+
+        logger.info(f"Building charm {charm_path} with base index {bases_index}")
+
+        return await _build_charm(charm_path, bases_index=bases_index)
+
+    ops_test.build_charm = build_charm
+    return ops_test
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -40,6 +69,22 @@ def copy_s3_library_into_charm(ops_test: OpsTest):
     install_path_requirer = "tests/v0/integration/application-s3-charm/" + library_path
     shutil.copyfile(library_path, install_path_provider)
     shutil.copyfile(library_path, install_path_requirer)
+
+
+@pytest.fixture(scope="module")
+async def application_charm(ops_test: OpsTest):
+    """Build the application charm."""
+    charm_path = "tests/v0/integration/application-charm"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+async def application_charm_etcd_client(ops_test: OpsTest):
+    """Build the application charm."""
+    charm_path = "tests/v0/integration/application-charm-etcd-client"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
 
 
 @pytest.fixture(scope="module")

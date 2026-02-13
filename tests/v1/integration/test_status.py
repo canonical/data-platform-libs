@@ -27,20 +27,20 @@ RELATION_NAME = "first-database-db"
 @pytest.mark.skip_if_deployed
 async def test_deploy_charms(
     ops_test: OpsTest,
-    application_charm_v1,
+    application_charm,
     database_charm,
     dp_libs_ubuntu_series,
 ):
     """Deploy both charms (application and database) to use in the tests."""
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm_v1,
+            application_charm,
             application_name=APPLICATION_APP_1,
             num_units=1,
             series=dp_libs_ubuntu_series,
         ),
         ops_test.model.deploy(
-            application_charm_v1,
+            application_charm,
             application_name=APPLICATION_APP_2,
             num_units=1,
             series=dp_libs_ubuntu_series,

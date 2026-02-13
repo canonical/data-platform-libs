@@ -56,7 +56,7 @@ NUM_APP = 2
 @pytest.mark.abort_on_fail
 async def test_deploy_charms(
     ops_test: OpsTest,
-    application_charm_v1,
+    application_charm,
     database_charm,
     dummy_database_charm,
     dp_libs_ubuntu_series,
@@ -66,7 +66,7 @@ async def test_deploy_charms(
     # set data in the relation application databag using only the leader unit).
     await asyncio.gather(
         ops_test.model.deploy(
-            application_charm_v1,
+            application_charm,
             application_name=APPLICATION_APP_NAME,
             num_units=NUM_APP,
             series=dp_libs_ubuntu_series,
@@ -692,7 +692,7 @@ async def test_tls_integration_after_initial_integration(ops_test: OpsTest):
 
 
 async def test_two_applications_dont_share_the_same_relation_data(
-    ops_test: OpsTest, application_charm_v1
+    ops_test: OpsTest, application_charm
 ):
     """Test that two different application connect to the database with different credentials."""
     # Set some variables to use in this test.
@@ -702,7 +702,7 @@ async def test_two_applications_dont_share_the_same_relation_data(
 
     # Deploy another application.
     await ops_test.model.deploy(
-        application_charm_v1, application_name=another_application_app_name, series="jammy"
+        application_charm, application_name=another_application_app_name, series="jammy"
     )
     await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
 
@@ -837,7 +837,7 @@ async def test_an_application_can_connect_to_multiple_aliased_database_clusters(
 
 
 async def test_an_application_can_request_multiple_databases(
-    ops_test: OpsTest, application_charm_v1
+    ops_test: OpsTest, application_charm
 ):
     """Test that an application can request additional databases using the same interface."""
     # Relate the charms using another relation and wait for them exchanging some connection data.
