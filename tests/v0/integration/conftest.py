@@ -14,6 +14,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
+
 @pytest.fixture(scope="session")
 def dp_libs_ubuntu_series(pytestconfig) -> str:
     if pytestconfig.option.os_series:

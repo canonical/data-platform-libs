@@ -44,6 +44,7 @@ def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
     ops_test.build_charm = build_charm
     return ops_test
 
+
 @pytest.fixture(scope="module", autouse=True)
 def copy_v0_data_interfaces_library_into_charm(ops_test: OpsTest):
     """Copy the data_interfaces library to the different charm folder."""

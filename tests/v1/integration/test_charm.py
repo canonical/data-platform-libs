@@ -836,9 +836,7 @@ async def test_an_application_can_connect_to_multiple_aliased_database_clusters(
     assert application_connection_string != another_application_connection_string
 
 
-async def test_an_application_can_request_multiple_databases(
-    ops_test: OpsTest, application_charm
-):
+async def test_an_application_can_request_multiple_databases(ops_test: OpsTest, application_charm):
     """Test that an application can request additional databases using the same interface."""
     # Relate the charms using another relation and wait for them exchanging some connection data.
     sleep(5)

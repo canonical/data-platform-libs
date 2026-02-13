@@ -9,6 +9,7 @@ import pytest
 from ops import JujuVersion
 from pytest_mock import MockerFixture
 
+
 def pytest_addoption(parser):
     parser.addoption(
         "--os-series", help="Ubuntu series for dp libs charm (e.g. jammy)", default="jammy"
@@ -33,6 +34,7 @@ def pytest_configure(config):
         raise argparse.ArgumentError(
             None, f"Only base index combinations {valid_combinations} are accepted."
         )
+
 
 @pytest.fixture(autouse=True)
 def juju_has_secrets(mocker: MockerFixture):

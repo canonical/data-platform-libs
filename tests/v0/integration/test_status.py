@@ -27,7 +27,7 @@ RELATION_NAME = "database-with-status"
 @pytest.mark.skip_if_deployed
 async def test_deploy_charms(
     ops_test: OpsTest,
-        application_charm,
+    application_charm,
     database_charm,
     dp_libs_ubuntu_series,
 ):

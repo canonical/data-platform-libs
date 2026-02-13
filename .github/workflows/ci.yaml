@@ -174,12 +174,11 @@ jobs:
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run:
-          tox run -e ${{ matrix.tests.tox-environment }} -- --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
+          tox run -e ${{ matrix.tests.tox-environment }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
           WEBSOCKETS_VERSION_SPECIFIER: ${{ env.WEBSOCKETS_VERSION_SPECIFIER }}
-          BASE_MARKER : ${{ steps.select-tests.outputs.mark_expression }}
       - name: Print debug-log
         if: failure()
         run: juju switch testing; juju debug-log --replay --no-tail
@@ -265,12 +264,11 @@ jobs:
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
         run:
-          tox run -e ${{ matrix.tests.tox-environment }} -- --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
+          tox run -e ${{ matrix.tests.tox-environment }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
           WEBSOCKETS_VERSION_SPECIFIER: ${{ env.WEBSOCKETS_VERSION_SPECIFIER }}
-          BASE_MARKER : ${{ steps.select-tests.outputs.mark_expression }}
       - name: Print debug-log
         if: failure()
         run: juju switch testing; juju debug-log --replay --no-tail
