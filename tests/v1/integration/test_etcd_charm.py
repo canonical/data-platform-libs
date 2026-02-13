@@ -95,17 +95,9 @@ def test_deploy_charms(
     """Deploy both charms (application and the testing charmed-etcd app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
     # set data in the relation application databag using only the leader unit).
-
     juju_lxd_model.deploy(application_charm, app=REQUIRER_APP_NAME, num_units=1)
     juju_lxd_model.deploy(ETCD_APP_NAME, channel="3.6/edge", num_units=2)
     juju_lxd_model.deploy(TLS_NAME, channel="1/edge", config={"ca-common-name": "etcd"})
-
-    juju_lxd_model.wait(
-        lambda status: all(
-            machine.machine_status.message == "Running" for machine in status.machines.values()
-        )
-        and len(status.machines) == 4
-    )
 
     # enable TLS and check if the cluster is still accessible
     logger.info("Integrating peer-certificates and client-certificates relations")
