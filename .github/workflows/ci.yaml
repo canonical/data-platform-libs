@@ -13,6 +13,7 @@ on:
   # Triggered on push to branch "main" by .github/workflows/release.yaml
   workflow_call:
 
+permissions: {}
 jobs:
   lint:
     name: Lint
