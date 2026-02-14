@@ -1045,7 +1045,6 @@ class ProviderCommonModel(CommonModel):
     secret_tls: SecretString | None = Field(default=None)
     secret_extra: SecretString | None = Field(default=None)
     secret_entity: SecretString | None = Field(default=None)
-    prefix_databases: str | None = Field(default=None)
 
 
 class ResourceProviderModel(ProviderCommonModel):
@@ -1060,6 +1059,7 @@ class ResourceProviderModel(ProviderCommonModel):
     entity_name: EntitySecretStr = Field(default=None)
     entity_password: EntitySecretStr = Field(default=None)
     version: str | None = Field(default=None)
+    prefix_databases: list[str] | None = Field(default=None)
 
 
 class RequirerDataContractV0(RequirerCommonModel):
@@ -1912,13 +1912,35 @@ class ResourceProviderEvent(EventBase, Generic[TRequirerCommonModel]):
 class ResourceRequestedEvent(ResourceProviderEvent[TRequirerCommonModel]):
     """Resource requested event."""
 
-    pass
+    @property
+    def requested_entity_secret_content(self) -> dict[str, str | None] | None:
+        """Returns the content of the requested entity secret."""
+        names = None
+        if secret_uri := self.request.requested_entity_secret:
+            secret = self.framework.model.get_secret(id=secret_uri)
+            if content := secret.get_content(refresh=True):
+                if "entity-name" in content:
+                    names = {content["entity-name"]: content.get("password")}
+                else:
+                    logger.warning("Invalid requested-entity-secret: no entity name")
+        return names
 
 
 class ResourceEntityRequestedEvent(ResourceProviderEvent[TRequirerCommonModel]):
     """Resource Entity requested event."""
 
-    pass
+    @property
+    def requested_entity_secret_content(self) -> dict[str, str | None] | None:
+        """Returns the content of the requested entity secret."""
+        names = None
+        if secret_uri := self.request.requested_entity_secret:
+            secret = self.framework.model.get_secret(id=secret_uri)
+            if content := secret.get_content(refresh=True):
+                if "entity-name" in content:
+                    names = {content["entity-name"]: content.get("password")}
+                else:
+                    logger.warning("Invalid requested-entity-secret: no entity name")
+        return names
 
 
 class ResourceEntityPermissionsChangedEvent(ResourceProviderEvent[TRequirerCommonModel]):
@@ -2846,9 +2868,6 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
         response_model: type[TResourceProviderModel],
         unique_key: str = "",
         relation_aliases: list[str] | None = None,
-        requested_entity_secret: SecretString | None = None,
-        requested_entity_name: str | None = None,
-        requested_entity_password: str | None = None,
     ):
         super().__init__(charm, relation_name, unique_key)
         self.component = self.charm.unit

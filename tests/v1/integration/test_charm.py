@@ -778,19 +778,20 @@ async def test_database_username(ops_test: OpsTest):
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
-    secret_uri = await get_application_relation_data(
-        ops_test,
-        APPLICATION_APP_NAME,
-        USERNAME_FIRST_DATABASE_RELATION_NAME,
-        "secret-user",
+    requests = json.loads(
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, USERNAME_FIRST_DATABASE_RELATION_NAME, "requests"
+        )
+        or "[]"
     )
-
+    request = requests[0]
+    secret_uri = request.get(f"{SECRET_REF_PREFIX}entity")
     secret_content = await get_juju_secret(ops_test, secret_uri)
-    name = secret_content["username"]
-    password = secret_content["password"]
+    entity_name = secret_content["entity-name"]
+    entity_pass = secret_content["entity-password"]
 
-    assert name == "testuser"
-    assert password is not None
+    assert entity_name == "testuser"
+    assert entity_pass is not None
 
 
 async def test_an_application_can_connect_to_multiple_database_clusters(
@@ -1410,22 +1411,18 @@ async def test_database_prefix(ops_test: OpsTest):
     )
     await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
 
-    assert (
+    requests = json.loads(
         await get_application_relation_data(
-            ops_test,
-            APPLICATION_APP_NAME,
-            PREFIX_DATABASE_RELATION_NAME,
-            "prefix-databases",
+            ops_test, APPLICATION_APP_NAME, PREFIX_DATABASE_RELATION_NAME, "requests"
         )
-        == "testdb1,testdb2"
+        or "[]"
     )
+    request = requests[0]
 
+    assert request["prefix-databases"] == ["testdb1", "testdb2"]
     data = json.loads(
         await get_application_relation_data(
-            ops_test,
-            APPLICATION_APP_NAME,
-            PREFIX_DATABASE_RELATION_NAME,
-            "data",
+            ops_test, APPLICATION_APP_NAME, PREFIX_DATABASE_RELATION_NAME, "data"
         )
     )
-    assert data["prefix-matching"] == "all"
+    assert data[request["request-id"]]["prefix-matching"] == "all"

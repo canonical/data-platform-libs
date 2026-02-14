@@ -230,8 +230,11 @@ class DatabaseCharm(CharmBase):
         extra_user_roles = request.extra_user_roles
         username = None
         password = None
-        if request.requested_entity_secret:
-            pass
+        if request.requested_entity_secret and (content := event.requested_entity_secret_content):
+            for key, val in content.items():
+                username = key
+                password = val
+                break
 
         if resource[-1] == "*":
             resources = [f"{resource[:-1]}1", f"{resource[:-1]}2"]
@@ -246,10 +249,10 @@ class DatabaseCharm(CharmBase):
         connection = psycopg2.connect(connection_string)
         connection.autocommit = True
         cursor = connection.cursor()
+        cursor.execute(f"CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';")
         # Create the database, user and password. Also gives the user access to the database.
         for resource in resources:
             cursor.execute(f"CREATE DATABASE {resource};")
-            cursor.execute(f"CREATE USER {username} WITH ENCRYPTED PASSWORD '{password}';")
             cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {resource} TO {username};")
             # Add the roles to the user.
             if extra_user_roles:
@@ -283,7 +286,6 @@ class DatabaseCharm(CharmBase):
             version=version,
             prefix_databases=resources if len(resources) > 1 else None,
         )
-
         self.database.set_response(event.relation.id, response)
         self.unit.status = ActiveStatus()
 
@@ -305,8 +307,16 @@ class DatabaseCharm(CharmBase):
         entity_type = request.entity_type
 
         # Generate a entity-name and a entity-password for the application.
-        rolename = self._new_rolename()
-        password = self._new_password()
+        rolename = None
+        password = None
+        if request.requested_entity_secret and (content := event.requested_entity_secret_content):
+            for key, val in content.items():
+                rolename = key
+                password = val
+                break
+
+        rolename = rolename or self._new_rolename()
+        password = password or self._new_password()
 
         # Connect to the database.
         connection_string = (

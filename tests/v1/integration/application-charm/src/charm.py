@@ -123,7 +123,11 @@ class ApplicationCharm(CharmBase):
         self.first_database_username = ResourceRequirerEventHandler(
             self,
             "first-database-username",
-            requests=[RequirerCommonModel(resource=database_name, entity_type="USER")],
+            requests=[
+                RequirerCommonModel(
+                    resource=database_name, entity_type="USER", requested_entity_name="testuser"
+                )
+            ],
             response_model=ExtendedResponseModel,
         )
         self.framework.observe(
@@ -173,11 +177,14 @@ class ApplicationCharm(CharmBase):
             self._on_cluster_endpoints_changed,
         )
 
-        database_name = f"{self.app.name.replace('-', '_')}_first_database_db"
-        self.first_database = ResourceRequirerEventHandler(
+        self.database_prefixes = ResourceRequirerEventHandler(
             charm=self,
             relation_name="database-with-prefix",
-            requests=[RequirerCommonModel(resource="testdb*", extra_user_roles=EXTRA_USER_ROLES)],
+            requests=[
+                RequirerCommonModel(
+                    resource="testdb*", extra_user_roles=EXTRA_USER_ROLES, prefix_matching="all"
+                )
+            ],
             response_model=ExtendedResponseModel,
         )
 
