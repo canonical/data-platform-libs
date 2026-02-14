@@ -1005,7 +1005,7 @@ class RequirerCommonModel(CommonModel):
     requested_entity_secret: SecretString | None = Field(default=None)
     requested_entity_name: str | None = Field(default=None)
     requested_entity_password: str | None = Field(default=None)
-    prefix_matching: str | None = Field(default=None)
+    prefix_matching: Literal["all", "only-existing"] | None = Field(default=None)
 
     @model_validator(mode="after")
     def validate_fields(self):
@@ -2846,6 +2846,9 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
         response_model: type[TResourceProviderModel],
         unique_key: str = "",
         relation_aliases: list[str] | None = None,
+        requested_entity_secret: SecretString | None = None,
+        requested_entity_name: str | None = None,
+        requested_entity_password: str | None = None,
     ):
         super().__init__(charm, relation_name, unique_key)
         self.component = self.charm.unit
@@ -3100,6 +3103,21 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
         for request in self._requests:
             request.request_id = gen_hash(request.resource, request.salt)
 
+            # Create helper secret if needed
+            if request.requested_entity_name and not request.requested_entity_secret:
+                content = {"entity-name": request.requested_entity_name}
+                if request.requested_entity_password:
+                    content["password"] = request.requested_entity_password
+                secret = self.charm.app.add_secret(
+                    content, label=f"{request.request_id}-requested-entity"
+                )
+                secret.grant(event.relation)
+                if not secret.id:
+                    raise SecretError("Secret helper missing Id")
+                request.requested_entity_secret = secret.id
+                request.requested_entity_name = None
+                request.requested_entity_password = None
+
         full_request = RequirerDataContractV1[self._request_model](
             version="v1", requests=self._requests
         )
@@ -3200,6 +3218,17 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
     # Methods to handle specificities of relation events
     ##############################################################################
 
+    def _clear_helper_secret(
+        self, request: RequirerCommonModel, response: ResourceProviderModel
+    ) -> None:
+        """Remove helper secret if set."""
+        if self.charm.unit.is_leader() and response.username and request.requested_entity_secret:
+            try:
+                secret = self.framework.model.get_secret(id=request.requested_entity_secret)
+                secret.remove_all_revisions()
+            except ModelError:
+                logger.debug("Unable to remove helper secret")
+
     @override
     def _handle_event(
         self,
@@ -3221,6 +3250,7 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                 event.relation, app=event.app, unit=event.unit, response=response
             )
             self._emit_aliased_event(event, "resource_created", response)
+            self._clear_helper_secret(request, response)
             return
 
         if "secret-entity" in _diff.added and request.entity_type:
