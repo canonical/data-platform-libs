@@ -20,7 +20,7 @@ from charms.data_platform_libs.v0.data_interfaces import EtcdRequires as EtcdReq
 if TYPE_CHECKING:
     from charm import ApplicationCharm
 
-ETCD_DATA_DIR = "/var/lib/application-charm/etcd"
+ETCD_DATA_DIR = "/var/lib/application-charm-etcd-client/etcd"
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ class EtcdRequiresV0(ops.framework.Object):
         if not event.username:
             logger.error("No username available")
             return
-        Path(ETCD_DATA_DIR).mkdir(exist_ok=True)
+        Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
         Path(f"{ETCD_DATA_DIR}/ca.pem").write_text(event.tls_ca)
 
     @property
