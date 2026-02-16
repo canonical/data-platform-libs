@@ -13,6 +13,7 @@ on:
   # Triggered on push to branch "main" by .github/workflows/release.yaml
   workflow_call:
 
+permissions: {}
 jobs:
   lint:
     name: Lint
@@ -126,7 +127,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: "1.27-strict/stable"
+          channel: "1.35-strict/stable"
           bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "2.x/stable"
@@ -204,7 +205,7 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-          channel: "1.27-strict/stable"
+          channel: "1.35-strict/stable"
           bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "3.x/stable"
