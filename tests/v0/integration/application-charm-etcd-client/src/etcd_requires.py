@@ -18,9 +18,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
 from charms.data_platform_libs.v0.data_interfaces import EtcdRequires as EtcdRequiresV0Base
 
 if TYPE_CHECKING:
-    from charm import ApplicationCharm
-
-ETCD_DATA_DIR = "/var/lib/application-charm-etcd-client/etcd"
+    from charm import ETCD_DATA_DIR, ApplicationCharm
 
 logger = logging.getLogger(__name__)
 
