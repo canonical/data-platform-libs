@@ -25,16 +25,12 @@ from charmlibs.interfaces.tls_certificates import (
     TLSCertificatesRequiresV4,
 )
 from etcd_requires import EtcdRequiresV0
+from literals import CA_CERT_PATH, CLIENT_CERT_PATH, CLIENT_KEY_PATH, ETCD_DATA_DIR
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 
 logger = logging.getLogger(__name__)
-
-ETCD_DATA_DIR = "/var/lib/application-charm-etcd-client/etcd"
-CLIENT_CERT_PATH = f"{ETCD_DATA_DIR}/client.pem"
-CLIENT_KEY_PATH = f"{ETCD_DATA_DIR}/client.key"
-CA_CERT_PATH = f"{ETCD_DATA_DIR}/ca.pem"
 
 
 class ApplicationCharm(CharmBase):
