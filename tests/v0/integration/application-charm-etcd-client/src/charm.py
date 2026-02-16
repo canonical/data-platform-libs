@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# Copyright 2022 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Application charm that connects to database charms.
+"""Application charm that connects to etcd charm using data interfaces v0.
 
 This charm is meant to be used only for testing
 of the libraries in this repository.
@@ -74,10 +74,7 @@ class ApplicationCharm(CharmBase):
     @property
     def common_names(self) -> list[str]:
         """Return the common names for the client certificates."""
-        return [
-            "client1.requirer-charm",
-            "client2.requirer-charm",
-        ]
+        return ["requirer-charm"]
 
     @property
     def server_ca_chain(self) -> str | None:

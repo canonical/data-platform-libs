@@ -1,5 +1,6 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 name: application-charm-etcd-client
 description: |
   Data platform libs application meant to serve as an etcd client,
