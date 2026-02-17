@@ -1,7 +1,7 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-update-mtls-certs:
+update-mtls-cert:
   description: Update the mtls certificates
 
 put-etcd:
@@ -24,5 +24,5 @@ get-etcd:
 get-credentials:
   description: Action for fetching all available credentials from relations.
 
-get-certificates:
+get-certificate:
   description: Get the certificate from the certificate provider

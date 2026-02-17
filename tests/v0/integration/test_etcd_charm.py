@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
-import json
 import logging
+import random
 from datetime import timedelta
 from pathlib import Path
 
@@ -37,7 +37,7 @@ TLS_NAME = "self-signed-certificates"
 PEER_RELATION = "etcd-peers"
 INTERNAL_USER = "root"
 APPS = [ETCD_APP_NAME, REQUIRER_APP_NAME, TLS_NAME]
-TEST_KEY = "/test_key"
+TEST_KEY = "test_key"
 TEST_VALUE = "42"
 
 
@@ -52,13 +52,13 @@ def get_requirer_common_name(juju: Juju) -> str:
     raise ValueError("Failed to get common name from requirer charm")
 
 
-def get_requirer_mtls_certificates(juju: Juju) -> list[str] | None:
+def get_requirer_mtls_certificate(juju: Juju) -> str | None:
     """Get the mtls certificate from the requirer TLS provider."""
     requirer_unit = next(iter(juju.status().get_units(REQUIRER_APP_NAME)))
 
-    action_result = juju.run(requirer_unit, "get-certificates")
+    action_result = juju.run(requirer_unit, "get-certificate")
     if action_result.status == "completed":
-        return json.loads(action_result.results["certificates"])
+        return action_result.results["certificate"]
 
     return None
 
@@ -130,35 +130,33 @@ def test_relate_client_charm(juju_lxd_model: Juju):
     password = secret.get(f"{INTERNAL_USER}-password")
 
     # check if user and role are created for the common name and that the role is assigned to the user
-    common_names = get_requirer_common_name(juju_lxd_model)
-    logger.info(f"Requirer has common names: {common_names}")
-    for common_name in common_names:
-        user_roles = get_user(
-            endpoints, common_name, user=INTERNAL_USER, password=password, tls_enabled=True
-        )
-        assert user_roles, f"failed to get user roles for {common_name}"
-        assert common_name in user_roles, f"failed to get user roles for {common_name}"
+    common_name = get_requirer_common_name(juju_lxd_model)
+    logger.info(f"Requirer has common names: {common_name}")
+    user_roles = get_user(
+        endpoints, common_name, user=INTERNAL_USER, password=password, tls_enabled=True
+    )
+    assert user_roles, f"failed to get user roles for {common_name}"
+    assert common_name in user_roles, f"failed to get user roles for {common_name}"
 
-        # check if the user can read and write to the key prefix
-        permissions = get_role(
-            endpoints, common_name, user=INTERNAL_USER, password=password, tls_enabled=True
-        )
+    # check if the user can read and write to the key prefix
+    permissions = get_role(
+        endpoints, common_name, user=INTERNAL_USER, password=password, tls_enabled=True
+    )
 
-        assert permissions, f"failed to get permissions for {common_name}"
-        for permission in permissions:
-            assert permission["permType"] == 2, "permission is not read and write"
-            assert permission["key"] == f"/{common_name}/", "permission is not for the key prefix"
+    assert permissions, f"failed to get permissions for {common_name}"
+    for permission in permissions:
+        assert permission["permType"] == 2, "permission is not read and write"
+        assert permission["key"] == f"/{common_name}/", "permission is not for the key prefix"
 
     # get client ca from every unit and check if it includes the mtls cert
-    mtls_certs = get_requirer_mtls_certificates(juju_lxd_model)
-    assert mtls_certs, "failed to get mtls cert from requirer TLS provider"
+    mtls_cert = get_requirer_mtls_certificate(juju_lxd_model)
+    assert mtls_cert, "failed to get mtls cert from requirer TLS provider"
     for unit_name in juju_lxd_model.status().get_units(ETCD_APP_NAME):
         client_cas = get_certificate_from_unit(
             juju_lxd_model, unit_name, TLSType.CLIENT, is_ca=True
         )
         assert client_cas, f"failed to get client CAs for {unit_name}"
-        for mtls_cert in mtls_certs:
-            assert mtls_cert in client_cas, f"mtls cert not in trusted CAs for {unit_name}"
+        assert mtls_cert in client_cas, f"mtls cert not in trusted CAs for {unit_name}"
 
 
 def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
@@ -176,34 +174,26 @@ def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
 
     # write to authorized key prefix
     # every user will write the key to their own prefix
-    key = "test/foo"
+    common_name = get_requirer_common_name(juju_lxd_model)
+    key = f"/{common_name}/foo"
     action = juju_lxd_model.run(
         requirer_unit, "put-etcd", params={"key": key, "value": TEST_VALUE}
     )
     assert action.status == "completed", "Action should succeed"
-
-    # read from the key prefix
-    action = juju_lxd_model.run(requirer_unit, "get-etcd", params={"key": key})
-    assert action.status == "completed", "Action should succeed"
-    common_names = get_requirer_common_name(juju_lxd_model)
-    results = json.loads(action.results["results"])
-    for common_name in common_names:
-        assert common_name in results
-        lines = results[common_name].splitlines()
-        assert len(lines) == 2
-        assert lines[0] == f"/{common_name}/{key}"
-        assert lines[1] == TEST_VALUE
+    assert action.results["message"] == "OK"
 
 
 def test_update_mtls_cert(juju_lxd_model: Juju):
     """Test updating the common name used by the requirer app."""
-    old_mtls_certs = get_requirer_mtls_certificates(juju_lxd_model)
-    assert old_mtls_certs, "failed to get the old mtls certs from requirer TLS provider"
+    new_common_name = f"new-common-name-{random.randint(1000, 9999)}"
+    mtls_cert, mtls_ca = generate_mtls_chain(new_common_name)
 
     # run juju action to update the common name
     requirer_unit = next(iter(juju_lxd_model.status().get_units(REQUIRER_APP_NAME)))
 
-    juju_lxd_model.run(requirer_unit, "update-mtls-certs")
+    juju_lxd_model.run(
+        requirer_unit, "update-mtls-cert", {"chain": "\n".join([mtls_cert, mtls_ca])}
+    )
 
     # wait for model to settle
     juju_lxd_model.wait(
@@ -212,18 +202,16 @@ def test_update_mtls_cert(juju_lxd_model: Juju):
         )
     )
 
-    # get client ca from every unit and check if it includes the new_ca
-    mtls_certs = get_requirer_mtls_certificates(juju_lxd_model)
-    assert mtls_certs, "failed to get the new mtls certs from requirer TLS provider"
+    common_name = get_requirer_common_name(juju_lxd_model)
+    assert common_name == new_common_name, "common name not updated"
 
-    for unit_name in juju_lxd_model.status().get_units(ETCD_APP_NAME):
-        client_cas = get_certificate_from_unit(
-            juju_lxd_model, unit_name, TLSType.CLIENT, is_ca=True
-        )
-        assert client_cas, f"failed to get client CAs for {unit_name}"
-        for mtls_cert in mtls_certs:
-            assert mtls_cert in client_cas, f"new mtls cert not in trusted CAs for {unit_name}"
-        for old_mtls_cert in old_mtls_certs:
-            assert (
-                old_mtls_cert not in client_cas
-            ), f"old mtls certificate still in trusted CAs for {unit_name}"
+    old_mtls_cert = get_requirer_mtls_certificate(juju_lxd_model)
+    assert old_mtls_cert, "failed to get the old mtls cert from requirer TLS provider"
+    for unit in juju_lxd_model.status().get_units(ETCD_APP_NAME):
+        client_cas = get_certificate_from_unit(juju_lxd_model, unit, TLSType.CLIENT, is_ca=True)
+        assert client_cas, f"failed to get client CAs for {unit}"
+        assert mtls_cert in client_cas, f"new mtls cert not in trusted CAs for {unit}"
+        assert mtls_ca not in client_cas, f"new mtls ca is in trusted CAs for {unit}"
+        assert (
+            old_mtls_cert not in client_cas
+        ), f"old mtls certificate still in trusted CAs for {unit}"

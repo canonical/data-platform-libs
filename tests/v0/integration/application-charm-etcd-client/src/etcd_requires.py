@@ -54,18 +54,11 @@ class EtcdRequiresV0(ops.framework.Object):
         )
         self.charm.framework.observe(self.etcd_interface.on.etcd_ready, self._on_resource_created)
 
-    def update_mtls_certs(self, cert: str) -> None:
+    def set_mtls_cert(self, cert: str) -> None:
         """Set the mtls cert in the relation data bag."""
         if not self.etcd_relation:
             return
         self.etcd_interface.set_mtls_cert(self.etcd_relation.id, cert)
-
-    def update_requests_from_certs(self, certs: list[Certificate]) -> None:
-        """Update the requests in the relation data bag from the assigned certificates."""
-        if not self.etcd_relation:
-            return
-
-        self.etcd_interface.set_mtls_cert(self.etcd_relation.id, certs[0].raw)
 
     def _on_endpoints_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
         """Handle etcd client relation data changed event."""
