@@ -37,18 +37,17 @@ TLS_NAME = "self-signed-certificates"
 PEER_RELATION = "etcd-peers"
 INTERNAL_USER = "root"
 APPS = [ETCD_APP_NAME, REQUIRER_APP_NAME, TLS_NAME]
-key_prefix = "/test/"
 TEST_KEY = "/test_key"
 TEST_VALUE = "42"
 
 
-def get_requirer_common_names(juju: Juju) -> list[str]:
+def get_requirer_common_name(juju: Juju) -> str:
     """Get the common name of the requirer charm."""
     requirer_unit = next(iter(juju.status().get_units(REQUIRER_APP_NAME)))
 
     action_result = juju.run(requirer_unit, "get-credentials")
     if action_result.status == "completed":
-        return action_result.results["username"].split(",")
+        return action_result.results["username"]
 
     raise ValueError("Failed to get common name from requirer charm")
 
@@ -131,7 +130,7 @@ def test_relate_client_charm(juju_lxd_model: Juju):
     password = secret.get(f"{INTERNAL_USER}-password")
 
     # check if user and role are created for the common name and that the role is assigned to the user
-    common_names = get_requirer_common_names(juju_lxd_model)
+    common_names = get_requirer_common_name(juju_lxd_model)
     logger.info(f"Requirer has common names: {common_names}")
     for common_name in common_names:
         user_roles = get_user(
@@ -186,7 +185,7 @@ def test_write_read_with_requirer(juju_lxd_model: Juju) -> None:
     # read from the key prefix
     action = juju_lxd_model.run(requirer_unit, "get-etcd", params={"key": key})
     assert action.status == "completed", "Action should succeed"
-    common_names = get_requirer_common_names(juju_lxd_model)
+    common_names = get_requirer_common_name(juju_lxd_model)
     results = json.loads(action.results["results"])
     for common_name in common_names:
         assert common_name in results

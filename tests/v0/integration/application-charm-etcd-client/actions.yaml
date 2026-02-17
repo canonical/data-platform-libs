@@ -26,4 +26,3 @@ get-credentials:
 
 get-certificates:
   description: Get the certificate from the certificate provider
- 

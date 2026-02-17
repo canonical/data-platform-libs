@@ -60,6 +60,8 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
     shutil.copyfile(library_path, install_path)
     install_path = "tests/v0/integration/kafka-connect-charm/" + library_path
     shutil.copyfile(library_path, install_path)
+    install_path = "tests/v0/integration/application-charm-etcd-client/" + library_path
+    shutil.copyfile(library_path, install_path)
 
 
 @pytest.fixture(scope="module", autouse=True)

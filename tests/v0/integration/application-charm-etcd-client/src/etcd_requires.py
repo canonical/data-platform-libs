@@ -19,7 +19,7 @@ from charms.data_platform_libs.v0.data_interfaces import (
 from charms.data_platform_libs.v0.data_interfaces import EtcdRequires as EtcdRequiresV0Base
 
 if TYPE_CHECKING:
-    from charm import ApplicationCharm
+    from charm import ApplicationCharmEtcdClient
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class EtcdRequiresV0(ops.framework.Object):
 
     def __init__(
         self,
-        charm: "ApplicationCharm",
+        charm: "ApplicationCharmEtcdClient",
     ) -> None:
         super().__init__(charm, "requirer-etcd")
         self.charm = charm
@@ -106,17 +106,10 @@ class EtcdRequiresV0(ops.framework.Object):
         if not self.etcd_relation:
             return None
 
-        return {
-            "username": self.etcd_interface.fetch_relation_field(
-                self.etcd_relation.id, "username"
-            ),
-            "uris": self.etcd_interface.fetch_relation_field(self.etcd_relation.id, "uris"),
-            "endpoints": self.etcd_interface.fetch_relation_field(
-                self.etcd_relation.id, "endpoints"
-            ),
-            "version": self.etcd_interface.fetch_relation_field(self.etcd_relation.id, "version"),
-            "tls-ca": self.etcd_interface.fetch_relation_field(self.etcd_relation.id, "tls-ca"),
-        }
+        return self.etcd_interface.fetch_relation_data(
+            relation_ids=[self.etcd_relation.id],
+            fields=["username", "uris", "endpoints", "version", "tls-ca"]
+        ).get(self.etcd_relation.id, {})
 
     @property
     def raw_certificate(self) -> str:

@@ -25,7 +25,8 @@ from charmlibs.interfaces.tls_certificates import (
     TLSCertificatesRequiresV4,
 )
 from etcd_requires import EtcdRequiresV0
-from literals import CA_CERT_PATH, CLIENT_CERT_PATH, CLIENT_KEY_PATH, ETCD_DATA_DIR
+from literals import CA_CERT_PATH, CLIENT_CERT_PATH, CLIENT_KEY_PATH, ETCD_DATA_DIR, ETCD_VERSION
+from workload import get, put
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
@@ -33,8 +34,8 @@ from ops.model import ActiveStatus
 logger = logging.getLogger(__name__)
 
 
-class ApplicationCharm(CharmBase):
-    """Application charm that connects to database charms."""
+class ApplicationCharmEtcdClient(CharmBase):
+    """Application charm that connects to etcd charm."""
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -50,11 +51,10 @@ class ApplicationCharm(CharmBase):
             "certificates",
             certificate_requests=[
                 CertificateRequestAttributes(
-                    common_name=common_name,
+                    common_name=self.common_name,
                     sans_ip=frozenset({socket.gethostbyname(socket.gethostname())}),
                     sans_dns=frozenset({self.unit.name, socket.gethostname()}),
                 )
-                for common_name in self.common_names
             ],
         )
         self.framework.observe(
@@ -72,9 +72,9 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(self.on.get_certificates_action, self._on_get_certificates_action)
 
     @property
-    def common_names(self) -> list[str]:
+    def common_name(self) -> str:
         """Return the common names for the client certificates."""
-        return ["requirer-charm"]
+        return "requirer-charm"
 
     @property
     def server_ca_chain(self) -> str | None:
@@ -117,10 +117,9 @@ class ApplicationCharm(CharmBase):
             event.fail("No certificates available")
             return
 
-        for cert in certs:
-            self.certificates.renew_certificate(cert)
+        self.certificates.renew_certificate(certs[0])
 
-        event.set_results({"message": "certificates renewed"})
+        event.set_results({"message": "certificate renewed"})
 
     def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
         """Handle certificate available event."""
@@ -160,35 +159,30 @@ class ApplicationCharm(CharmBase):
             event.fail("No certificates available")
             return
 
-        results = {}
-        for cert in certs:
-            Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
-            Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
-            Path(CLIENT_KEY_PATH).write_text(private_key.raw)
-            key = (
-                orig_key
-                if orig_key.startswith("/")
-                else f"/{cert.certificate.common_name}/{orig_key}"
-            )
-            if result := _put(uris, key, value):
-                results[cert.certificate.common_name] = result
-            else:
-                results[cert.certificate.common_name] = "Failed"
+        cert = certs[0]
+        Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
+        Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
+        Path(CLIENT_KEY_PATH).write_text(private_key.raw)
+        key = (
+            orig_key
+            if orig_key.startswith("/")
+            else f"/{cert.certificate.common_name}/{orig_key}"
+        )
+        result = put(uris, key, value)
 
-        for common_name, result in results.items():
-            if result == "Failed":
-                event.set_results(
-                    {
-                        "ok": False,
-                        "results": json.dumps(results),
-                    }
-                )
-                event.fail(f"etcdctl put failed for certificate with common name: {common_name}")
-                return
+        if not result:
+            event.set_results(
+                {
+                    "ok": False,
+                    "results": json.dumps(result),
+                }
+            )
+            event.fail(f"etcdctl put failed for certificate with common name: {cert.certificate.common_name}")
+            return
         event.set_results(
             {
                 "ok": True,
-                "results": json.dumps(results),
+                "results": json.dumps(result),
             }
         )
 
@@ -216,35 +210,31 @@ class ApplicationCharm(CharmBase):
             event.set_results({"ok": False})
             return
 
-        results = {}
-        for cert in certs:
-            Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
-            Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
-            Path(CLIENT_KEY_PATH).write_text(private_key.raw)
-            key = (
-                orig_key
-                if orig_key.startswith("/")
-                else f"/{cert.certificate.common_name}/{orig_key}"
-            )
-            if result := _get(uris, key):
-                results[cert.certificate.common_name] = result
-            else:
-                results[cert.certificate.common_name] = "Failed"
+        cert = certs[0]
+        Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
+        Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
+        Path(CLIENT_KEY_PATH).write_text(private_key.raw)
+        key = (
+            orig_key
+            if orig_key.startswith("/")
+            else f"/{cert.certificate.common_name}/{orig_key}"
+        )
 
-        for common_name, result in results.items():
-            if result == "Failed":
-                event.set_results(
-                    {
-                        "ok": False,
-                        "results": json.dumps(results),
-                    }
-                )
-                event.fail(f"etcdctl get failed for certificate with common name: {common_name}")
-                return
+        result = get(uris, key)
+
+        if not result:
+            event.set_results(
+                {
+                    "ok": False,
+                    "results": json.dumps(result),
+                }
+            )
+            event.fail(f"etcdctl get failed for certificate with common name: {cert.certificate.common_name}")
+            return
         event.set_results(
             {
                 "ok": True,
-                "results": json.dumps(results),
+                "results": json.dumps(result),
             }
         )
 
@@ -299,9 +289,9 @@ class ApplicationCharm(CharmBase):
         logger.info("Installing etcdctl via Python urllib...")
         arch = platform.machine()
         if arch == "aarch64":
-            url = "https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-arm64.tar.gz"
+            url = f"https://github.com/etcd-io/etcd/releases/download/v{ETCD_VERSION}/etcd-v{ETCD_VERSION}-linux-arm64.tar.gz"
         else:
-            url = "https://github.com/etcd-io/etcd/releases/download/v3.4.35/etcd-v3.4.35-linux-amd64.tar.gz"
+            url = f"https://github.com/etcd-io/etcd/releases/download/v{ETCD_VERSION}/etcd-v{ETCD_VERSION}-linux-amd64.tar.gz"
         tmp_dir = "/tmp/etcd_install"
         os.makedirs(tmp_dir, exist_ok=True)
         tar_path = os.path.join(tmp_dir, "etcd.tar.gz")
@@ -320,7 +310,7 @@ class ApplicationCharm(CharmBase):
             return
         # Find the extracted etcdctl binary
         for entry in os.listdir(tmp_dir):
-            if entry.startswith("etcd-v3.4.35-linux-"):
+            if entry.startswith(f"etcd-v{ETCD_VERSION}-linux-"):
                 etcdctl_src = os.path.join(tmp_dir, entry, "etcdctl")
                 if os.path.isfile(etcdctl_src):
                     try:
@@ -344,68 +334,5 @@ class ApplicationCharm(CharmBase):
         return None
 
 
-def _put(endpoints: str, key: str, value: str) -> str | None:
-    """Put a key value pair in etcd."""
-    if (
-        not Path(CLIENT_CERT_PATH).exists()
-        or not Path(CLIENT_KEY_PATH).exists()
-        or not Path(CA_CERT_PATH).exists()
-    ):
-        logger.error("No client certificates available")
-        return None
-    try:
-        output = subprocess.check_output(
-            [
-                "etcdctl",
-                "--endpoints",
-                endpoints,
-                "--cert",
-                CLIENT_CERT_PATH,
-                "--key",
-                CLIENT_KEY_PATH,
-                "--cacert",
-                CA_CERT_PATH,
-                "put",
-                key,
-                value,
-            ],
-        )
-    except subprocess.CalledProcessError:
-        logger.error("etcdctl put failed")
-        return None
-    return output.decode("utf-8").strip()
-
-
-def _get(endpoints: str, key: str) -> str | None:
-    """Get a key value pair from etcd."""
-    if (
-        not Path(CLIENT_CERT_PATH).exists()
-        or not Path(CLIENT_KEY_PATH).exists()
-        or not Path(CA_CERT_PATH).exists()
-    ):
-        logger.error("No client certificates available")
-        return None
-    try:
-        output = subprocess.check_output(
-            [
-                "etcdctl",
-                "--endpoints",
-                endpoints,
-                "--cert",
-                CLIENT_CERT_PATH,
-                "--key",
-                CLIENT_KEY_PATH,
-                "--cacert",
-                CA_CERT_PATH,
-                "get",
-                key,
-            ],
-        )
-    except subprocess.CalledProcessError:
-        logger.error("etcdctl get failed")
-        return None
-    return output.decode("utf-8").strip()
-
-
 if __name__ == "__main__":
-    main(ApplicationCharm)
+    main(ApplicationCharmEtcdClient)
