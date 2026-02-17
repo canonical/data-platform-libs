@@ -26,10 +26,10 @@ from charmlibs.interfaces.tls_certificates import (
 )
 from etcd_requires import EtcdRequiresV0
 from literals import CA_CERT_PATH, CLIENT_CERT_PATH, CLIENT_KEY_PATH, ETCD_DATA_DIR, ETCD_VERSION
-from workload import get, put
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
+from workload import get, put
 
 logger = logging.getLogger(__name__)
 
@@ -164,9 +164,7 @@ class ApplicationCharmEtcdClient(CharmBase):
         Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
         Path(CLIENT_KEY_PATH).write_text(private_key.raw)
         key = (
-            orig_key
-            if orig_key.startswith("/")
-            else f"/{cert.certificate.common_name}/{orig_key}"
+            orig_key if orig_key.startswith("/") else f"/{cert.certificate.common_name}/{orig_key}"
         )
         result = put(uris, key, value)
 
@@ -177,7 +175,9 @@ class ApplicationCharmEtcdClient(CharmBase):
                     "results": json.dumps(result),
                 }
             )
-            event.fail(f"etcdctl put failed for certificate with common name: {cert.certificate.common_name}")
+            event.fail(
+                f"etcdctl put failed for certificate with common name: {cert.certificate.common_name}"
+            )
             return
         event.set_results(
             {
@@ -215,9 +215,7 @@ class ApplicationCharmEtcdClient(CharmBase):
         Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
         Path(CLIENT_KEY_PATH).write_text(private_key.raw)
         key = (
-            orig_key
-            if orig_key.startswith("/")
-            else f"/{cert.certificate.common_name}/{orig_key}"
+            orig_key if orig_key.startswith("/") else f"/{cert.certificate.common_name}/{orig_key}"
         )
 
         result = get(uris, key)
@@ -229,7 +227,9 @@ class ApplicationCharmEtcdClient(CharmBase):
                     "results": json.dumps(result),
                 }
             )
-            event.fail(f"etcdctl get failed for certificate with common name: {cert.certificate.common_name}")
+            event.fail(
+                f"etcdctl get failed for certificate with common name: {cert.certificate.common_name}"
+            )
             return
         event.set_results(
             {

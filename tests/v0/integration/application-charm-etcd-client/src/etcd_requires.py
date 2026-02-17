@@ -108,7 +108,7 @@ class EtcdRequiresV0(ops.framework.Object):
 
         return self.etcd_interface.fetch_relation_data(
             relation_ids=[self.etcd_relation.id],
-            fields=["username", "uris", "endpoints", "version", "tls-ca"]
+            fields=["username", "uris", "endpoints", "version", "tls-ca"],
         ).get(self.etcd_relation.id, {})
 
     @property
