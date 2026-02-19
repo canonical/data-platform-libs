@@ -1093,20 +1093,6 @@ class DataRequirerBaseTests(ABC):
 
     def test_requested_entity_consistency(self):
         """Test consistency restrictions on direct secret usage and helper values."""
-        # Try to set both secret and entity name
-        with pytest.raises(ValueError) as e:
-            RequirerCommonModel(
-                requested_entity_secret="secret:secret", requested_entity_name="testuser"
-            )
-        assert "Unable to use provided and automated entity name secret" in str(e.value)
-
-        # Try to set both secret and password
-        with pytest.raises(ValueError) as e:
-            RequirerCommonModel(
-                requested_entity_secret="secret:secret", requested_entity_password="testpass"
-            )
-        assert "Unable to use provided and automated entity name secret" in str(e.value)
-
         # Try to set password without entity name
         with pytest.raises(ValueError) as e:
             RequirerCommonModel(requested_entity_password="testpass")
@@ -1221,9 +1207,6 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "extra-user-roles": "CREATEDB,CREATEROLE",
                     "prefix-matching": None,
                     "request-id": "c759221a6c14c72a",
-                    "requested-entity-name": None,
-                    "requested-entity-password": None,
-                    "requested-entity-secret": None,
                     "resource": "data_platform",
                     "salt": "kkkkkkkk",
                     "secret-mtls": None,
@@ -1236,9 +1219,6 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "extra-user-roles": None,
                     "prefix-matching": None,
                     "request-id": "9ecfabfbb5258f88",
-                    "requested-entity-name": None,
-                    "requested-entity-password": None,
-                    "requested-entity-secret": None,
                     "resource": "",
                     "salt": "xxxxxxxx",
                     "secret-mtls": None,
@@ -1491,9 +1471,6 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "salt": "kkkkkkkk",
                     "prefix-matching": None,
                     "request-id": "c759221a6c14c72a",
-                    "requested-entity-name": None,
-                    "requested-entity-password": None,
-                    "requested-entity-secret": None,
                     "resource": "data_platform",
                     "extra-group-roles": None,
                     "extra-user-roles": "CREATEDB,CREATEROLE",
@@ -1505,9 +1482,6 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "salt": "xxxxxxxx",
                     "prefix-matching": None,
                     "request-id": "9ecfabfbb5258f88",
-                    "requested-entity-name": None,
-                    "requested-entity-password": None,
-                    "requested-entity-secret": None,
                     "resource": "",
                     "entity-type": "USER",
                     "extra-group-roles": None,

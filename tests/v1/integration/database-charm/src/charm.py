@@ -230,7 +230,7 @@ class DatabaseCharm(CharmBase):
         extra_user_roles = request.extra_user_roles
         username = None
         password = None
-        if request.requested_entity_secret and (content := event.requested_entity_secret_content):
+        if content := event.requested_entity_secret_content:
             for key, val in content.items():
                 username = key
                 password = val
@@ -309,7 +309,7 @@ class DatabaseCharm(CharmBase):
         # Generate a entity-name and a entity-password for the application.
         rolename = None
         password = None
-        if request.requested_entity_secret and (content := event.requested_entity_secret_content):
+        if content := event.requested_entity_secret_content:
             for key, val in content.items():
                 rolename = key
                 password = val

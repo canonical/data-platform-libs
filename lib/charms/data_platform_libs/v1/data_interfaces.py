@@ -496,6 +496,9 @@ TlsSecretBool = Annotated[OptionalSecretBool, Field(exclude=True, default=None),
 MtlsSecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "mtls"]
 ExtraSecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "extra"]
 EntitySecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "entity"]
+RequestedEntitySecretStr = Annotated[
+    OptionalSecretStr, Field(exclude=True, default=None), "entity"
+]
 
 
 class Scope(Enum):
@@ -1002,9 +1005,8 @@ class RequirerCommonModel(CommonModel):
     entity_permissions: list[EntityPermissionModel] | None = Field(default=None)
     secret_mtls: SecretString | None = Field(default=None)
     mtls_cert: MtlsSecretStr = Field(default=None)
-    requested_entity_secret: SecretString | None = Field(default=None)
-    requested_entity_name: str | None = Field(default=None)
-    requested_entity_password: str | None = Field(default=None)
+    requested_entity_name: RequestedEntitySecretStr = Field(default=None)
+    requested_entity_password: RequestedEntitySecretStr = Field(default=None)
     prefix_matching: Literal["all", "only-existing"] | None = Field(default=None)
 
     @model_validator(mode="after")
@@ -1018,11 +1020,6 @@ class RequirerCommonModel(CommonModel):
 
         if self.entity_type == "GROUP" and self.extra_user_roles:
             raise ValueError("Inconsistent entity information. Use extra_group_roles instead")
-
-        if self.requested_entity_secret and (
-            self.requested_entity_name or self.requested_entity_password
-        ):
-            raise ValueError("Unable to use provided and automated entity name secret")
 
         if self.requested_entity_password and not self.requested_entity_name:
             raise ValueError("Unable to set entity password without an entity name")
@@ -1913,34 +1910,24 @@ class ResourceRequestedEvent(ResourceProviderEvent[TRequirerCommonModel]):
     """Resource requested event."""
 
     @property
-    def requested_entity_secret_content(self) -> dict[str, str | None] | None:
+    def requested_entity_secret_content(
+        self,
+    ) -> dict[RequestedEntitySecretStr, RequestedEntitySecretStr] | None:
         """Returns the content of the requested entity secret."""
-        names = None
-        if secret_uri := self.request.requested_entity_secret:
-            secret = self.framework.model.get_secret(id=secret_uri)
-            if content := secret.get_content(refresh=True):
-                if "entity-name" in content:
-                    names = {content["entity-name"]: content.get("password")}
-                else:
-                    logger.warning("Invalid requested-entity-secret: no entity name")
-        return names
+        if self.request.requested_entity_name:
+            return {self.request.requested_entity_name: self.request.requested_entity_password}
 
 
 class ResourceEntityRequestedEvent(ResourceProviderEvent[TRequirerCommonModel]):
     """Resource Entity requested event."""
 
     @property
-    def requested_entity_secret_content(self) -> dict[str, str | None] | None:
+    def requested_entity_secret_content(
+        self,
+    ) -> dict[RequestedEntitySecretStr, RequestedEntitySecretStr] | None:
         """Returns the content of the requested entity secret."""
-        names = None
-        if secret_uri := self.request.requested_entity_secret:
-            secret = self.framework.model.get_secret(id=secret_uri)
-            if content := secret.get_content(refresh=True):
-                if "entity-name" in content:
-                    names = {content["entity-name"]: content.get("password")}
-                else:
-                    logger.warning("Invalid requested-entity-secret: no entity name")
-        return names
+        if self.request.requested_entity_name:
+            return {self.request.requested_entity_name: self.request.requested_entity_password}
 
 
 class ResourceEntityPermissionsChangedEvent(ResourceProviderEvent[TRequirerCommonModel]):
@@ -3122,21 +3109,6 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
         for request in self._requests:
             request.request_id = gen_hash(request.resource, request.salt)
 
-            # Create helper secret if needed
-            if request.requested_entity_name and not request.requested_entity_secret:
-                content = {"entity-name": request.requested_entity_name}
-                if request.requested_entity_password:
-                    content["password"] = request.requested_entity_password
-                secret = self.charm.app.add_secret(
-                    content, label=f"{request.request_id}-requested-entity"
-                )
-                secret.grant(event.relation)
-                if not secret.id:
-                    raise SecretError("Secret helper missing Id")
-                request.requested_entity_secret = secret.id
-                request.requested_entity_name = None
-                request.requested_entity_password = None
-
         full_request = RequirerDataContractV1[self._request_model](
             version="v1", requests=self._requests
         )
@@ -3237,17 +3209,6 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
     # Methods to handle specificities of relation events
     ##############################################################################
 
-    def _clear_helper_secret(
-        self, request: RequirerCommonModel, response: ResourceProviderModel
-    ) -> None:
-        """Remove helper secret if set."""
-        if self.charm.unit.is_leader() and response.username and request.requested_entity_secret:
-            try:
-                secret = self.framework.model.get_secret(id=request.requested_entity_secret)
-                secret.remove_all_revisions()
-            except ModelError:
-                logger.debug("Unable to remove helper secret")
-
     @override
     def _handle_event(
         self,
@@ -3269,7 +3230,6 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                 event.relation, app=event.app, unit=event.unit, response=response
             )
             self._emit_aliased_event(event, "resource_created", response)
-            self._clear_helper_secret(request, response)
             return
 
         if "secret-entity" in _diff.added and request.entity_type:
