@@ -279,7 +279,7 @@ def _put(endpoints: str, key: str, value: str) -> str | None:
             ],
         )
     except subprocess.CalledProcessError:
-        logger.error("etcdctl put failed")
+        logger.error("etcdctl put failed", exc_info=True)
         return None
     return output.decode("utf-8").strip()
 
@@ -310,7 +310,7 @@ def _get(endpoints: str, key: str) -> str | None:
             ],
         )
     except subprocess.CalledProcessError:
-        logger.error("etcdctl get failed")
+        logger.error("etcdctl get failed", exc_info=True)
         return None
     return output.decode("utf-8").strip()
 
