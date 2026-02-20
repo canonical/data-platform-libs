@@ -215,3 +215,32 @@ def test_update_mtls_cert(juju_lxd_model: Juju):
         assert (
             old_mtls_cert not in client_cas
         ), f"old mtls certificate still in trusted CAs for {unit}"
+
+    # old_mtls_cert = get_requirer_mtls_certificate(juju_lxd_model)
+    # assert old_mtls_cert, "failed to get the old mtls certs from requirer TLS provider"
+    #
+    # # run juju action to update the common name
+    # requirer_unit = next(iter(juju_lxd_model.status().get_units(REQUIRER_APP_NAME)))
+    #
+    # juju_lxd_model.run(requirer_unit, "update-mtls-cert")
+    #
+    # # wait for model to settle
+    # juju_lxd_model.wait(
+    #         lambda status: apps_active_and_agents_idle(
+    #             status, ETCD_APP_NAME, REQUIRER_APP_NAME, idle_period=10
+    #         )
+    # )
+    #
+    # # get client ca from every unit and check if it includes the new ca
+    # mtls_cert = get_requirer_mtls_certificate(juju_lxd_model)
+    # assert mtls_cert, "failed to get the new mtls certs from requirer TLS provider"
+    #
+    # for unit_name in juju_lxd_model.status().get_units(ETCD_APP_NAME):
+    #     client_cas = get_certificate_from_unit(
+    #         juju_lxd_model, unit_name, TLSType.CLIENT, is_ca=True
+    #     )
+    #     assert client_cas, f"failed to get client CAs for {unit_name}"
+    #     assert mtls_cert in client_cas, f"new mtls cert not in trusted CAs for {unit_name}"
+    #     assert old_mtls_cert not in client_cas, (
+    #             f"old mtls certificate still in trusted CAs for {unit_name}"
+    #     )

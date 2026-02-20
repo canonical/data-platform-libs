@@ -57,27 +57,19 @@ class ApplicationCharmEtcdClient(CharmBase):
 
         # Etcd interface and related events
         self.etcd = EtcdRequiresV0(self)
+        self.framework.observe(self.on.config_changed, self._on_certificate_available)
         self.framework.observe(self.on.update_mtls_cert_action, self._on_update_action)
         self.framework.observe(self.on.put_etcd_action, self._on_put_etcd_action)
         self.framework.observe(self.on.get_etcd_action, self._on_get_etcd_action)
         self.framework.observe(
             self.on.get_credentials_action, self._on_get_credentials_action_etcd
         )
-        self.framework.observe(self.on.config_changed, self._on_certificate_available)
         self.framework.observe(self.on.get_certificate_action, self._on_get_certificate_action)
 
     @property
     def common_name(self) -> str:
-        """Return the common names for the client certificates."""
+        """Return the common name for the client certificate."""
         return "requirer-charm"
-
-    @property
-    def ca_chain(self) -> str | None:
-        """Return the CA chain."""
-        certs, _ = self.certificates.get_assigned_certificates()
-        if not certs:
-            return None
-        return "\n".join(cert.raw for cert in certs[0].chain[::])
 
     @property
     def ca_cert(self) -> str | None:
@@ -92,8 +84,14 @@ class ApplicationCharmEtcdClient(CharmBase):
         """Return the raw certificate."""
         if not hasattr(self, "certificates"):
             return None
-        raw_cert = self.ca_cert if self.send_ca_option else self.ca_chain
-        return raw_cert or ""
+
+        if self.send_ca_option:
+            return self.ca_cert
+
+        certs, _ = self.certificates.get_assigned_certificates()
+        if certs:
+            return certs[0].certificate.raw
+        return ""
 
     @property
     def server_ca_chain(self) -> str | None:
@@ -115,7 +113,7 @@ class ApplicationCharmEtcdClient(CharmBase):
 
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Handle install event."""
-        # workaround for snapd not being available when requirer deployed as a k8s: install etcdctl directly using wget
+        # workaround for snapd not being available when requirer deployed as a k8s charm: install etcdctl directly using wget
         try:
             install_etcdctl()
             logger.info("etcdctl installation completed successfully")
@@ -149,8 +147,7 @@ class ApplicationCharmEtcdClient(CharmBase):
         Path(f"{ETCD_DATA_DIR}/client.key").write_text(private_key.raw)
 
         if self.etcd.etcd_relation:
-            raw_cert = self.raw_certificate or cert.certificate.raw
-            self.etcd.set_mtls_cert(raw_cert)
+            self.etcd.set_mtls_cert(cert.certificate.raw)
 
     def _on_put_etcd_action(self, event: ops.ActionEvent) -> None:
         """Handle put action."""
@@ -159,8 +156,12 @@ class ApplicationCharmEtcdClient(CharmBase):
             event.set_results({"ok": False})
             return
 
-        key = event.params["key"]
-        value = event.params["value"]
+        key = str(event.params.get("key", ""))
+        value = str(event.params.get("value", ""))
+        if not key or not value:
+            event.fail("Both key and value parameters are required.")
+            event.set_results({"ok": False})
+            return
 
         uris = self.etcd.etcd_uris
 
@@ -192,7 +193,12 @@ class ApplicationCharmEtcdClient(CharmBase):
             event.set_results({"ok": False})
             return
 
-        key = event.params["key"]
+        key = str(event.params.get("key", ""))
+        if not key:
+            event.fail("key parameter is required.")
+            event.set_results({"ok": False})
+            return
+
         result = get(uris, key)
         if result:
             event.set_results({"message": result})
@@ -230,11 +236,10 @@ class ApplicationCharmEtcdClient(CharmBase):
         if self.send_ca_option:
             event.set_results({"certificate": self.ca_cert})
         else:
-            certs, _ = self.certificates.get_assigned_certificates()
-            if not certs:
+            if not self.raw_certificate:
                 event.fail("No certificates available")
                 return
-            event.set_results({"certificate": certs[0].certificate.raw})
+            event.set_results({"certificate": self.raw_certificate})
 
 
 if __name__ == "__main__":

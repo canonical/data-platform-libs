@@ -46,7 +46,7 @@ class EtcdRequiresV0(ops.framework.Object):
             charm=self.charm,
             relation_name="etcd-client",
             prefix="/requirer-charm/",
-            mtls_cert=self.raw_certificate,
+            mtls_cert=self.charm.raw_certificate,
         )
 
         self.charm.framework.observe(
@@ -103,11 +103,3 @@ class EtcdRequiresV0(ops.framework.Object):
             relation_ids=[self.etcd_relation.id],
             fields=["username", "uris", "endpoints", "version", "tls-ca"],
         ).get(self.etcd_relation.id, {})
-
-    @property
-    def raw_certificate(self) -> str:
-        """Return the raw certificate."""
-        certs, _ = self.charm.certificates.get_assigned_certificates()
-        if not certs:
-            return ""
-        return certs[0].ca.raw if self.charm.send_ca_option else certs[0].certificate.raw
