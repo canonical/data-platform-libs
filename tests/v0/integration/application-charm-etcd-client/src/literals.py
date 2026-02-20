@@ -4,8 +4,8 @@
 
 """Collection of global literals for the requirer charm for etcd interface testing (v0)."""
 
-ETCD_DATA_DIR = "/var/lib/application-charm-etcd-client/etcd"
-CLIENT_CERT_PATH = f"{ETCD_DATA_DIR}/client.pem"
-CLIENT_KEY_PATH = f"{ETCD_DATA_DIR}/client.key"
-CA_CERT_PATH = f"{ETCD_DATA_DIR}/ca.pem"
-ETCD_VERSION = "3.6.7"
+SNAP_DIR = "/var/snap/charmed-etcd/common"
+CLIENT_CERT_PATH = f"{SNAP_DIR}/client.pem"
+CLIENT_KEY_PATH = f"{SNAP_DIR}/client.key"
+CA_CERT_PATH = f"{SNAP_DIR}/ca.pem"
+SNAP_NAME = "charmed-etcd"

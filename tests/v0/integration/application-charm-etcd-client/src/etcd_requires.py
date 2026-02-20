@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import ops
 from charmlibs.interfaces.tls_certificates import Certificate
-from literals import CA_CERT_PATH, ETCD_DATA_DIR
+from literals import CA_CERT_PATH, SNAP_DIR
 
 from charms.data_platform_libs.v0.data_interfaces import (
     DatabaseEndpointsChangedEvent,
@@ -76,7 +76,7 @@ class EtcdRequiresV0(ops.framework.Object):
         if not event.username:
             logger.error("No username available")
             return
-        Path(ETCD_DATA_DIR).mkdir(parents=True, exist_ok=True)
+        Path(SNAP_DIR).mkdir(parents=True, exist_ok=True)
         Path(CA_CERT_PATH).write_text(event.tls_ca)
 
     @property

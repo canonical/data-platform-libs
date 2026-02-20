@@ -10,20 +10,23 @@ of the libraries in this repository.
 
 import logging
 import socket
+import subprocess
 from pathlib import Path
 
 import ops
+from charmlibs import snap
 from charmlibs.interfaces.tls_certificates import (
     CertificateAvailableEvent,
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
 )
+from tenacity import stop_after_attempt, retry, wait_fixed
+
 from etcd_requires import EtcdRequiresV0
-from literals import CA_CERT_PATH, ETCD_DATA_DIR
+from literals import CA_CERT_PATH, SNAP_DIR, CLIENT_CERT_PATH, CLIENT_KEY_PATH, SNAP_NAME
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
-from workload import get, install_etcdctl, put
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,7 @@ class ApplicationCharmEtcdClient(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self.etcd_snap = snap.SnapCache()[SNAP_NAME]
 
         # Default charm events.
         self.framework.observe(self.on.start, self._on_start)
@@ -113,13 +117,9 @@ class ApplicationCharmEtcdClient(CharmBase):
 
     def _on_install(self, event: ops.InstallEvent) -> None:
         """Handle install event."""
-        # workaround for snapd not being available when requirer deployed as a k8s charm: install etcdctl directly using wget
-        try:
-            install_etcdctl()
-            logger.info("etcdctl installation completed successfully")
-        except Exception as e:
-            logger.error(f"Failed to install etcdctl: {e}", exc_info=True)
-            event.defer()
+        # install the etcd snap
+        if not self._install_etcd_snap():
+            self.unit.status = ops.BlockedStatus("Failed to install etcd snap")
             return
 
     def _on_update_action(self, event: ops.ActionEvent) -> None:
@@ -142,9 +142,9 @@ class ApplicationCharmEtcdClient(CharmBase):
             return
 
         cert = certs[0]
-        Path(ETCD_DATA_DIR).mkdir(exist_ok=True, parents=True)
-        Path(f"{ETCD_DATA_DIR}/client.pem").write_text(cert.certificate.raw)
-        Path(f"{ETCD_DATA_DIR}/client.key").write_text(private_key.raw)
+        Path(SNAP_DIR).mkdir(exist_ok=True, parents=True)
+        Path(f"{SNAP_DIR}/client.pem").write_text(cert.certificate.raw)
+        Path(f"{SNAP_DIR}/client.key").write_text(private_key.raw)
 
         if self.etcd.etcd_relation:
             self.etcd.set_mtls_cert(cert.certificate.raw)
@@ -170,7 +170,7 @@ class ApplicationCharmEtcdClient(CharmBase):
             event.set_results({"ok": False})
             return
 
-        if result := put(uris, key, value):
+        if result := _put(uris, key, value):
             event.set_results({"message": result})
         else:
             event.fail("etcdctl put failed")
@@ -199,7 +199,7 @@ class ApplicationCharmEtcdClient(CharmBase):
             event.set_results({"ok": False})
             return
 
-        result = get(uris, key)
+        result = _get(uris, key)
         if result:
             event.set_results({"message": result})
         else:
@@ -241,6 +241,78 @@ class ApplicationCharmEtcdClient(CharmBase):
                 return
             event.set_results({"certificate": self.raw_certificate})
 
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(5), reraise=True)
+    def _install_etcd_snap(self) -> bool:
+        """Install the etcd snap."""
+        try:
+            self.etcd_snap.ensure(snap.SnapState.Present, channel="3.6/edge")
+            self.etcd_snap.hold()
+            return True
+        except snap.SnapError as e:
+            logger.error(str(e))
+            return False
+
+def _put(endpoints: str, key: str, value: str) -> str | None:
+    """Put a key value pair in etcd."""
+    if (
+            not Path(CLIENT_CERT_PATH).exists()
+            or not Path(CLIENT_KEY_PATH).exists()
+            or not Path(CA_CERT_PATH).exists()
+    ):
+        logger.error("No client certificates available")
+        return None
+    try:
+        output = subprocess.check_output(
+            [
+                "charmed-etcd.etcdctl",
+                "--endpoints",
+                endpoints,
+                "--cert",
+                CLIENT_CERT_PATH,
+                "--key",
+                CLIENT_KEY_PATH,
+                "--cacert",
+                CA_CERT_PATH,
+                "put",
+                key,
+                value,
+            ],
+        )
+    except subprocess.CalledProcessError:
+        logger.error("etcdctl put failed")
+        return None
+    return output.decode("utf-8").strip()
+
+
+def _get(endpoints: str, key: str) -> str | None:
+    """Get a key value pair from etcd."""
+    if (
+            not Path(CLIENT_CERT_PATH).exists()
+            or not Path(CLIENT_KEY_PATH).exists()
+            or not Path(CA_CERT_PATH).exists()
+    ):
+        logger.error("No client certificates available")
+        return None
+    try:
+        output = subprocess.check_output(
+            [
+                "charmed-etcd.etcdctl",
+                "--endpoints",
+                endpoints,
+                "--cert",
+                CLIENT_CERT_PATH,
+                "--key",
+                CLIENT_KEY_PATH,
+                "--cacert",
+                CA_CERT_PATH,
+                "get",
+                key,
+            ],
+        )
+    except subprocess.CalledProcessError:
+        logger.error("etcdctl get failed")
+        return None
+    return output.decode("utf-8").strip()
 
 if __name__ == "__main__":
     main(ApplicationCharmEtcdClient)
