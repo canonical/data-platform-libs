@@ -20,13 +20,12 @@ from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
 )
-from tenacity import stop_after_attempt, retry, wait_fixed
-
 from etcd_requires import EtcdRequiresV0
-from literals import CA_CERT_PATH, SNAP_DIR, CLIENT_CERT_PATH, CLIENT_KEY_PATH, SNAP_NAME
+from literals import CA_CERT_PATH, CLIENT_CERT_PATH, CLIENT_KEY_PATH, SNAP_DIR, SNAP_NAME
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 
@@ -252,12 +251,13 @@ class ApplicationCharmEtcdClient(CharmBase):
             logger.error(str(e))
             return False
 
+
 def _put(endpoints: str, key: str, value: str) -> str | None:
     """Put a key value pair in etcd."""
     if (
-            not Path(CLIENT_CERT_PATH).exists()
-            or not Path(CLIENT_KEY_PATH).exists()
-            or not Path(CA_CERT_PATH).exists()
+        not Path(CLIENT_CERT_PATH).exists()
+        or not Path(CLIENT_KEY_PATH).exists()
+        or not Path(CA_CERT_PATH).exists()
     ):
         logger.error("No client certificates available")
         return None
@@ -287,9 +287,9 @@ def _put(endpoints: str, key: str, value: str) -> str | None:
 def _get(endpoints: str, key: str) -> str | None:
     """Get a key value pair from etcd."""
     if (
-            not Path(CLIENT_CERT_PATH).exists()
-            or not Path(CLIENT_KEY_PATH).exists()
-            or not Path(CA_CERT_PATH).exists()
+        not Path(CLIENT_CERT_PATH).exists()
+        or not Path(CLIENT_KEY_PATH).exists()
+        or not Path(CA_CERT_PATH).exists()
     ):
         logger.error("No client certificates available")
         return None
@@ -313,6 +313,7 @@ def _get(endpoints: str, key: str) -> str | None:
         logger.error("etcdctl get failed")
         return None
     return output.decode("utf-8").strip()
+
 
 if __name__ == "__main__":
     main(ApplicationCharmEtcdClient)
