@@ -43,4 +43,3 @@ delete-relation-field:
 
 set-mtls-cert:
   description: Sets the MTLS cert for the requirer application.
- 
