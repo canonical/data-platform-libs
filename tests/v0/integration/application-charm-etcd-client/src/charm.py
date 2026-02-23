@@ -128,9 +128,13 @@ class ApplicationCharmEtcdClient(CharmBase):
             event.fail("etcd-client relation not found")
             return
 
-        if event.params.get("chain"):
-            cert = event.params["chain"].replace("\\n", "\n")
-            self.etcd.set_mtls_cert(cert)
+        certs, _ = self.certificates.get_assigned_certificates()
+        if not certs:
+            event.fail("No certificate available")
+            return
+
+        self.certificates.renew_certificate(certs[0])
+        event.set_results({"message": "certificate renewed"})
 
     def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
         """Handle certificate available event."""
@@ -142,8 +146,8 @@ class ApplicationCharmEtcdClient(CharmBase):
 
         cert = certs[0]
         Path(SNAP_DIR).mkdir(exist_ok=True, parents=True)
-        Path(f"{SNAP_DIR}/client.pem").write_text(cert.certificate.raw)
-        Path(f"{SNAP_DIR}/client.key").write_text(private_key.raw)
+        Path(CLIENT_CERT_PATH).write_text(cert.certificate.raw)
+        Path(CLIENT_KEY_PATH).write_text(private_key.raw)
 
         if self.etcd.etcd_relation:
             self.etcd.set_mtls_cert(cert.certificate.raw)
