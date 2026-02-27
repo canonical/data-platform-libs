@@ -2113,6 +2113,12 @@ class AuthenticationUpdatedEvent(ResourceRequirerEvent[TResourceProviderModel]):
     pass
 
 
+class ResourcePrefixResourcesChangedEvent(ResourceRequirerEvent[TResourceProviderModel]):
+    """Prefix resources have changed."""
+
+    pass
+
+
 # Error Propagation Events
 
 
@@ -2171,6 +2177,7 @@ class ResourceRequiresEvents(CharmEvents, Generic[TResourceProviderModel]):
     authentication_updated = EventSource(AuthenticationUpdatedEvent)
     status_raised = EventSource(StatusRaisedEvent)
     status_resolved = EventSource(StatusResolvedEvent)
+    prefix_resources_changed = EventSource(ResourcePrefixResourcesChangedEvent)
 
 
 ##############################################################################
