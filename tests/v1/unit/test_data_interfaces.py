@@ -1010,7 +1010,7 @@ def reset_aliases():
             delattr(ResourceRequiresEvents, f"{cluster_alias}_resource_entity_created")
             delattr(ResourceRequiresEvents, f"{cluster_alias}_endpoints_changed")
             delattr(ResourceRequiresEvents, f"{cluster_alias}_read_only_endpoints_changed")
-            delattr(ResourceRequiresEvents, f"{cluster_alias}_prefix_databases_changed")
+            delattr(ResourceRequiresEvents, f"{cluster_alias}_prefix_resources_changed")
         except AttributeError:
             # Ignore the events not existing before the first test.
             pass
@@ -1210,6 +1210,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "resource": "data_platform",
                     "salt": "kkkkkkkk",
                     "secret-mtls": None,
+                    "secret-requested-entity": None,
                 },
                 {
                     "entity-permissions": None,
@@ -1222,6 +1223,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "resource": "",
                     "salt": "xxxxxxxx",
                     "secret-mtls": None,
+                    "secret-requested-entity": None,
                 },
             ],
         }
@@ -1476,6 +1478,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "extra-user-roles": "CREATEDB,CREATEROLE",
                     "external-node-connectivity": False,
                     "secret-mtls": None,
+                    "secret-requested-entity": None,
                 },
                 {
                     "entity-permissions": None,
@@ -1488,6 +1491,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "extra-user-roles": None,
                     "external-node-connectivity": False,
                     "secret-mtls": None,
+                    "secret-requested-entity": None,
                 },
             ],
         }

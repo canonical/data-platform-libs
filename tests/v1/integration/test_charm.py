@@ -1419,7 +1419,7 @@ async def test_database_prefix(ops_test: OpsTest):
     )
     request = requests[0]
 
-    assert request["prefix-databases"] == ["testdb1", "testdb2"]
+    assert request["prefix-resources"] == ["testdb1", "testdb2"]
     data = json.loads(
         await get_application_relation_data(
             ops_test, APPLICATION_APP_NAME, PREFIX_DATABASE_RELATION_NAME, "data"

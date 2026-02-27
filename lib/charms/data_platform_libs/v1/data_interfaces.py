@@ -497,7 +497,7 @@ MtlsSecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), 
 ExtraSecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "extra"]
 EntitySecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "entity"]
 RequestedEntitySecretStr = Annotated[
-    OptionalSecretStr, Field(exclude=True, default=None), "entity"
+    OptionalSecretStr, Field(exclude=True, default=None), "requested-entity"
 ]
 
 
@@ -1005,6 +1005,7 @@ class RequirerCommonModel(CommonModel):
     entity_permissions: list[EntityPermissionModel] | None = Field(default=None)
     secret_mtls: SecretString | None = Field(default=None)
     mtls_cert: MtlsSecretStr = Field(default=None)
+    secret_requested_entity: SecretString | None = Field(default=None)
     requested_entity_name: RequestedEntitySecretStr = Field(default=None)
     requested_entity_password: RequestedEntitySecretStr = Field(default=None)
     prefix_matching: Literal["all", "only-existing"] | None = Field(default=None)
@@ -1056,7 +1057,7 @@ class ResourceProviderModel(ProviderCommonModel):
     entity_name: EntitySecretStr = Field(default=None)
     entity_password: EntitySecretStr = Field(default=None)
     version: str | None = Field(default=None)
-    prefix_databases: list[str] | None = Field(default=None)
+    prefix_resources: list[str] | None = Field(default=None)
 
 
 class RequirerDataContractV0(RequirerCommonModel):
