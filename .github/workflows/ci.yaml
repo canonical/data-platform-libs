@@ -65,22 +65,35 @@ jobs:
             bases-index: 0
           - series: focal
             bases-index: 1
-        tox-environments:
-          - integration-db-v0
-          - integration-upgrade-v0-1
-          - integration-upgrade-v0-2
-          - integration-upgrade-v0-3
-          - integration-upgrade-v0-4
+        tests:
+          - tox-environment: integration-db-v0
+            provider: microk8s
+          - tox-environment: integration-upgrade-v0-1
+            provider: microk8s
+          - tox-environment: integration-upgrade-v0-2
+            provider: microk8s
+          - tox-environment: integration-upgrade-v0-3
+            provider: microk8s
+          - tox-environment: integration-upgrade-v0-4
+            provider: microk8s
           # To be enabled after data_interfaces v040
           # - integration-upgrade-v0-5
           # - integration-upgrade-v0-6
           # - integration-upgrade-v0-7
-          - integration-upgrade-databag-v0
-          - integration-s3-v0
-          - integration-opensearch-v0
-          - integration-kafka-v0
-          - integration-kafka-connect-v0
-          - integration-status-v0
+          - tox-environment: integration-upgrade-databag-v0
+            provider: microk8s
+          - tox-environment: integration-s3-v0
+            provider: microk8s
+          - tox-environment: integration-opensearch-v0
+            provider: microk8s
+          - tox-environment: integration-kafka-v0
+            provider: microk8s
+          - tox-environment: integration-kafka-connect-v0
+            provider: microk8s
+          - tox-environment: integration-status-v0
+            provider: microk8s
+          - tox-environment: integration-etcd-v0
+            provider: lxd
         juju-version:
           - juju-bootstrap-option: "2.9.51"
             juju-snap-channel: "2.9/stable"
@@ -89,31 +102,35 @@ jobs:
             juju-snap-channel: "3.6/stable"
             libjuju-version: "3.6.1.0"
         exclude:
-          - tox-environments: integration-upgrade-v0-1
+          - tests: {tox-environment: integration-upgrade-v0-1}
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-v0-2
+          - tests: {tox-environment: integration-upgrade-v0-2}
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-v0-3
+          - tests: {tox-environment: integration-upgrade-v0-3}
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-v0-4
+          - tests: {tox-environment: integration-upgrade-v0-4}
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-v0-5
+          - tests: {tox-environment: integration-upgrade-v0-5}
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-v0-6
+          - tests: {tox-environment: integration-upgrade-v0-6}
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-v0-7
+          - tests: {tox-environment: integration-upgrade-v0-7}
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-upgrade-databag-v0
+          - tests: {tox-environment: integration-upgrade-databag-v0}
             juju-version: {juju-snap-channel: "2.9/stable"}
-          - tox-environments: integration-opensearch-v0
+          - tests: { tox-environment: integration-etcd-v0}
+            juju-version: { juju-snap-channel: "2.9/stable" }
+          - tests: {tox-environment: integration-opensearch-v0}
             ubuntu-versions: {series: focal}
-          - tox-environments: integration-kafka-v0
+          - tests: {tox-environment: integration-kafka-v0}
             ubuntu-versions: {series: focal}
-          - tox-environments: integration-kafka-connect-v0
+          - tests: {tox-environment: integration-kafka-connect-v0}
             ubuntu-versions: {series: focal}
-          - tox-environments: integration-status-v0
+          - tests: {tox-environment: integration-status-v0}
             ubuntu-versions: {series: focal}
-    name: ${{ matrix.tox-environments }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
+          - tests: {tox-environment: integration-etcd-v0}
+            ubuntu-versions: {series: focal}
+    name: ${{ matrix.tests.tox-environment }} Juju ${{ matrix.juju-version.juju-snap-channel}} -- ${{ matrix.ubuntu-versions.series }}
     needs:
       - lint
       - unit-test
@@ -122,13 +139,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup operator environment
+      - name: Setup k8s controller
+        if: ${{ 'microk8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
           channel: "1.35-strict/stable"
           bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
+          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
+          charmcraft-channel: "2.x/stable"
+      - name: Setup lxd controller
+        if: ${{ 'lxd' == matrix.tests.provider }}
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: lxd
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "2.x/stable"
       - name: Download packed charm(s)
@@ -148,7 +173,8 @@ jobs:
           fi
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox run -e ${{ matrix.tox-environments }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
+        run:
+          tox run -e ${{ matrix.tests.tox-environment }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
@@ -233,7 +259,8 @@ jobs:
           fi
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox run -e ${{ matrix.tests.tox-environment }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
+        run:
+          tox run -e ${{ matrix.tests.tox-environment }} -- -m '${{ steps.select-tests.outputs.mark_expression }}' --model testing  --os-series=${{ matrix.ubuntu-versions.series }} --build-bases-index=${{ matrix.ubuntu-versions.bases-index }}
         env:
           CI_PACKED_CHARMS: ${{ needs.build.outputs.charms }}
           LIBJUJU_VERSION_SPECIFIER: "==${{ matrix.juju-version.libjuju-version }}"
