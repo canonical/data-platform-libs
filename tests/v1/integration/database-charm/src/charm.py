@@ -388,7 +388,7 @@ class DatabaseCharm(CharmBase):
         model = self.database.interface.build_model(relation.id, DataContract)
         for request in model.requests:
             setattr(request, event.params["field"].replace("-", "_"), None)
-        # Charms should be compatible with old vesrions, to simulatrams["field"])
+        # Charms should be compatible with old versions, to simulatrams["field"])
         self.database.interface.write_model(relation.id, model)
 
     def _new_rolename(self) -> str:
@@ -445,7 +445,7 @@ class DatabaseCharm(CharmBase):
         component = event.params["component"]
         count = event.params["count"]
 
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         for cnt in range(count):
             value = event.params["value"] + f"{cnt}"
             if component == "app":

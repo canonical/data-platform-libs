@@ -1910,25 +1910,13 @@ class ResourceProviderEvent(EventBase, Generic[TRequirerCommonModel]):
 class ResourceRequestedEvent(ResourceProviderEvent[TRequirerCommonModel]):
     """Resource requested event."""
 
-    @property
-    def requested_entity_secret_content(
-        self,
-    ) -> dict[RequestedEntitySecretStr, RequestedEntitySecretStr] | None:
-        """Returns the content of the requested entity secret."""
-        if self.request.requested_entity_name:
-            return {self.request.requested_entity_name: self.request.requested_entity_password}
+    pass
 
 
 class ResourceEntityRequestedEvent(ResourceProviderEvent[TRequirerCommonModel]):
     """Resource Entity requested event."""
 
-    @property
-    def requested_entity_secret_content(
-        self,
-    ) -> dict[RequestedEntitySecretStr, RequestedEntitySecretStr] | None:
-        """Returns the content of the requested entity secret."""
-        if self.request.requested_entity_name:
-            return {self.request.requested_entity_name: self.request.requested_entity_password}
+    pass
 
 
 class ResourceEntityPermissionsChangedEvent(ResourceProviderEvent[TRequirerCommonModel]):
@@ -2905,6 +2893,10 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                     f"{relation_alias}_read_only_endpoints_changed",
                     ResourceReadOnlyEndpointsChangedEvent,
                 )
+                self.on.define_event(
+                    f"{relation_alias}_prefix_resources_changed",
+                    ResourcePrefixResourcesChangedEvent,
+                )
 
     ##############################################################################
     # Extra useful functions
@@ -3270,4 +3262,12 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                 event.relation, app=event.app, unit=event.unit, response=response
             )
             self._emit_aliased_event(event, "authentication_updated", response)
+            return
+
+        if "prefix-resources" in _diff.added or "prefix-resources" in _diff.changed:
+            logger.info(f"prefix resources updated for {response.resource} at {datetime.now()}")
+            getattr(self.on, "prefix_resources_changed").emit(
+                event.relation, app=event.app, unit=event.unit, response=response
+            )
+            self._emit_aliased_event(event, "prefix_resources_changed", response)
             return
