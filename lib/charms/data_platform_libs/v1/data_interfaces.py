@@ -289,6 +289,7 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    PlainSerializer,
     SerializationInfo,
     SerializerFunctionWrapHandler,
     Tag,
@@ -1057,7 +1058,10 @@ class ResourceProviderModel(ProviderCommonModel):
     entity_name: EntitySecretStr = Field(default=None)
     entity_password: EntitySecretStr = Field(default=None)
     version: str | None = Field(default=None)
-    prefix_resources: list[str] | None = Field(default=None)
+    prefix_resources: Annotated[
+        list[str] | None,
+        PlainSerializer(lambda x: sorted(x) if x else x),
+    ] = Field(default=None)
 
 
 class RequirerDataContractV0(RequirerCommonModel):
