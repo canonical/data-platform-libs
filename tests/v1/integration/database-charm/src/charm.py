@@ -279,7 +279,7 @@ class DatabaseCharm(CharmBase):
             username=username,
             endpoints=f"{self.model.get_binding('database').network.bind_address}:5432",
             version=version,
-            prefix_resources=resources if len(resources) > 1 else None,
+            prefix_resources=",".join(resources) if len(resources) > 1 else None,
         )
         self.database.set_response(event.relation.id, response)
         self.unit.status = ActiveStatus()

@@ -1739,7 +1739,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                         {
                             "salt": "kkkkkkkk",
                             "request-id": "c759221a6c14c72a",
-                            "prefix-resources": ["db1", "db2"],
+                            "prefix-resources": "db1,db2",
                         }
                     ]
                 ),
@@ -1761,7 +1761,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         # Check that the endpoints are present in the relation
         # using the requires charm library event.
         event = _on_prefix_resources_changed.call_args[0][0]
-        assert event.response.prefix_resources == ["db1", "db2"]
+        assert event.response.prefix_resources == "db1,db2"
 
         # Reset the mock call count.
         _on_prefix_resources_changed.reset_mock()
@@ -1776,7 +1776,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                         {
                             "salt": "kkkkkkkk",
                             "request-id": "c759221a6c14c72a",
-                            "prefix-resources": ["db1", "db2"],
+                            "prefix-resources": "db1,db2",
                         }
                     ]
                 )
@@ -1796,7 +1796,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                         {
                             "salt": "kkkkkkkk",
                             "request-id": "c759221a6c14c72a",
-                            "prefix-resources": ["db1", "db2", "db3"],
+                            "prefix-resources": "db1,db2,db3",
                         }
                     ]
                 )

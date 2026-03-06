@@ -1029,6 +1029,13 @@ class RequirerCommonModel(CommonModel):
         return self
 
 
+def csv_list_sorter(el: str | None) -> str | None:
+    """Serialization sorter for comma separated lists."""
+    if el:
+        return ",".join(sorted(el.split(",")))
+    return None
+
+
 class ProviderCommonModel(CommonModel):
     """Serialized fields added to the databag.
 
@@ -1038,8 +1045,10 @@ class ProviderCommonModel(CommonModel):
     secret_extra is a secret URI for all additional secrets requested.
     """
 
-    endpoints: str | None = Field(default=None)
-    read_only_endpoints: str | None = Field(default=None)
+    endpoints: Annotated[str | None, PlainSerializer(csv_list_sorter)] = Field(default=None)
+    read_only_endpoints: Annotated[str | None, PlainSerializer(csv_list_sorter)] = Field(
+        default=None
+    )
     secret_user: SecretString | None = Field(default=None)
     secret_tls: SecretString | None = Field(default=None)
     secret_extra: SecretString | None = Field(default=None)
@@ -1058,10 +1067,7 @@ class ResourceProviderModel(ProviderCommonModel):
     entity_name: EntitySecretStr = Field(default=None)
     entity_password: EntitySecretStr = Field(default=None)
     version: str | None = Field(default=None)
-    prefix_resources: Annotated[
-        list[str] | None,
-        PlainSerializer(lambda x: sorted(x) if x else x),
-    ] = Field(default=None)
+    prefix_resources: Annotated[str | None, PlainSerializer(csv_list_sorter)] = Field(default=None)
 
 
 class RequirerDataContractV0(RequirerCommonModel):
