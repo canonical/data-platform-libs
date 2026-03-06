@@ -287,7 +287,7 @@ LIBAPI = 1
 # to 0 if you are raising the major API version
 LIBPATCH = 0
 
-PYDEPS = ["pydantic>=2.11,<3", "poetry-core"]
+PYDEPS = ["pydantic>=2,<3", "poetry-core"]
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +296,9 @@ logger = logging.getLogger(__name__)
 
 def verify_requirements(version: str, requirement: str) -> bool:
     """Verifies a specified version against defined constraint.
+
+    Supports Poetry version constraints
+    https://python-poetry.org/docs/dependency-specification/#version-constraints
 
     Args:
         version: the version currently in use
@@ -354,7 +357,7 @@ class DependencyModel(BaseModel):
 
     dependencies: Dict[str, VersionConstraint]
     name: str
-    upgrade_supported: str
+    upgrade_supported: VersionConstraint
     version: str
 
     @model_validator(mode="after")
@@ -556,7 +559,7 @@ class DataUpgrade(Object, ABC):
         if not (deps := self.peer_relation.data[self.charm.app].get("dependencies", "")):
             return None
 
-        return type(self.dependency_model)(**json.loads(deps))
+        return type(self.dependency_model).model_validate_json(deps)
 
     @property
     def upgrade_stack(self) -> Optional[List[int]]:
@@ -759,7 +762,7 @@ class DataUpgrade(Object, ABC):
         if self.charm.unit.is_leader():
             logger.debug("Persisting dependencies to upgrade relation data...")
             self.peer_relation.data[self.charm.app].update(
-                {"dependencies": json.dumps(self.dependency_model.model_dump())}
+                {"dependencies": self.dependency_model.model_dump_json()}
             )
 
     def _on_pre_upgrade_check_action(self, event: ActionEvent) -> None:
@@ -848,7 +851,7 @@ class DataUpgrade(Object, ABC):
         Raises:
             :class:`VersionError` if upgrading to existing `version` is not supported
         """
-        keys = self.dependency_model.__class__.model_fields.keys()
+        keys = self.dependency_model.model_fields.keys()
 
         compatible = True
         incompatibilities: List[Tuple[str, str, str, str]] = []
@@ -955,7 +958,7 @@ class DataUpgrade(Object, ABC):
                 if self.charm.unit.is_leader():
                     logger.debug("Persisting new dependencies to upgrade relation data...")
                     self.peer_relation.data[self.charm.app].update(
-                        {"dependencies": json.dumps(self.dependency_model.model_dump())}
+                        {"dependencies": self.dependency_model.model_dump_json()}
                     )
                 return
 
