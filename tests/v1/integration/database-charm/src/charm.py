@@ -228,13 +228,8 @@ class DatabaseCharm(CharmBase):
 
         resource = request.resource
         extra_user_roles = request.extra_user_roles
-        username = None
-        password = None
-        if content := event.requested_entity_secret_content:
-            for key, val in content.items():
-                username = key
-                password = val
-                break
+        username = request.requested_entity_name
+        password = request.requested_entity_password
 
         if resource[-1] == "*":
             resources = [f"{resource[:-1]}1", f"{resource[:-1]}2"]
@@ -307,13 +302,8 @@ class DatabaseCharm(CharmBase):
         entity_type = request.entity_type
 
         # Generate a entity-name and a entity-password for the application.
-        rolename = None
-        password = None
-        if content := event.requested_entity_secret_content:
-            for key, val in content.items():
-                rolename = key
-                password = val
-                break
+        rolename = request.requested_entity_name
+        password = request.requested_entity_password
 
         rolename = rolename or self._new_rolename()
         password = password or self._new_password()
