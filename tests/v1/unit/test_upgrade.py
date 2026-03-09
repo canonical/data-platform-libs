@@ -15,6 +15,7 @@ from charms.data_platform_libs.v1.upgrade import (
     DataUpgrade,
     DependencyModel,
     KubernetesClientError,
+    UpgradeState,
     VersionError,
     verify_requirements,
 )
@@ -307,11 +308,11 @@ def test_dependency_model_succeeds_nested():
 @pytest.mark.parametrize(
     "min_state",
     [
-        ("failed"),
-        ("idle"),
-        ("ready"),
-        ("upgrading"),
-        ("completed"),
+        UpgradeState.FAILED,
+        UpgradeState.IDLE,
+        UpgradeState.READY,
+        UpgradeState.UPGRADING,
+        UpgradeState.COMPLETED,
     ],
 )
 def test_cluster_state(harness, min_state):
@@ -327,10 +328,12 @@ def test_cluster_state(harness, min_state):
 
     with harness.hooks_disabled():
         harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/0", {"state": min_state}
+            harness.charm.upgrade.peer_relation.id, "gandalf/0", {"state": min_state.name.lower()}
         )
         harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "completed"}
+            harness.charm.upgrade.peer_relation.id,
+            "gandalf/1",
+            {"state": UpgradeState.COMPLETED.name.lower()},
         )
 
     assert harness.charm.upgrade.cluster_state == min_state
@@ -339,11 +342,11 @@ def test_cluster_state(harness, min_state):
 @pytest.mark.parametrize(
     "state",
     [
-        ("failed"),
-        ("idle"),
-        ("ready"),
-        ("upgrading"),
-        ("completed"),
+        UpgradeState.FAILED,
+        UpgradeState.IDLE,
+        UpgradeState.READY,
+        UpgradeState.UPGRADING,
+        UpgradeState.COMPLETED,
     ],
 )
 def test_idle(harness, state):
@@ -359,13 +362,15 @@ def test_idle(harness, state):
 
     with harness.hooks_disabled():
         harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/0", {"state": state}
+            harness.charm.upgrade.peer_relation.id, "gandalf/0", {"state": state.name.lower()}
         )
         harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
+            harness.charm.upgrade.peer_relation.id,
+            "gandalf/1",
+            {"state": UpgradeState.IDLE.name.lower()},
         )
 
-    assert harness.charm.upgrade.idle == (state == "idle")
+    assert harness.charm.upgrade.idle == (state.name.lower() == UpgradeState.IDLE.name.lower())
 
 
 def test_data_upgrade_raises_on_init(harness):
@@ -503,7 +508,10 @@ def test_upgrade_created_sets_idle_and_deps(harness):
     harness.add_relation("upgrade", "gandalf")
 
     assert harness.charm.upgrade.peer_relation
-    assert harness.charm.upgrade.peer_relation.data[harness.charm.unit].get("state") == "idle"
+    assert (
+        harness.charm.upgrade.peer_relation.data[harness.charm.unit].get("state")
+        == UpgradeState.IDLE.name.lower()
+    )
     assert (
         json.loads(
             harness.charm.upgrade.peer_relation.data[harness.charm.app].get("dependencies", "")
@@ -533,7 +541,9 @@ def test_pre_upgrade_check_action_fails_already_upgrading(harness, mocker):
     harness.add_relation("upgrade", "gandalf")
 
     harness.set_leader(True)
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "ready"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.READY.name.lower()}
+    )
 
     mock_event = mocker.MagicMock()
     harness.charm.upgrade._on_pre_upgrade_check_action(mock_event)
@@ -590,7 +600,9 @@ def test_pre_upgrade_check_action_builds_upgrade_stack_k8s(harness, mocker):
 
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
     harness.update_relation_data(
-        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
+        harness.charm.upgrade.peer_relation.id,
+        "gandalf/1",
+        {"state": UpgradeState.IDLE.name.lower()},
     )
 
     mock_event = mocker.MagicMock()
@@ -614,7 +626,9 @@ def test_pre_upgrade_check_recovers_stack(harness, mocker):
 
     mocker.patch.object(GandalfUpgrade, "_repair_upgrade_stack")
 
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "failed"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.FAILED.name.lower()}
+    )
     harness.set_leader(True)
 
     mock_event = mocker.MagicMock()
@@ -622,7 +636,7 @@ def test_pre_upgrade_check_recovers_stack(harness, mocker):
 
     GandalfUpgrade._repair_upgrade_stack.assert_called_once()
     assert isinstance(harness.charm.unit.status, BlockedStatus)
-    assert harness.charm.upgrade.state == "recovery"
+    assert harness.charm.upgrade.state == UpgradeState.RECOVERY
 
 
 def test_resume_upgrade_action_fails_non_leader(harness, mocker):
@@ -744,7 +758,9 @@ def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate="k8s"
     )
     harness.add_relation("upgrade", "gandalf")
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "idle"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.IDLE.name.lower()}
+    )
     harness.charm.upgrade.upgrade_stack = [0]
 
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
@@ -756,10 +772,10 @@ def test_upgrade_charm_runs_checks_on_leader(harness, mocker):
 @pytest.mark.parametrize(
     "substrate,leader,call_count,state",
     [
-        ("vm", True, 1, "ready"),
-        ("vm", False, 0, "ready"),
-        ("k8s", True, 0, "upgrading"),
-        ("k8s", False, 0, "upgrading"),
+        ("vm", True, 1, UpgradeState.READY),
+        ("vm", False, 0, UpgradeState.READY),
+        ("k8s", True, 0, UpgradeState.UPGRADING),
+        ("k8s", False, 0, UpgradeState.UPGRADING),
     ],
 )
 def test_upgrade_charm_runs_upgrade_changed_on_leader_first_to_rollback(
@@ -770,7 +786,9 @@ def test_upgrade_charm_runs_upgrade_changed_on_leader_first_to_rollback(
     )
     harness.add_relation("upgrade", "gandalf")
     harness.set_leader(leader)
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "recovery"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.RECOVERY.name.lower()}
+    )
     harness.charm.upgrade.upgrade_stack = [2, 1, 0]
 
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
@@ -784,10 +802,10 @@ def test_upgrade_charm_runs_upgrade_changed_on_leader_first_to_rollback(
 @pytest.mark.parametrize(
     "substrate,initial_state,upgrade_stack,final_state",
     [
-        ("vm", "idle", [2, 1, 0], "ready"),
-        ("vm", "recovery", [2, 0, 1], "ready"),
-        ("vm", "recovery", [0, 2, 1], "ready"),
-        ("k8s", "recovery", [2, 1, 0], "upgrading"),
+        ("vm", UpgradeState.IDLE, [2, 1, 0], UpgradeState.READY),
+        ("vm", UpgradeState.RECOVERY, [2, 0, 1], UpgradeState.READY),
+        ("vm", UpgradeState.RECOVERY, [0, 2, 1], UpgradeState.READY),
+        ("k8s", UpgradeState.RECOVERY, [2, 1, 0], UpgradeState.UPGRADING),
     ],
 )
 def test_upgrade_charm_doesnt_run_upgrade_changed_on_leader_not_first_to_rollback(
@@ -798,7 +816,9 @@ def test_upgrade_charm_doesnt_run_upgrade_changed_on_leader_not_first_to_rollbac
     )
     harness.add_relation("upgrade", "gandalf")
     harness.set_leader(True)
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": initial_state})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": initial_state.name.lower()}
+    )
     harness.charm.upgrade.upgrade_stack = upgrade_stack
 
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
@@ -809,13 +829,17 @@ def test_upgrade_charm_doesnt_run_upgrade_changed_on_leader_not_first_to_rollbac
     assert harness.charm.upgrade.state == final_state
 
 
-@pytest.mark.parametrize("substrate,state", [("vm", "ready"), ("k8s", "upgrading")])
+@pytest.mark.parametrize(
+    "substrate,state", [("vm", UpgradeState.READY), ("k8s", UpgradeState.UPGRADING)]
+)
 def test_upgrade_charm_sets_right_state(harness, mocker, substrate, state):
     harness.charm.upgrade = GandalfUpgrade(
         charm=harness.charm, dependency_model=GandalfModel(**GANDALF_DEPS), substrate=substrate
     )
     harness.add_relation("upgrade", "gandalf")
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "idle"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.IDLE.name.lower()}
+    )
     harness.charm.upgrade.upgrade_stack = [0]
 
     mocker.patch.object(harness.charm.upgrade, "_upgrade_supported_check")
@@ -852,14 +876,18 @@ def test_upgrade_changed_sets_idle_and_deps_if_all_completed(harness):
     assert not harness.charm.upgrade.stored_dependencies
 
     harness.charm.upgrade.upgrade_stack = []
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "completed"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.COMPLETED.name.lower()}
+    )
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
-    harness.set_leader()
+    harness.set_leader(True)
     harness.update_relation_data(
-        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "completed"}
+        harness.charm.upgrade.peer_relation.id,
+        "gandalf/1",
+        {"state": UpgradeState.COMPLETED.name.lower()},
     )
 
-    assert harness.charm.upgrade.state == "idle"
+    assert harness.charm.upgrade.state == UpgradeState.IDLE
     assert harness.charm.upgrade.stored_dependencies == GandalfModel(**GANDALF_DEPS)
 
 
@@ -869,17 +897,21 @@ def test_upgrade_changed_sets_idle_and_deps_if_some_completed_idle(harness):
     )
     harness.add_relation("upgrade", "gandalf")
 
-    assert not harness.charm.upgrade.stored_dependencies == GandalfModel(**GANDALF_DEPS)
+    assert harness.charm.upgrade.stored_dependencies != GandalfModel(**GANDALF_DEPS)
 
     harness.charm.upgrade.upgrade_stack = []
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "completed"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.COMPLETED.name.lower()}
+    )
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
-    harness.set_leader()
+    harness.set_leader(True)
     harness.update_relation_data(
-        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
+        harness.charm.upgrade.peer_relation.id,
+        "gandalf/1",
+        {"state": UpgradeState.IDLE.name.lower()},
     )
 
-    assert harness.charm.upgrade.state == "idle"
+    assert harness.charm.upgrade.state == UpgradeState.IDLE
     assert harness.charm.upgrade.stored_dependencies == GandalfModel(**GANDALF_DEPS)
 
 
@@ -889,13 +921,17 @@ def test_upgrade_changed_does_not_recurse_if_called_all_idle(harness, mocker):
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.upgrade_stack = []
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "idle"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.IDLE.name.lower()}
+    )
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
     harness.set_leader(True)
 
     mocker.patch.object(harness.charm.upgrade, "on_upgrade_changed")
     harness.update_relation_data(
-        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
+        harness.charm.upgrade.peer_relation.id,
+        "gandalf/1",
+        {"state": UpgradeState.IDLE.name.lower()},
     )
 
     harness.charm.upgrade.on_upgrade_changed.assert_called_once()
@@ -904,10 +940,10 @@ def test_upgrade_changed_does_not_recurse_if_called_all_idle(harness, mocker):
 @pytest.mark.parametrize(
     "pre_state,stack,call_count,post_state",
     [
-        ("idle", [0, 1], 0, "idle"),
-        ("idle", [1, 0], 0, "idle"),
-        ("ready", [0, 1], 0, "ready"),
-        ("ready", [1, 0], 1, "upgrading"),
+        (UpgradeState.IDLE, [0, 1], 0, UpgradeState.IDLE),
+        (UpgradeState.IDLE, [1, 0], 0, UpgradeState.IDLE),
+        (UpgradeState.READY, [0, 1], 0, UpgradeState.READY),
+        (UpgradeState.READY, [1, 0], 1, UpgradeState.UPGRADING),
     ],
 )
 def test_upgrade_changed_emits_upgrade_granted_only_if_top_of_stack(
@@ -921,12 +957,16 @@ def test_upgrade_changed_emits_upgrade_granted_only_if_top_of_stack(
         harness.add_relation("upgrade", "gandalf")
         harness.charm.upgrade.upgrade_stack = stack
         harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
-        harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": pre_state})
+        harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+            {"state": pre_state.name.lower()}
+        )
 
     upgrade_granted_spy = mocker.spy(harness.charm.upgrade, "_on_upgrade_granted")
 
     harness.update_relation_data(
-        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "ready"}
+        harness.charm.upgrade.peer_relation.id,
+        "gandalf/1",
+        {"state": UpgradeState.READY.name.lower()},
     )
 
     assert upgrade_granted_spy.call_count == call_count
@@ -942,16 +982,20 @@ def test_upgrade_changed_emits_upgrade_granted_only_if_all_ready(harness, mocker
         harness.add_relation("upgrade", "gandalf")
         harness.charm.upgrade.upgrade_stack = [1, 0]
         harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
-        harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "ready"})
+        harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+            {"state": UpgradeState.READY.name.lower()}
+        )
 
     upgrade_granted_spy = mocker.spy(harness.charm.upgrade, "_on_upgrade_granted")
 
     harness.update_relation_data(
-        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "idle"}
+        harness.charm.upgrade.peer_relation.id,
+        "gandalf/1",
+        {"state": UpgradeState.IDLE.name.lower()},
     )
 
     assert upgrade_granted_spy.call_count == 0
-    assert harness.charm.upgrade.state == "ready"
+    assert harness.charm.upgrade.state == UpgradeState.READY
 
 
 @pytest.mark.parametrize(
@@ -1015,14 +1059,18 @@ def test_upgrade_changed_recurses_on_leader_and_clears_stack(harness, mocker):
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.upgrade_stack = [0, 1]
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "ready"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.READY.name.lower()}
+    )
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
     harness.set_leader(True)
 
     upgrade_changed_spy = mocker.spy(harness.charm.upgrade, "on_upgrade_changed")
 
     harness.update_relation_data(
-        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "completed"}
+        harness.charm.upgrade.peer_relation.id,
+        "gandalf/1",
+        {"state": UpgradeState.COMPLETED.name.lower()},
     )
 
     # once for top of stack 1, once for leader 0
@@ -1039,13 +1087,17 @@ def test_upgrade_changed_does_not_recurse_or_change_stack_non_leader(harness, mo
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.upgrade_stack = [0, 1]
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "ready"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.READY.name.lower()}
+    )
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
 
     upgrade_changed_spy = mocker.spy(harness.charm.upgrade, "on_upgrade_changed")
 
     harness.update_relation_data(
-        harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "completed"}
+        harness.charm.upgrade.peer_relation.id,
+        "gandalf/1",
+        {"state": UpgradeState.COMPLETED.name.lower()},
     )
 
     # once for top of stack 1
@@ -1061,17 +1113,23 @@ def test_repair_upgrade_stack_puts_failed_unit_first_in_stack(harness):
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.upgrade_stack = [0, 2]
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "ready"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.READY.name.lower()}
+    )
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/2")
     harness.set_leader(True)
 
     with harness.hooks_disabled():
         harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "completed"}
+            harness.charm.upgrade.peer_relation.id,
+            "gandalf/1",
+            {"state": UpgradeState.COMPLETED.name.lower()},
         )
         harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/2", {"state": "failed"}
+            harness.charm.upgrade.peer_relation.id,
+            "gandalf/2",
+            {"state": UpgradeState.FAILED.name.lower()},
         )
 
     harness.charm.upgrade._repair_upgrade_stack()
@@ -1085,17 +1143,23 @@ def test_repair_upgrade_stack_does_not_modify_existing_stack(harness):
     )
     harness.add_relation("upgrade", "gandalf")
     harness.charm.upgrade.upgrade_stack = [0, 2, 1]
-    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update({"state": "ready"})
+    harness.charm.upgrade.peer_relation.data[harness.charm.unit].update(
+        {"state": UpgradeState.READY.name.lower()}
+    )
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/1")
     harness.add_relation_unit(harness.charm.upgrade.peer_relation.id, "gandalf/2")
     harness.set_leader(True)
 
     with harness.hooks_disabled():
         harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/1", {"state": "failed"}
+            harness.charm.upgrade.peer_relation.id,
+            "gandalf/1",
+            {"state": UpgradeState.FAILED.name.lower()},
         )
         harness.update_relation_data(
-            harness.charm.upgrade.peer_relation.id, "gandalf/2", {"state": "ready"}
+            harness.charm.upgrade.peer_relation.id,
+            "gandalf/2",
+            {"state": UpgradeState.READY.name.lower()},
         )
 
     harness.charm.upgrade._repair_upgrade_stack()
