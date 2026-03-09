@@ -515,8 +515,6 @@ class UpgradeEvents(CharmEvents):
 class DataUpgrade(Object, ABC):
     """Manages `upgrade` relation operations for in-place upgrades."""
 
-    STATES = ["recovery", "failed", "idle", "ready", "upgrading", "completed"]
-
     on = UpgradeEvents()  # pyright: ignore [reportAssignmentType]
 
     def __init__(
