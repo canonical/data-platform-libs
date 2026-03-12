@@ -348,7 +348,7 @@ class DatabaseCharm(CharmBase):
     def _on_set_relation_field(self, event: ActionEvent):
         """Set requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         if DATA_INTERFACES_VERSION > 17:
             self.database.update_relation_data(
                 relation.id, {event.params["field"]: event.params["value"]}
@@ -361,7 +361,7 @@ class DatabaseCharm(CharmBase):
     def _on_delete_relation_field(self, event: ActionEvent):
         """Delete requested relation field."""
         relation = self._get_relation(event.params["relation_id"])
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         if DATA_INTERFACES_VERSION > 17:
             self.database.delete_relation_data(relation.id, [event.params["field"]])
         else:
@@ -414,7 +414,7 @@ class DatabaseCharm(CharmBase):
         """Set requested relation field."""
         component = event.params["component"]
 
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         if DATA_INTERFACES_VERSION <= 17:
             relation = self.model.get_relation(PEER)
             if component == "app":
@@ -439,7 +439,7 @@ class DatabaseCharm(CharmBase):
         component = event.params["component"]
         count = event.params["count"]
 
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         for cnt in range(count):
             value = event.params["value"] + f"{cnt}"
             if DATA_INTERFACES_VERSION <= 17:
@@ -465,7 +465,7 @@ class DatabaseCharm(CharmBase):
         """Set requested relation field."""
         component = event.params["component"]
 
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         if DATA_INTERFACES_VERSION <= 17:
             relation = self.model.get_relation(PEER)
             if component == "app":
@@ -495,7 +495,7 @@ class DatabaseCharm(CharmBase):
         """Delete requested relation field."""
         component = event.params["component"]
 
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         if DATA_INTERFACES_VERSION <= 17:
             relation = self.model.get_relation(PEER)
             if component == "app":
@@ -528,7 +528,7 @@ class DatabaseCharm(CharmBase):
         """Delete requested relation field."""
         component = event.params["component"]
 
-        # Charms should be compatible with old vesrions, to simulate rolling upgrade
+        # Charms should be compatible with old versions, to simulate rolling upgrade
         if DATA_INTERFACES_VERSION <= 17:
             return
 
