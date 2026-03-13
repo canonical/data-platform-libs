@@ -208,7 +208,7 @@ class DatabaseCharm(CharmBase):
                     "command": "/usr/local/bin/docker-entrypoint.sh postgres",
                     "startup": "enabled",
                     "environment": {
-                        "PGDATA": "/var/lib/postgresql/data/pgdata",
+                        "PGDATA": "/var/lib/postgresql/data/pgdata/data",
                         "POSTGRES_PASSWORD": self._stored.password,
                     },
                 }
@@ -228,8 +228,8 @@ class DatabaseCharm(CharmBase):
 
         resource = request.resource
         extra_user_roles = request.extra_user_roles
-        username = request.requested_entity_name
-        password = request.requested_entity_password
+        username = request.entity_name
+        password = request.entity_password
 
         if resource[-1] == "*":
             resources = [f"{resource[:-1]}1", f"{resource[:-1]}2"]
@@ -302,8 +302,8 @@ class DatabaseCharm(CharmBase):
         entity_type = request.entity_type
 
         # Generate a entity-name and a entity-password for the application.
-        rolename = request.requested_entity_name
-        password = request.requested_entity_password
+        rolename = request.entity_name
+        password = request.entity_password
 
         rolename = rolename or self._new_rolename()
         password = password or self._new_password()

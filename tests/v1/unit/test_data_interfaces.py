@@ -1102,7 +1102,7 @@ class DataRequirerBaseTests(ABC):
         """Test consistency restrictions on direct secret usage and helper values."""
         # Try to set password without entity name
         with pytest.raises(ValueError) as e:
-            RequirerCommonModel(requested_entity_password="testpass")
+            RequirerCommonModel(entity_password="testpass")
         assert "Unable to set entity password without an entity name" in str(e.value)
 
 

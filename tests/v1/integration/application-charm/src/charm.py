@@ -125,7 +125,7 @@ class ApplicationCharm(CharmBase):
             "first-database-username",
             requests=[
                 RequirerCommonModel(
-                    resource=database_name, entity_type="USER", requested_entity_name="testuser"
+                    resource=database_name, entity_type="USER", entity_name="testuser"
                 )
             ],
             response_model=ExtendedResponseModel,

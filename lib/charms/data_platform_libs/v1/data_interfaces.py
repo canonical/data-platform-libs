@@ -289,7 +289,6 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
-    PlainSerializer,
     SerializationInfo,
     SerializerFunctionWrapHandler,
     Tag,
@@ -837,9 +836,16 @@ class BaseCommonModel(BaseModel):
                 if not secret_uri:
                     continue
 
-                secret = repository.get_secret(
-                    secret_group, secret_uri=secret_uri, short_uuid=short_uuid
-                )
+                try:
+                    secret = repository.get_secret(
+                        secret_group, secret_uri=secret_uri, short_uuid=short_uuid
+                    )
+                except SecretNotFoundError:
+                    # v0 deletes the requested entity secret
+                    if secret_group == "requested-entity":
+                        logger.debug("Missing requested entity secret")
+                        continue
+                    raise
 
                 if not secret:
                     logger.info(f"No secret for group {secret_group} and short uuid {short_uuid}")
@@ -1006,9 +1012,12 @@ class RequirerCommonModel(CommonModel):
     entity_permissions: list[EntityPermissionModel] | None = Field(default=None)
     secret_mtls: SecretString | None = Field(default=None)
     mtls_cert: MtlsSecretStr = Field(default=None)
-    secret_requested_entity: SecretString | None = Field(default=None)
-    requested_entity_name: RequestedEntitySecretStr = Field(default=None)
-    requested_entity_password: RequestedEntitySecretStr = Field(default=None)
+    secret_requested_entity: SecretString | None = Field(
+        default=None,
+        validation_alias=AliasChoices("requested-entity-secret", "secret-requested-entity"),
+    )
+    entity_name: RequestedEntitySecretStr = Field(default=None)
+    entity_password: RequestedEntitySecretStr = Field(default=None)
     prefix_matching: Literal["all", "only-existing"] | None = Field(default=None)
 
     @model_validator(mode="after")
@@ -1023,17 +1032,10 @@ class RequirerCommonModel(CommonModel):
         if self.entity_type == "GROUP" and self.extra_user_roles:
             raise ValueError("Inconsistent entity information. Use extra_group_roles instead")
 
-        if self.requested_entity_password and not self.requested_entity_name:
+        if self.entity_password and not self.entity_name:
             raise ValueError("Unable to set entity password without an entity name")
 
         return self
-
-
-def csv_list_sorter(el: str | None) -> str | None:
-    """Serialization sorter for comma separated lists."""
-    if el:
-        return ",".join(sorted(el.split(",")))
-    return None
 
 
 class ProviderCommonModel(CommonModel):
@@ -1045,10 +1047,8 @@ class ProviderCommonModel(CommonModel):
     secret_extra is a secret URI for all additional secrets requested.
     """
 
-    endpoints: Annotated[str | None, PlainSerializer(csv_list_sorter)] = Field(default=None)
-    read_only_endpoints: Annotated[str | None, PlainSerializer(csv_list_sorter)] = Field(
-        default=None
-    )
+    endpoints: str | None = Field(default=None)
+    read_only_endpoints: str | None = Field(default=None)
     secret_user: SecretString | None = Field(default=None)
     secret_tls: SecretString | None = Field(default=None)
     secret_extra: SecretString | None = Field(default=None)
@@ -1067,7 +1067,7 @@ class ResourceProviderModel(ProviderCommonModel):
     entity_name: EntitySecretStr = Field(default=None)
     entity_password: EntitySecretStr = Field(default=None)
     version: str | None = Field(default=None)
-    prefix_resources: Annotated[str | None, PlainSerializer(csv_list_sorter)] = Field(default=None)
+    prefix_resources: str | None = Field(default=None)
 
 
 class RequirerDataContractV0(RequirerCommonModel):
@@ -2660,6 +2660,11 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
             self.interface.write_model(
                 relation_id, response, context={"version": "v0"}
             )  # {"database": "database-name", "secret-user": "uri", ...}
+            # Set expected prefix field if present
+            if response.prefix_resources:
+                self.interface.repository(relation_id).write_field(
+                    "prefix-databases", response.prefix_resources
+                )
             return
 
         model = self.interface.build_model(relation_id, DataContractV1[response.__class__])
