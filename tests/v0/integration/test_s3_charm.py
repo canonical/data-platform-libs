@@ -3,7 +3,6 @@
 # See LICENSE file for licensing details.
 import logging
 
-import pytest
 from jubilant_adapters import JujuFixture, gather
 
 from .helpers import get_connection_info
@@ -17,7 +16,6 @@ FIRST_S3_RELATION_NAME = "first-s3-credentials"
 SECOND_S3_RELATION_NAME = "second-s3-credentials"
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_charms(juju: JujuFixture, application_s3_charm, s3_charm, dp_libs_ubuntu_series):
     """Deploy both charms (application and s3 provider app) to use in the tests."""
     # Deploy both charms (2 units for each application to test that later they correctly
@@ -37,7 +35,6 @@ def test_deploy_charms(juju: JujuFixture, application_s3_charm, s3_charm, dp_lib
     )
 
 
-@pytest.mark.abort_on_fail
 def test_s3_relation_with_charm_libraries(juju: JujuFixture):
     """Test basic functionality of s3-credentials relation interface."""
     # Relate the charms and wait for them exchanging some connection data.

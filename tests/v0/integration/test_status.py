@@ -2,7 +2,6 @@ import json
 import logging
 from pathlib import Path
 
-import pytest
 import yaml
 from jubilant_adapters import JujuFixture, gather
 
@@ -22,8 +21,6 @@ DATABASE_APP_METADATA = yaml.safe_load(
 RELATION_NAME = "database-with-status"
 
 
-@pytest.mark.abort_on_fail
-@pytest.mark.skip_if_deployed
 def test_deploy_charms(
     juju: JujuFixture,
     application_charm,
@@ -60,7 +57,6 @@ def test_deploy_charms(
     juju.ext.model.wait_for_idle(apps=APP_NAMES, status="active", idle_period=30)
 
 
-@pytest.mark.abort_on_fail
 def test_relate_application(juju: JujuFixture):
     # Relate the charms and wait for them exchanging some connection data.
     juju.ext.model.add_relation(DATABASE_APP_NAME, f"{APPLICATION_APP_1}:{RELATION_NAME}")
@@ -68,7 +64,6 @@ def test_relate_application(juju: JujuFixture):
     juju.ext.model.wait_for_idle(apps=APP_NAMES, status="active")
 
 
-@pytest.mark.abort_on_fail
 def test_raise_status(juju: JujuFixture):
     app_1_rel = next(iter(juju.ext.model.applications[APPLICATION_APP_1].relations))
     app_2_rel = next(iter(juju.ext.model.applications[APPLICATION_APP_2].relations))
@@ -130,7 +125,6 @@ def test_raise_status(juju: JujuFixture):
     # TODO:
 
 
-@pytest.mark.abort_on_fail
 def test_resolve_status(juju: JujuFixture):
     app_1_rel = next(iter(juju.ext.model.applications[APPLICATION_APP_1].relations))
     app_2_rel = next(iter(juju.ext.model.applications[APPLICATION_APP_2].relations))
@@ -156,7 +150,6 @@ def test_resolve_status(juju: JujuFixture):
     assert "[]" in juju.ext.model.applications[APPLICATION_APP_2].units[0].workload_status_message
 
 
-@pytest.mark.abort_on_fail
 def test_clear_statuses(juju: JujuFixture):
     app_1_rel = next(iter(juju.ext.model.applications[APPLICATION_APP_1].relations))
     db_unit = juju.ext.model.applications[DATABASE_APP_NAME].units[0].name

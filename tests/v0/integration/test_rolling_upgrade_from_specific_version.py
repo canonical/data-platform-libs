@@ -82,7 +82,6 @@ def upgrade_to_new_version(juju, app_name):
 
 
 @pytest.mark.usefixtures("fetch_old_versions")
-@pytest.mark.abort_on_fail
 def test_deploy_charms(
     juju: JujuFixture, application_charm, database_charm, dp_libs_ubuntu_series
 ):
@@ -118,7 +117,6 @@ def test_deploy_charms(
 # -----------------------------------------------------
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.parametrize("component", ["app", "unit"])
 def test_peer_relation(component, juju: JujuFixture):
     """Peer relation safe across upgrades."""
@@ -216,7 +214,6 @@ def test_peer_relation(component, juju: JujuFixture):
 # -----------------------------------------------------
 
 
-@pytest.mark.abort_on_fail
 def test_unbalanced_versions_req_old_vs_prov_new(
     juju: JujuFixture,
 ):
@@ -270,7 +267,6 @@ def test_unbalanced_versions_req_old_vs_prov_new(
     assert action.results.get("value") == password
 
 
-@pytest.mark.abort_on_fail
 def test_rolling_upgrade_requires_old_vs_provides_new(juju: JujuFixture):
     """Upgrading Requires to the latest version of the libs."""
     upgrade_to_new_version(juju, APPLICATION_APP_NAME)
@@ -325,7 +321,6 @@ def test_rolling_upgrade_requires_old_vs_provides_new(juju: JujuFixture):
     assert not action.results.get("value")
 
 
-@pytest.mark.abort_on_fail
 def test_rolling_upgrade_requires_old_vs_provides_new_upgrade_new_secret(
     juju: JujuFixture,
 ):
@@ -400,7 +395,6 @@ def test_rolling_upgrade_requires_old_vs_provides_new_upgrade_new_secret(
 # -----------------------------------------------------
 
 
-@pytest.mark.abort_on_fail
 def test_unbalanced_versions_req_new_vs_prov_old(
     juju: JujuFixture,
 ):
@@ -432,7 +426,6 @@ def test_unbalanced_versions_req_new_vs_prov_old(
     assert action.results.get("value")
 
 
-@pytest.mark.abort_on_fail
 def test_rolling_upgrade_requires_new_vs_provides_old(
     juju: JujuFixture,
 ):
@@ -489,7 +482,6 @@ def test_rolling_upgrade_requires_new_vs_provides_old(
     assert not action.results.get("value")
 
 
-@pytest.mark.abort_on_fail
 def test_rolling_upgrade_requires_new_vs_provides_old_upgrade_new_secret(
     juju: JujuFixture,
 ):

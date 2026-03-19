@@ -18,8 +18,6 @@ SINK_REL = "connect-sink"
 PROV_SECRET_PREFIX = "secret-"
 
 
-@pytest.mark.abort_on_fail
-@pytest.mark.skip_if_deployed
 @pytest.mark.log_errors_allowed(
     'ERROR juju.worker.meterstatus error running "meter-status-changed": charm missing from disk'
 )
@@ -45,7 +43,6 @@ def test_deploy_charms(juju: JujuFixture, application_charm: str, kafka_connect_
     assert juju.ext.model.applications[PROVIDER_APP_NAME].status == "active"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_connect_client_relation_with_charm_libraries(
     juju: JujuFixture, request: pytest.FixtureRequest
@@ -83,7 +80,6 @@ def test_connect_client_relation_with_charm_libraries(
     assert endpoints == "http://worker1:8083,http://worker2:8083"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_kafka_connect_credentials_change(juju: JujuFixture, request: pytest.FixtureRequest):
     """Test Kafka Connect credentials change functionality."""
@@ -120,7 +116,6 @@ def test_kafka_connect_credentials_change(juju: JujuFixture, request: pytest.Fix
     assert new_password == "newpass"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_kafka_connect_endpoints_change(juju: JujuFixture, request: pytest.FixtureRequest):
     """Test Kafka Connect endpoints change functionality."""

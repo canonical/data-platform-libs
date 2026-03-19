@@ -13,14 +13,12 @@ logger = logging.getLogger(__name__)
 APP_NAME = "secrets-test"
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_charms(juju: JujuFixture, secrets_charm):
     """Deploy both charm to use in the tests."""
     juju.ext.model.deploy(secrets_charm, application_name=APP_NAME, num_units=2, series="jammy")
     juju.ext.model.wait_for_idle(apps=[APP_NAME], status="active", wait_for_exact_units=2)
 
 
-@pytest.mark.abort_on_fail
 def test_add_get_secret_app(juju: JujuFixture):
     """Test basic functionality of getting/setting cached secrets."""
     leader_id = get_leader_id(juju, APP_NAME)
@@ -43,7 +41,6 @@ def test_add_get_secret_app(juju: JujuFixture):
     assert action.results.get("grandmas-apple-pie") == {"secret-ingredient": "cinnamon"}
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.log_errors_allowed(
     'cannot apply changes: creating secrets: secret with label "grandmas-apple-pie" already exists'
 )
@@ -62,7 +59,6 @@ def test_secret_label_unique(juju: JujuFixture):
     action.wait()
 
 
-@pytest.mark.abort_on_fail
 def test_add_get_secret_unit(juju: JujuFixture):
     unit_id = get_non_leader_id(juju, APP_NAME)
     unit_name = f"{APP_NAME}/{unit_id}"
@@ -86,7 +82,6 @@ def test_add_get_secret_unit(juju: JujuFixture):
     }
 
 
-@pytest.mark.abort_on_fail
 def test_set_secret(juju: JujuFixture):
     """Test basic functionality of getting/setting cached secrets."""
     leader_id = get_leader_id(juju, APP_NAME)

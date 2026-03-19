@@ -19,7 +19,6 @@ ROLES_RELATION_NAME = "opensearch-client-roles"
 PROV_SECRET_PREFIX = "secret-"
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_charms(juju: JujuFixture, application_charm, opensearch_charm):
     """Deploy both charms (application and the testing opensearch app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
@@ -42,7 +41,6 @@ def test_deploy_charms(juju: JujuFixture, application_charm, opensearch_charm):
     )
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_without_juju_secrets")
 def test_opensearch_relation_with_charm_libraries(juju: JujuFixture):
     """Test basic functionality of opensearch relation interface."""
@@ -76,7 +74,6 @@ def test_opensearch_relation_with_charm_libraries(juju: JujuFixture):
     assert index == "test-index"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_opensearch_relation_with_charm_libraries_secrets(juju: JujuFixture):
     """Test basic functionality of opensearch relation interface."""
@@ -112,7 +109,6 @@ def test_opensearch_relation_with_charm_libraries_secrets(juju: JujuFixture):
     assert index == "test-index"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_opensearch_relation_secret_changed(juju: JujuFixture):
     """Test basic functionality of opensearch relation interface."""
@@ -141,7 +137,6 @@ def test_opensearch_relation_secret_changed(juju: JujuFixture):
         assert unit.workload_status_message == "opensearch_authentication_updated"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_without_juju_secrets")
 def test_opensearch_roles_relation_with_charm_libraries(juju: JujuFixture):
     """Test basic functionality of opensearch-roles relation interface."""
@@ -169,7 +164,6 @@ def test_opensearch_roles_relation_with_charm_libraries(juju: JujuFixture):
     assert entity_pass == "password"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_opensearch_roles_relation_with_charm_libraries_secrets(juju: JujuFixture):
     """Test basic functionality of opensearch relation interface."""

@@ -56,7 +56,6 @@ def upgrade_to_secrets(juju, app_name):
         x, stdout, y = juju.juju(*complete_command.split())
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_charms(
     juju: JujuFixture, application_charm, database_charm, dp_libs_ubuntu_series
 ):
@@ -92,7 +91,6 @@ def test_deploy_charms(
 # -----------------------------------------------------
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.parametrize("component", ["app", "unit"])
 def test_peer_relation(component, juju: JujuFixture):
     """Relating Requires (databag only) with Provides (that could use secrets).
@@ -219,7 +217,6 @@ def test_peer_relation(component, juju: JujuFixture):
 # -----------------------------------------------------
 
 
-@pytest.mark.abort_on_fail
 def test_unbalanced_versions_falling_back_to_databag_req_databag_vs_prov_secrets(
     juju: JujuFixture,
 ):
@@ -273,7 +270,6 @@ def test_unbalanced_versions_falling_back_to_databag_req_databag_vs_prov_secrets
     assert action.results.get("value") == password
 
 
-@pytest.mark.abort_on_fail
 def test_transparent_upgrade_requires_databag_vs_provides_secrets(juju: JujuFixture):
     """Upgrading Requires to use secrets (if possible).
 
@@ -357,7 +353,6 @@ def test_transparent_upgrade_requires_databag_vs_provides_secrets(juju: JujuFixt
     assert not action.results.get("value")
 
 
-@pytest.mark.abort_on_fail
 def test_transparent_upgrade_requires_databag_vs_provides_secrets_upgrade_new_secret(
     juju: JujuFixture,
 ):
@@ -455,7 +450,6 @@ def test_transparent_upgrade_requires_databag_vs_provides_secrets_upgrade_new_se
 # -----------------------------------------------------
 
 
-@pytest.mark.abort_on_fail
 def test_unbalanced_versions_falling_back_to_databag_req_secrets_vs_prov_databag(
     juju: JujuFixture,
 ):
@@ -506,7 +500,6 @@ def test_unbalanced_versions_falling_back_to_databag_req_secrets_vs_prov_databag
     assert action.results.get("value") == password
 
 
-@pytest.mark.abort_on_fail
 def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_databag(
     juju: JujuFixture,
 ):
@@ -592,7 +585,6 @@ def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_databa
     assert not action.results.get("value")
 
 
-@pytest.mark.abort_on_fail
 def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_databag_upgrade_new_secret(
     juju: JujuFixture,
 ):

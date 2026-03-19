@@ -54,7 +54,6 @@ NUM_OTHER_DB = 1
 NUM_APP = 2
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_charms(
     juju: JujuFixture,
     application_charm,
@@ -122,7 +121,6 @@ def test_deploy_charms(
     )
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_without_juju_secrets")
 @pytest.mark.parametrize("component", ["app", "unit"])
 def test_peer_relation(component, juju: JujuFixture):
@@ -195,7 +193,6 @@ def test_peer_relation(component, juju: JujuFixture):
     )
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 @pytest.mark.parametrize("component", ["app", "unit"])
 def test_peer_relation_secrets(component, juju: JujuFixture):
@@ -299,7 +296,6 @@ def test_peer_relation_secrets(component, juju: JujuFixture):
     action.wait()
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 @pytest.mark.parametrize("component", ["app", "unit"])
 def test_peer_relation_secret_revisions(component, juju: JujuFixture):
@@ -345,7 +341,6 @@ def test_peer_relation_secret_revisions(component, juju: JujuFixture):
     assert changed_secret_revision == unchanged_secret_revision
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 @pytest.mark.parametrize("component", ["app", "unit"])
 def test_peer_relation_set_secret(component, juju: JujuFixture):
@@ -425,7 +420,6 @@ def test_peer_relation_set_secret(component, juju: JujuFixture):
     action.wait()
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_peer_relation_non_leader_unit_secrets(juju: JujuFixture):
     """Testing peer relation using the DataPeer class."""
@@ -523,7 +517,6 @@ def test_peer_relation_non_leader_unit_secrets(juju: JujuFixture):
     action.wait()
 
 
-@pytest.mark.abort_on_fail
 def test_peer_relation_non_leader_can_read_app_data(juju: JujuFixture):
     """Testing peer relation using the DataPeer class."""
     # Setting and verifying two secret fields
@@ -557,7 +550,6 @@ def test_peer_relation_non_leader_can_read_app_data(juju: JujuFixture):
     assert action.results.get("value") == "plain text"
 
 
-@pytest.mark.abort_on_fail
 def test_other_peer_relation(juju: JujuFixture):
     """Testing peer relation using the DataPeer class."""
     # Setting and verifying two secret fields
@@ -596,7 +588,6 @@ def test_other_peer_relation(juju: JujuFixture):
                 assert action.results.get(unit.name.replace("/", "-")) == "blablabla2"
 
 
-@pytest.mark.abort_on_fail
 def test_other_peer_relation_scale(juju: JujuFixture):
     """The scaling test is the 'continuation' of the previous (test_other_peer_relation()) test.
 
@@ -646,7 +637,6 @@ def test_other_peer_relation_scale(juju: JujuFixture):
         assert action.results.get(unit) is None
 
 
-@pytest.mark.abort_on_fail
 def test_database_relation_with_charm_libraries(juju: JujuFixture):
     """Test basic functionality of database relation interface."""
     # Relate the charms and wait for them exchanging some connection data.
@@ -705,7 +695,6 @@ def test_user_with_extra_roles(juju: JujuFixture):
     connection.close()
 
 
-@pytest.mark.abort_on_fail
 def test_postgresql_plugin(juju: JujuFixture):
     """Test that the application charm can check whether a plugin is enabled."""
     # Check that the plugin is disabled.
@@ -785,7 +774,6 @@ def test_secrets_usage_correct_secrets(juju: JujuFixture, application_charm):
     )
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_without_juju_secrets")
 def test_database_roles_relation_with_charm_libraries(juju: JujuFixture):
     """Test basic functionality of database-roles relation interface."""
@@ -807,7 +795,6 @@ def test_database_roles_relation_with_charm_libraries(juju: JujuFixture):
     assert entity_pass is not None
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_database_roles_relation_with_charm_libraries_secrets(juju: JujuFixture):
     """Test basic functionality of database-roles relation interface."""
@@ -833,7 +820,6 @@ def test_database_roles_relation_with_charm_libraries_secrets(juju: JujuFixture)
     assert entity_pass is not None
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_database_username(juju: JujuFixture):
     """Test basic functionality of database-roles relation interface."""
@@ -859,7 +845,6 @@ def test_database_username(juju: JujuFixture):
     assert password is not None
 
 
-@pytest.mark.abort_on_fail
 def test_database_prefix(juju: JujuFixture):
     """Test basic functionality of database-roles relation interface."""
     # Relate the charms and wait for them exchanging some connection data.
@@ -1057,7 +1042,6 @@ def test_provider_with_additional_secrets(juju: JujuFixture, database_charm):
     assert topsecret1 != topsecret2
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_relation_secret_revisions(juju: JujuFixture):
     """Check that only a content change triggers the emission of a new revision."""
@@ -1274,7 +1258,6 @@ def test_provider_get_set_delete_fields_secrets(field, value, relation_field, ju
     assert action.results["return-code"] == 0
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.log_errors_allowed("Can't delete secret for relation")
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_provider_deleted_secret_is_removed(juju: JujuFixture):

@@ -55,6 +55,14 @@ def juju(request: pytest.FixtureRequest):
 
 
 @pytest.fixture(scope="module", autouse=True)
+def switch_model(juju: JujuFixture):
+    if not juju.model:
+        return
+
+    juju.cli("switch", juju.model, include_model=False)
+
+
+@pytest.fixture(scope="module", autouse=True)
 def copy_data_interfaces_library_into_charm(juju: JujuFixture):
     """Copy the data_interfaces library to the different charm folder."""
     library_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"

@@ -22,9 +22,7 @@ TOPIC_RELATION_NAME_SPLIT_PATTERN = "kafka-split-pattern-client"
 PROV_SECRET_PREFIX = "secret-"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.log_errors_allowed
-@pytest.mark.skip_if_deployed
 def test_deploy_charms(juju: JujuFixture, application_charm, kafka_charm):
     """Deploy both charms (application and the testing kafka app) to use in the tests."""
     # Deploy both charms (1 unit for each application to test that later they correctly
@@ -52,7 +50,6 @@ def test_deploy_charms(juju: JujuFixture, application_charm, kafka_charm):
     )
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_without_juju_secrets")
 def test_kafka_relation_with_charm_libraries(juju: JujuFixture):
     """Test basic functionality of kafka relation interface."""
@@ -91,7 +88,6 @@ def test_kafka_relation_with_charm_libraries(juju: JujuFixture):
     assert topic == "test-topic"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_without_juju_secrets")
 def test_kafka_relation_with_charm_libraries_split_pattern(juju: JujuFixture):
     """Test basic functionality of kafka relation interface."""
@@ -137,7 +133,6 @@ def test_kafka_relation_with_charm_libraries_split_pattern(juju: JujuFixture):
     assert topic == "test-topic-split-pattern"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_kafka_relation_with_charm_libraries_secrets(juju: JujuFixture):
     """Test basic functionality of kafka relation interface."""
@@ -217,7 +212,6 @@ def test_kafka_bootstrap_server_changed(juju: JujuFixture):
         assert unit.workload_status_message == ""
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_kafka_mtls(juju: JujuFixture):
     """Tests mtls-cert is set as a secret from the requirer side and proper event triggered on provider side."""
@@ -252,7 +246,6 @@ def test_kafka_mtls(juju: JujuFixture):
     assert unit_cert.strip() == mtls_cert.strip()
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_without_juju_secrets")
 def test_kafka_roles_relation_with_charm_libraries(juju: JujuFixture):
     """Test basic functionality of kafka-roles relation interface."""
@@ -278,7 +271,6 @@ def test_kafka_roles_relation_with_charm_libraries(juju: JujuFixture):
     assert entity_pass == "password"
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("only_with_juju_secrets")
 def test_kafka_roles_relation_with_charm_libraries_secrets(juju: JujuFixture):
     """Test basic functionality of kafka-roles relation interface."""
