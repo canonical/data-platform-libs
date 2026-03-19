@@ -13,7 +13,7 @@ from jubilant_adapters import JujuFixture, temp_model_fixture
 
 logger = logging.getLogger(__name__)
 
-USE_CACHED_BUILD = bool(os.environ.get("CI", False))
+USE_CACHED_BUILD = False
 
 
 @pytest.fixture(scope="session")
