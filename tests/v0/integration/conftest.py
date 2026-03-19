@@ -6,13 +6,14 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from pathlib import Path
 from subprocess import check_call, check_output
 
 import pytest
-from pytest_operator.plugin import OpsTest
+from jubilant_adapters import JujuFixture, temp_model_fixture
 
 logger = logging.getLogger(__name__)
+
+USE_CACHED_BUILD = bool(os.environ.get("CI", False))
 
 
 @pytest.fixture(scope="session")
@@ -21,31 +22,40 @@ def dp_libs_ubuntu_series(pytestconfig) -> str:
         return pytestconfig.option.os_series
 
 
+def pytest_addoption(parser):
+    """Defines pytest parsers."""
+    parser.addoption(
+        "--model",
+        action="store",
+        help="Juju model to use; if not provided, a new model "
+        "will be created for each test which requires one",
+    )
+    parser.addoption(
+        "--keep-models",
+        action="store_true",
+        help="Keep models handled by opstest, can be overridden in track_model",
+    )
+
+
 @pytest.fixture(scope="module")
-def ops_test(ops_test: OpsTest, pytestconfig) -> OpsTest:
-    """Re-defining OpsTest.build_charm in a way that it takes CI caching and build parameters into account.
+def juju(request: pytest.FixtureRequest):
+    """Pytest fixture that wraps :meth:`jubilant.with_model`.
 
-    Build parameters (for charms available for multiple OS versions) are considered both when building the
-    charm, or when fetching pre-built, CI cached version of it.
+    This adds command line parameter ``--keep-models`` (see help for details).
     """
-    _build_charm = ops_test.build_charm
+    model = request.config.getoption("--model")
+    keep_models = bool(request.config.getoption("--keep-models"))
 
-    # Add bases_index option (indicating which OS version to use)
-    # when building the charm within the scope of the test run
-    async def build_charm(charm_path, bases_index: int = None) -> Path:
-        if not bases_index and pytestconfig.option.build_bases_index is not None:
-            bases_index = pytestconfig.option.build_bases_index
-
-        logger.info(f"Building charm {charm_path} with base index {bases_index}")
-
-        return await _build_charm(charm_path, bases_index=bases_index)
-
-    ops_test.build_charm = build_charm
-    return ops_test
+    if model:
+        juju = JujuFixture(model=model)
+        yield juju
+    else:
+        with temp_model_fixture(keep=keep_models) as juju:
+            yield juju
 
 
 @pytest.fixture(scope="module", autouse=True)
-def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
+def copy_data_interfaces_library_into_charm(juju: JujuFixture):
     """Copy the data_interfaces library to the different charm folder."""
     library_path = "lib/charms/data_platform_libs/v0/data_interfaces.py"
     install_path = "tests/v0/integration/database-charm/" + library_path
@@ -65,7 +75,7 @@ def copy_data_interfaces_library_into_charm(ops_test: OpsTest):
 
 
 @pytest.fixture(scope="module", autouse=True)
-def copy_s3_library_into_charm(ops_test: OpsTest):
+def copy_s3_library_into_charm(juju: JujuFixture):
     """Copy the s3 library to the applications charm folder."""
     library_path = "lib/charms/data_platform_libs/v0/s3.py"
     install_path_provider = "tests/v0/integration/s3-charm/" + library_path
@@ -75,71 +85,71 @@ def copy_s3_library_into_charm(ops_test: OpsTest):
 
 
 @pytest.fixture(scope="module")
-async def application_charm(ops_test: OpsTest):
+def application_charm(juju: JujuFixture):
     """Build the application charm."""
     charm_path = "tests/v0/integration/application-charm"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(scope="module")
-async def application_charm_etcd_client(ops_test: OpsTest):
+def application_charm_etcd_client(juju: JujuFixture):
     """Build the application charm."""
     charm_path = "tests/v0/integration/application-charm-etcd-client"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(scope="module")
-async def database_charm(ops_test: OpsTest):
+def database_charm(juju: JujuFixture):
     """Build the database charm."""
     charm_path = "tests/v0/integration/database-charm"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(scope="module")
-async def dummy_database_charm(ops_test: OpsTest):
+def dummy_database_charm(juju: JujuFixture):
     """Build the database charm."""
     charm_path = "tests/v0/integration/dummy-database-charm"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(scope="module")
-async def application_s3_charm(ops_test: OpsTest):
+def application_s3_charm(juju: JujuFixture):
     """Build the application-s3 charm."""
     charm_path = "tests/v0/integration/application-s3-charm"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(scope="module")
-async def s3_charm(ops_test: OpsTest):
+def s3_charm(juju: JujuFixture):
     """Build the S3 charm."""
     charm_path = "tests/v0/integration/s3-charm"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(scope="module")
-async def kafka_charm(ops_test: OpsTest):
+def kafka_charm(juju: JujuFixture):
     """Build the Kafka charm."""
     charm_path = "tests/v0/integration/kafka-charm"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(scope="module")
-async def kafka_connect_charm(ops_test: OpsTest):
+def kafka_connect_charm(juju: JujuFixture):
     """Build the Kafka Connect dummy charm."""
     charm_path = "tests/v0/integration/kafka-connect-charm"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(scope="module")
-async def opensearch_charm(ops_test: OpsTest):
+def opensearch_charm(juju: JujuFixture):
     """Build the OpenSearch charm.
 
     TODO we could simplify a lot of these charm builds by having a single test charm that includes
@@ -147,20 +157,20 @@ async def opensearch_charm(ops_test: OpsTest):
     data-integrator charm repo.
     """
     charm_path = "tests/v0/integration/opensearch-charm"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(scope="module")
-async def secrets_charm(ops_test: OpsTest):
+def secrets_charm(juju: JujuFixture):
     """Build the secrets charm."""
     charm_path = "tests/v0/integration/secrets-charm"
-    charm = await ops_test.build_charm(charm_path)
+    charm = juju.ext.build_charm(charm_path, use_cache=USE_CACHED_BUILD)
     return charm
 
 
 @pytest.fixture(autouse=True)
-async def without_errors(ops_test: OpsTest, request):
+def without_errors(juju: JujuFixture, request):
     """This fixture is to list all those errors that mustn't occur during execution."""
     # To be executed after the tests
     now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -177,7 +187,7 @@ async def without_errors(ops_test: OpsTest, request):
         if not whitelist:
             return
 
-    _, dbg_log, _ = await ops_test.juju("debug-log", "--ms", "--replay")
+    _, dbg_log, _ = juju.juju("debug-log", "--ms", "--replay")
     lines = dbg_log.split("\n")
     for index, line in enumerate(lines):
         logitems = line.split(" ")
