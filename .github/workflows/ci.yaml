@@ -24,7 +24,7 @@ jobs:
         libs-version: [0, 1]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install tox
         # TODO: Consider replacing with custom image on self-hosted runner OR pinning version
         run: python3 -m pip install tox
@@ -46,7 +46,7 @@ jobs:
             juju-version: {libjuju-version: "2.9.49.1"}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install tox
         # TODO: Consider replacing with custom image on self-hosted runner OR pinning version
         run: python3 -m pip install tox
@@ -138,7 +138,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup k8s controller
         if: ${{ 'microk8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
@@ -157,7 +157,7 @@ jobs:
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "2.x/stable"
       - name: Download packed charm(s)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.artifact-name }}
       - name: Select tests
@@ -224,7 +224,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup k8s controller
         if: ${{ 'microk8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
@@ -243,7 +243,7 @@ jobs:
           juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
           charmcraft-channel: "3.x/stable"
       - name: Download packed charm(s)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.artifact-name }}
       - name: Select tests
