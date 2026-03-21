@@ -1017,7 +1017,7 @@ class RequirerCommonModel(CommonModel):
         validation_alias=AliasChoices("requested-entity-secret", "secret-requested-entity"),
     )
     entity_name: RequestedEntitySecretStr = Field(default=None)
-    entity_password: RequestedEntitySecretStr = Field(default=None)
+    entity_password: RequestedEntitySecretStr = Field(default=None, serialization_alias="password")
     prefix_matching: Literal["all", "only-existing"] | None = Field(default=None)
 
     @model_validator(mode="after")
