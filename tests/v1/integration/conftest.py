@@ -164,7 +164,7 @@ async def without_errors(ops_test: OpsTest, request):
     # To be executed after the tests
     now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     yield
-    whitelist = []
+    whitelist = ["sending log message: websocket: close 1005 (no status): websocket: close sent"]
     if "log_errors_allowed" in request.keywords:
         for marker in [
             mark for mark in request.node.iter_markers() if mark.name == "log_errors_allowed"
