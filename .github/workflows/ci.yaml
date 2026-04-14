@@ -24,7 +24,7 @@ jobs:
         libs-version: [0, 1]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install tox
         # TODO: Consider replacing with custom image on self-hosted runner OR pinning version
         run: python3 -m pip install tox
@@ -46,7 +46,7 @@ jobs:
             juju-version: {libjuju-version: "2.9.49.1"}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install tox
         # TODO: Consider replacing with custom image on self-hosted runner OR pinning version
         run: python3 -m pip install tox
@@ -138,26 +138,23 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+      - name: Setup concierge
+        run: |
+          sudo snap install --classic concierge
+          sudo concierge prepare --juju-channel "${{ matrix.juju-version.juju-snap-channel}}" --extra-debs tox
+          sudo snap install charmcraft --channel 2.x/stable --classic
       - name: Setup k8s controller
         if: ${{ 'microk8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: "1.35-strict/stable"
-          bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
-          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
-          charmcraft-channel: "2.x/stable"
+        run: |
+          juju switch concierge-microk8s
       - name: Setup lxd controller
         if: ${{ 'lxd' == matrix.tests.provider }}
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: lxd
-          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
-          charmcraft-channel: "2.x/stable"
+        run: |
+          juju switch concierge-lxd
       - name: Download packed charm(s)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.artifact-name }}
       - name: Select tests
@@ -224,26 +221,22 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+      - name: Setup concierge
+        run: |
+          sudo snap install --classic concierge
+          sudo concierge prepare --juju-channel "3.6/stable" --extra-debs tox --extra-snaps "charmcraft/3.x/stable"
       - name: Setup k8s controller
         if: ${{ 'microk8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: "1.35-strict/stable"
-          bootstrap-options: "--agent-version ${{ matrix.juju-version.juju-bootstrap-option }}"
-          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
-          charmcraft-channel: "3.x/stable"
+        run: |
+          juju switch concierge-microk8s
       - name: Setup lxd controller
         if: ${{ 'lxd' == matrix.tests.provider }}
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: lxd
-          juju-channel: ${{ matrix.juju-version.juju-snap-channel }}
-          charmcraft-channel: "3.x/stable"
+        run: |
+          juju switch concierge-lxd
       - name: Download packed charm(s)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.artifact-name }}
       - name: Select tests
