@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
-import asyncio
 import logging
 from pathlib import Path
 
 import pytest
 import yaml
-from pytest_operator.plugin import OpsTest
+from jubilant_adapters import JujuFixture, gather
 
 from .helpers import (
     get_application_relation_data,
@@ -29,47 +28,46 @@ DB_SECOND_DATABASE_RELATION_NAME = "second-database-db"
 SECRET_REF_PREFIX = "secret-"
 
 
-async def downgrade_to_databag(ops_test, app_name):
+def downgrade_to_databag(juju, app_name):
     """Helper function simulating a "rolling downgrade".
 
     The data_interfaces module is replaced "on-the-fly" by an older version, where Juju Secrets aren't enabled yet.
     """
-    for unit in ops_test.model.applications[app_name].units:
+    for unit in juju.ext.model.applications[app_name].units:
         unit_name_with_dash = unit.name.replace("/", "-")
         complete_command = (
             "scp tests/v0/integration/data/data_interfaces.py "
             f"{unit.name}:/var/lib/juju/agents/unit-{unit_name_with_dash}/charm/lib/charms/data_platform_libs/v0/"
         )
-        x, stdout, y = await ops_test.juju(*complete_command.split())
+        x, stdout, y = juju.juju(*complete_command.split())
 
 
-async def upgrade_to_secrets(ops_test, app_name):
+def upgrade_to_secrets(juju, app_name):
     """Helper function simulating a "rolling upgrade".
 
     The data_interfaces module is replaced "on-the-fly" by the latest version, using Juju secrets.
     """
-    for unit in ops_test.model.applications[app_name].units:
+    for unit in juju.ext.model.applications[app_name].units:
         unit_name_with_dash = unit.name.replace("/", "-")
         complete_command = (
             "scp lib/charms/data_platform_libs/v0/data_interfaces.py "
             f"{unit.name}:/var/lib/juju/agents/unit-{unit_name_with_dash}/charm/lib/charms/data_platform_libs/v0/"
         )
-        x, stdout, y = await ops_test.juju(*complete_command.split())
+        x, stdout, y = juju.juju(*complete_command.split())
 
 
-@pytest.mark.abort_on_fail
-async def test_deploy_charms(
-    ops_test: OpsTest, application_charm, database_charm, dp_libs_ubuntu_series
+def test_deploy_charms(
+    juju: JujuFixture, application_charm, database_charm, dp_libs_ubuntu_series
 ):
     """Deploy both charms (application and database) to use in the tests."""
-    await asyncio.gather(
-        ops_test.model.deploy(
+    gather(
+        juju.ext.model.deploy(
             application_charm,
             application_name=APPLICATION_APP_NAME,
             num_units=1,
             series=dp_libs_ubuntu_series,
         ),
-        ops_test.model.deploy(
+        juju.ext.model.deploy(
             database_charm,
             resources={
                 "database-image": DATABASE_APP_METADATA["resources"]["database-image"][
@@ -81,7 +79,7 @@ async def test_deploy_charms(
             series=dp_libs_ubuntu_series,
         ),
     )
-    await ops_test.model.wait_for_idle(
+    juju.ext.model.wait_for_idle(
         apps=[APPLICATION_APP_NAME, DATABASE_APP_NAME],
         status="active",
         wait_for_exact_units=1,
@@ -93,62 +91,61 @@ async def test_deploy_charms(
 # -----------------------------------------------------
 
 
-@pytest.mark.abort_on_fail
 @pytest.mark.parametrize("component", ["app", "unit"])
-async def test_peer_relation(component, ops_test: OpsTest):
+def test_peer_relation(component, juju: JujuFixture):
     """Relating Requires (databag only) with Provides (that could use secrets).
 
     This should fall back to databag usage.
     """
-    await downgrade_to_databag(ops_test, DATABASE_APP_NAME)
+    downgrade_to_databag(juju, DATABASE_APP_NAME)
 
     # Setting and verifying two fields (one that should be a secret, one plain text)
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = get_leader_id(juju, DATABASE_APP_NAME)
     unit_name = f"{DATABASE_APP_NAME}/{leader_id}"
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "set-peer-relation-field",
         **{"component": component, "field": "monitor-password", "value": "blablabla"},
     )
-    await action.wait()
+    action.wait()
 
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "set-peer-relation-field",
         **{"component": component, "field": "not-a-secret", "value": "plain text"},
     )
-    await action.wait()
+    action.wait()
 
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == "blablabla"
 
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == "plain text"
 
     # Upgrade
-    await upgrade_to_secrets(ops_test, DATABASE_APP_NAME)
+    upgrade_to_secrets(juju, DATABASE_APP_NAME)
 
     # Both secret and databag content can be modified
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "set-peer-relation-field",
         **{"component": component, "field": "monitor-password", "value": "blablabla_new"},
     )
-    await action.wait()
+    action.wait()
 
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "set-peer-relation-field",
         **{"component": component, "field": "not-a-secret", "value": "even more plain text"},
     )
-    await action.wait()
+    action.wait()
 
     # ...and secret is moved away from the databag
     assert not (
-        await get_application_relation_data(
-            ops_test,
+        get_application_relation_data(
+            juju,
             DATABASE_APP_NAME,
             "database-peers",
             "monitor-password",
@@ -157,56 +154,56 @@ async def test_peer_relation(component, ops_test: OpsTest):
     )
 
     assert (
-        await get_application_relation_data(
-            ops_test, DATABASE_APP_NAME, "database-peers", "not-a-secret", app_or_unit=component
+        get_application_relation_data(
+            juju, DATABASE_APP_NAME, "database-peers", "not-a-secret", app_or_unit=component
         )
     ) == "even more plain text"
 
     assert not (
-        await get_application_relation_data(
-            ops_test, DATABASE_APP_NAME, "database-peers", "internal-secret", app_or_unit=component
+        get_application_relation_data(
+            juju, DATABASE_APP_NAME, "database-peers", "internal-secret", app_or_unit=component
         )
     )
 
-    secret = await get_secret_by_label(ops_test, f"database-peers.database.{component}")
+    secret = get_secret_by_label(juju, f"database-peers.database.{component}")
     assert secret.get("monitor-password") == "blablabla_new"
 
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == "blablabla_new"
 
-    await upgrade_to_secrets(ops_test, DATABASE_APP_NAME)
+    upgrade_to_secrets(juju, DATABASE_APP_NAME)
 
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == "even more plain text"
 
     # Removing both secret and databag content can be modified
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "delete-peer-relation-field", **{"component": component, "field": "monitor-password"}
     )
-    await action.wait()
+    action.wait()
 
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "delete-peer-relation-field", **{"component": component, "field": "not-a-secret"}
     )
-    await action.wait()
+    action.wait()
 
     # ...successfully
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "get-peer-relation-field", **{"component": component, "field": "monitor-password"}
     )
-    await action.wait()
+    action.wait()
     assert not action.results.get("value")
 
-    action = await ops_test.model.units.get(unit_name).run_action(
+    action = juju.ext.model.units.get(unit_name).run_action(
         "get-peer-relation-field", **{"component": component, "field": "not-a-secret"}
     )
-    await action.wait()
+    action.wait()
     assert not action.results.get("value")
 
 
@@ -220,79 +217,77 @@ async def test_peer_relation(component, ops_test: OpsTest):
 # -----------------------------------------------------
 
 
-@pytest.mark.abort_on_fail
-async def test_unbalanced_versions_falling_back_to_databag_req_databag_vs_prov_secrets(
-    ops_test: OpsTest,
+def test_unbalanced_versions_falling_back_to_databag_req_databag_vs_prov_secrets(
+    juju: JujuFixture,
 ):
     """Relating Requires (databag only) with Provides (that could use secrets).
 
     This should fall back to databag usage.
     """
-    await downgrade_to_databag(ops_test, APPLICATION_APP_NAME)
+    downgrade_to_databag(juju, APPLICATION_APP_NAME)
 
     # Storing Relation object in 'pytest' global namespace for the session
-    pytest.first_database_relation = await ops_test.model.add_relation(
+    pytest.first_database_relation = juju.ext.model.add_relation(
         f"{APPLICATION_APP_NAME}:{DB_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
-    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+    juju.ext.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # Secrest are correctly set in databag
-    username = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "username"
+    username = get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "username"
     )
-    password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "password"
+    password = get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "password"
     )
 
     assert username
     assert password
 
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
 
     # Interface functions (invoked by actions below) are consistent
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "username"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == username
 
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "password"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == password
 
 
-@pytest.mark.abort_on_fail
-async def test_transparent_upgrade_requires_databag_vs_provides_secrets(ops_test: OpsTest):
+def test_transparent_upgrade_requires_databag_vs_provides_secrets(juju: JujuFixture):
     """Upgrading Requires to use secrets (if possible).
 
     YET, already existing relations keep using the databag for all operations (fetch, update, delete)
     """
-    await upgrade_to_secrets(ops_test, APPLICATION_APP_NAME)
+    upgrade_to_secrets(juju, APPLICATION_APP_NAME)
 
     # Application charm leader
-    leader_app_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_app_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_app_name = f"{APPLICATION_APP_NAME}/{leader_app_id}"
 
     # DB leader
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
 
     # Set new sensitive information (if secrets: stored in 'secret-user')
     uris_new_val = "http://username:password@example.com"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "set-relation-field",
         **{
             "relation_id": pytest.first_database_relation.id,
@@ -300,80 +295,79 @@ async def test_transparent_upgrade_requires_databag_vs_provides_secrets(ops_test
             "value": uris_new_val,
         },
     )
-    await action.wait()
+    action.wait()
 
     # Relation data is correct
-    assert uris_new_val == await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "uris"
+    assert uris_new_val == get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "uris"
     )
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
 
     # Interface functions (invoked by actions below) are consistent
-    action = await ops_test.model.units.get(leader_app_name).run_action(
+    action = juju.ext.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "uris"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == uris_new_val
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "uris"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == uris_new_val
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "delete-relation-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "uris"},
     )
-    await action.wait()
+    action.wait()
 
     # Relation data is correct
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "uris"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "uris"
         )
         is None
     )
 
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
 
     # Interface functions (invoked by actions below) are consistent
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "uris"},
     )
-    await action.wait()
+    action.wait()
     assert not action.results.get("value")
 
 
-@pytest.mark.abort_on_fail
-async def test_transparent_upgrade_requires_databag_vs_provides_secrets_upgrade_new_secret(
-    ops_test: OpsTest,
+def test_transparent_upgrade_requires_databag_vs_provides_secrets_upgrade_new_secret(
+    juju: JujuFixture,
 ):
     """After Requires upgrade, we stay on the databag."""
     # Application charm leader
-    leader_app_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_app_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_app_name = f"{APPLICATION_APP_NAME}/{leader_app_id}"
 
     # DB leader
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
 
     # Set new sensitive information (if secrets: stored in 'secret-tls')
     tls_ca_val = "<ca_cert_here>"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "set-relation-field",
         **{
             "relation_id": pytest.first_database_relation.id,
@@ -381,73 +375,73 @@ async def test_transparent_upgrade_requires_databag_vs_provides_secrets_upgrade_
             "value": tls_ca_val,
         },
     )
-    await action.wait()
+    action.wait()
 
     # We stay on the databag
-    assert await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "tls-ca"
+    assert get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "tls-ca"
     )
 
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-tls"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-tls"
         )
         is None
     )
 
     # Interface functions (invoked by actions below) are consistent
-    action = await ops_test.model.units.get(leader_app_name).run_action(
+    action = juju.ext.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "tls-ca"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == tls_ca_val
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "tls-ca"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == tls_ca_val
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "delete-relation-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "tls-ca"},
     )
-    await action.wait()
+    action.wait()
 
-    action = await ops_test.model.units.get(leader_app_name).run_action(
+    action = juju.ext.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "tls-ca"},
     )
-    await action.wait()
+    action.wait()
     assert not action.results.get("value")
 
     # Previously existing sensitive data stays where it was
-    password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "password"
+    password = get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "password"
     )
     assert password
 
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_FIRST_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
 
-    action = await ops_test.model.units.get(leader_app_name).run_action(
+    action = juju.ext.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "password"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == password
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.first_database_relation.id, "field": "password"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == password
 
 
@@ -456,78 +450,76 @@ async def test_transparent_upgrade_requires_databag_vs_provides_secrets_upgrade_
 # -----------------------------------------------------
 
 
-@pytest.mark.abort_on_fail
-async def test_unbalanced_versions_falling_back_to_databag_req_secrets_vs_prov_databag(
-    ops_test: OpsTest,
+def test_unbalanced_versions_falling_back_to_databag_req_secrets_vs_prov_databag(
+    juju: JujuFixture,
 ):
     """Relating Requires (secrets available) with Provides (databag only).
 
     This should fall back to databag usage.
     """
-    await downgrade_to_databag(ops_test, DATABASE_APP_NAME)
+    downgrade_to_databag(juju, DATABASE_APP_NAME)
 
     # Storing Relation object in 'pytest' global namespace for the session
-    pytest.second_database_relation = await ops_test.model.add_relation(
+    pytest.second_database_relation = juju.ext.model.add_relation(
         f"{APPLICATION_APP_NAME}:{DB_SECOND_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
     )
-    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+    juju.ext.model.wait_for_idle(apps=APP_NAMES, status="active")
 
     # Relation data is correct
-    username = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "username"
+    username = get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "username"
     )
-    password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "password"
+    password = get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "password"
     )
 
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
 
     # Interface functions (invoked by actions below) are consistent
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "username"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == username
 
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "password"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == password
 
 
-@pytest.mark.abort_on_fail
-async def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_databag(
-    ops_test: OpsTest,
+def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_databag(
+    juju: JujuFixture,
 ):
     """Upgrading Provides to use secrets (if possible).
 
     YET, already existing relations keep using the databag for all operations (fetch, update, delete)
     """
-    await upgrade_to_secrets(ops_test, DATABASE_APP_NAME)
+    upgrade_to_secrets(juju, DATABASE_APP_NAME)
 
     # Application charm leader
-    leader_app_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_app_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_app_name = f"{APPLICATION_APP_NAME}/{leader_app_id}"
 
     # DB leader
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
 
     # Set new sensitive information (if secrets: stored in 'secret-user')
     uris_new_val = "http://username:password@example.com"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "set-relation-field",
         **{
             "relation_id": pytest.second_database_relation.id,
@@ -535,80 +527,79 @@ async def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_
             "value": uris_new_val,
         },
     )
-    await action.wait()
+    action.wait()
 
     # Relation data is correct
-    assert uris_new_val == await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "uris"
+    assert uris_new_val == get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "uris"
     )
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
 
     # Interface functions (invoked by actions below) are consistent
-    action = await ops_test.model.units.get(leader_app_name).run_action(
+    action = juju.ext.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "uris"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == uris_new_val
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "uris"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == uris_new_val
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "delete-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "uris"},
     )
-    await action.wait()
+    action.wait()
 
     # Relation data is correct
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "uris"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "uris"
         )
         is None
     )
 
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
 
     # Interface functions (invoked by actions below) are consistent
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "uris"},
     )
-    await action.wait()
+    action.wait()
     assert not action.results.get("value")
 
 
-@pytest.mark.abort_on_fail
-async def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_databag_upgrade_new_secret(
-    ops_test: OpsTest,
+def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_databag_upgrade_new_secret(
+    juju: JujuFixture,
 ):
     """After Provider upgrade, the relation remains on databag."""
     # Application charm leader
-    leader_app_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_app_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_app_name = f"{APPLICATION_APP_NAME}/{leader_app_id}"
 
     # DB leader
-    leader_id = await get_leader_id(ops_test, DATABASE_APP_NAME)
+    leader_id = get_leader_id(juju, DATABASE_APP_NAME)
     leader_name = f"{DATABASE_APP_NAME}/{leader_id}"
 
     # Set new sensitive information (if secrets: stored in 'secret-tls')
     tls_ca_val = "<ca_cert_here>"
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "set-relation-field",
         **{
             "relation_id": pytest.second_database_relation.id,
@@ -616,70 +607,70 @@ async def test_transparent_upgrade_keeping_databag_requires_secrets_vs_provides_
             "value": tls_ca_val,
         },
     )
-    await action.wait()
+    action.wait()
 
-    tls_ca_val = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "tls-ca"
+    tls_ca_val = get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "tls-ca"
     )
 
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-tls"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-tls"
         )
         is None
     )
 
     # Interface functions (invoked by actions below) are consistent
-    action = await ops_test.model.units.get(leader_app_name).run_action(
+    action = juju.ext.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "tls-ca"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == tls_ca_val
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "tls-ca"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == tls_ca_val
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "delete-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "tls-ca"},
     )
-    await action.wait()
+    action.wait()
 
-    action = await ops_test.model.units.get(leader_app_name).run_action(
+    action = juju.ext.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "tls-ca"},
     )
-    await action.wait()
+    action.wait()
     assert not action.results.get("value")
 
     # Previously existing sensitive data stays where it was
-    password = await get_application_relation_data(
-        ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "password"
+    password = get_application_relation_data(
+        juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "password"
     )
     assert password
 
     assert (
-        await get_application_relation_data(
-            ops_test, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
+        get_application_relation_data(
+            juju, APPLICATION_APP_NAME, DB_SECOND_DATABASE_RELATION_NAME, "secret-user"
         )
         is None
     )
 
-    action = await ops_test.model.units.get(leader_app_name).run_action(
+    action = juju.ext.model.units.get(leader_app_name).run_action(
         "get-relation-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "password"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == password
 
-    action = await ops_test.model.units.get(leader_name).run_action(
+    action = juju.ext.model.units.get(leader_name).run_action(
         "get-relation-self-side-field",
         **{"relation_id": pytest.second_database_relation.id, "field": "password"},
     )
-    await action.wait()
+    action.wait()
     assert action.results.get("value") == password

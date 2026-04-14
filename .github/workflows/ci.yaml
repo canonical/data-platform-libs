@@ -98,7 +98,7 @@ jobs:
           - juju-bootstrap-option: "2.9.51"
             juju-snap-channel: "2.9/stable"
             libjuju-version: "2.9.49.1"
-          - juju-bootstrap-option: "3.6.1"
+          - juju-bootstrap-option: "3.6.19"
             juju-snap-channel: "3.6/stable"
             libjuju-version: "3.6.1.0"
         exclude:
