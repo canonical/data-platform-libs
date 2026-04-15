@@ -950,6 +950,10 @@ class ApplicationCharmDatabase(CharmBase):
             self.requirer.on.cluster1_resource_created,
             self._on_cluster1_resource_created,
         )
+        self.framework.observe(
+            self.requirer.on.prefix_resources_changed,
+            self._on_prefix_resources_changed,
+        )
 
     def log_relation_size(self, prefix=""):
         logger.info(f"§{prefix} relations: {len(self.requirer.interface.relations)}")
@@ -993,6 +997,9 @@ class ApplicationCharmDatabase(CharmBase):
     def _on_read_only_endpoints_changed(self, _) -> None:
         self.log_relation_size("on_read_only_endpoints_changed")
 
+    def _on_prefix_resources_changed(self, _) -> None:
+        self.log_relation_size("on_prefix_resources_changed")
+
     def _on_cluster1_resource_created(self, _) -> None:
         self.log_relation_size("on_cluster1_resource_created")
 
@@ -1010,6 +1017,7 @@ def reset_aliases():
             delattr(ResourceRequiresEvents, f"{cluster_alias}_resource_entity_created")
             delattr(ResourceRequiresEvents, f"{cluster_alias}_endpoints_changed")
             delattr(ResourceRequiresEvents, f"{cluster_alias}_read_only_endpoints_changed")
+            delattr(ResourceRequiresEvents, f"{cluster_alias}_prefix_resources_changed")
         except AttributeError:
             # Ignore the events not existing before the first test.
             pass
@@ -1089,6 +1097,13 @@ class DataRequirerBaseTests(ABC):
             RequirerCommonModel(entity_type="GROUP", extra_user_roles=EXTRA_USER_ROLES)
         with pytest.raises(ValidationError):
             KafkaRequestModel(consumer_group_prefix="*")
+
+    def test_requested_entity_consistency(self):
+        """Test consistency restrictions on direct secret usage and helper values."""
+        # Try to set password without entity name
+        with pytest.raises(ValueError) as e:
+            RequirerCommonModel(entity_password="testpass")
+        assert "Unable to set entity password without an entity name" in str(e.value)
 
 
 class TestDatabaseRequiresNoRelations(DataRequirerBaseTests, unittest.TestCase):
@@ -1197,10 +1212,12 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "external-node-connectivity": False,
                     "extra-group-roles": None,
                     "extra-user-roles": "CREATEDB,CREATEROLE",
+                    "prefix-matching": None,
                     "request-id": "c759221a6c14c72a",
                     "resource": "data_platform",
                     "salt": "kkkkkkkk",
                     "secret-mtls": None,
+                    "secret-requested-entity": None,
                 },
                 {
                     "entity-permissions": None,
@@ -1208,10 +1225,12 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "external-node-connectivity": False,
                     "extra-group-roles": None,
                     "extra-user-roles": None,
+                    "prefix-matching": None,
                     "request-id": "9ecfabfbb5258f88",
                     "resource": "",
                     "salt": "xxxxxxxx",
                     "secret-mtls": None,
+                    "secret-requested-entity": None,
                 },
             ],
         }
@@ -1459,16 +1478,19 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "entity-permissions": None,
                     "entity-type": None,
                     "salt": "kkkkkkkk",
+                    "prefix-matching": None,
                     "request-id": "c759221a6c14c72a",
                     "resource": "data_platform",
                     "extra-group-roles": None,
                     "extra-user-roles": "CREATEDB,CREATEROLE",
                     "external-node-connectivity": False,
                     "secret-mtls": None,
+                    "secret-requested-entity": None,
                 },
                 {
                     "entity-permissions": None,
                     "salt": "xxxxxxxx",
+                    "prefix-matching": None,
                     "request-id": "9ecfabfbb5258f88",
                     "resource": "",
                     "entity-type": "USER",
@@ -1476,6 +1498,7 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
                     "extra-user-roles": None,
                     "external-node-connectivity": False,
                     "secret-mtls": None,
+                    "secret-requested-entity": None,
                 },
             ],
         }
@@ -1701,6 +1724,87 @@ class TestDatabaseRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.response.tls_ca == "deadbeef"
         assert event.response.uris == "host1:port,host2:port"
         assert event.response.version == "1.0"
+
+    @patch.object(charm, "_on_prefix_resources_changed")
+    @pytest.mark.usefixtures("only_with_juju_secrets")
+    def test_on_prefix_resources_changed(self, _on_prefix_resources_changed):
+        """Asserts that the prefix resources are in the relation databag when they change."""
+        # Simulate adding endpoints to the relation.
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "requests": json.dumps(
+                    [
+                        {
+                            "salt": "kkkkkkkk",
+                            "request-id": "c759221a6c14c72a",
+                            "prefix-resources": "db1,db2",
+                        }
+                    ]
+                ),
+                "data": json.dumps(
+                    {
+                        "c759221a6c14c72a": {
+                            "salt": "kkkkkkkk",
+                            "request-id": "c759221a6c14c72a",
+                            "resource": DATABASE,
+                        }
+                    }
+                ),
+            },
+        )
+
+        # Assert the correct hook is called.
+        _on_prefix_resources_changed.assert_called_once()
+
+        # Check that the endpoints are present in the relation
+        # using the requires charm library event.
+        event = _on_prefix_resources_changed.call_args[0][0]
+        assert event.response.prefix_resources == "db1,db2"
+
+        # Reset the mock call count.
+        _on_prefix_resources_changed.reset_mock()
+
+        # Set the same data in the relation (no change in the endpoints).
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "requests": json.dumps(
+                    [
+                        {
+                            "salt": "kkkkkkkk",
+                            "request-id": "c759221a6c14c72a",
+                            "prefix-resources": "db1,db2",
+                        }
+                    ]
+                )
+            },
+        )
+
+        # Assert the hook was not called again.
+        _on_prefix_resources_changed.assert_not_called()
+
+        # Then, change the endpoints in the relation.
+        self.harness.update_relation_data(
+            self.rel_id,
+            self.provider,
+            {
+                "requests": json.dumps(
+                    [
+                        {
+                            "salt": "kkkkkkkk",
+                            "request-id": "c759221a6c14c72a",
+                            "prefix-resources": "db1,db2,db3",
+                        }
+                    ]
+                )
+            },
+        )
+
+        # Assert the hook is called now.
+        _on_prefix_resources_changed.assert_called_once()
 
     def test_assign_relation_alias(self):
         """Asserts the correct relation alias is assigned to the relation."""

@@ -41,6 +41,8 @@ DATABASE_DUMMY_APP_METADATA = yaml.safe_load(
 DB_FIRST_DATABASE_RELATION_NAME = "first-database-db"
 DB_SECOND_DATABASE_RELATION_NAME = "second-database-db"
 ROLES_FIRST_DATABASE_RELATION_NAME = "first-database-roles"
+USERNAME_FIRST_DATABASE_RELATION_NAME = "first-database-username"
+PREFIX_DATABASE_RELATION_NAME = "database-with-prefix"
 
 MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "multiple-database-clusters"
 ALIASED_MULTIPLE_DATABASE_CLUSTERS_RELATION_NAME = "aliased-multiple-database-clusters"
@@ -765,6 +767,33 @@ async def test_database_roles_relation_with_charm_libraries_secrets(ops_test: Op
     assert entity_pass is not None
 
 
+@pytest.mark.abort_on_fail
+@pytest.mark.usefixtures("only_with_juju_secrets")
+async def test_database_username(ops_test: OpsTest):
+    """Test basic functionality of database-roles relation interface."""
+    # Relate the charms and wait for them exchanging some connection data.
+
+    pytest.first_database_relation = await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{USERNAME_FIRST_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    requests = json.loads(
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, USERNAME_FIRST_DATABASE_RELATION_NAME, "requests"
+        )
+        or "[]"
+    )
+    request = requests[0]
+    secret_uri = request.get(f"{SECRET_REF_PREFIX}entity")
+    secret_content = await get_juju_secret(ops_test, secret_uri)
+    entity_name = secret_content["entity-name"]
+    entity_pass = secret_content["entity-password"]
+
+    assert entity_name == "testuser"
+    assert entity_pass is not None
+
+
 async def test_an_application_can_connect_to_multiple_database_clusters(
     ops_test: OpsTest, database_charm
 ):
@@ -1370,3 +1399,30 @@ async def test_scaling_requires_can_access_shared_secrets(ops_test):
     await action.wait()
     new_password = action.results.get("value")
     assert new_password == orig_password
+
+
+@pytest.mark.abort_on_fail
+async def test_database_prefix(ops_test: OpsTest):
+    """Test basic functionality of database-roles relation interface."""
+    # Relate the charms and wait for them exchanging some connection data.
+
+    pytest.first_database_relation = await ops_test.model.add_relation(
+        f"{APPLICATION_APP_NAME}:{PREFIX_DATABASE_RELATION_NAME}", DATABASE_APP_NAME
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    requests = json.loads(
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, PREFIX_DATABASE_RELATION_NAME, "requests"
+        )
+        or "[]"
+    )
+    request = requests[0]
+
+    assert request["prefix-resources"] == "testdb1,testdb2"
+    data = json.loads(
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, PREFIX_DATABASE_RELATION_NAME, "data"
+        )
+    )
+    assert data[request["request-id"]]["prefix-matching"] == "all"
