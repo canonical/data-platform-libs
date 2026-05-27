@@ -453,7 +453,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 58
+LIBPATCH = 59
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -2112,12 +2112,23 @@ class RequirerData(Data):
             field
             for field in self.SECRET_LABEL_MAP.keys()
             if field not in self._remote_secret_fields
+            and not (field == "mtls-cert" and self.is_cross_model_relation)
         ]
         if additional_secret_fields:
             self._remote_secret_fields += additional_secret_fields
         self.data_component = self.local_unit
 
     # Internal functions
+    @property
+    def is_cross_model_relation(self) -> bool:
+        """Determines whether the relation is a cross-model relation or not."""
+        if len(self.relations) == 0:
+            return False
+
+        if self._model.uuid != self.relations[0].remote_model.uuid:
+            return True
+
+        return False
 
     def _is_resource_created_for_relation(self, relation: Relation) -> bool:
         if not relation.app:
