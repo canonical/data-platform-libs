@@ -5727,6 +5727,24 @@ class EtcdRequirerEventHandlers(RequirerEventHandlers):
 
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
+
+        # send request again if encryption secret was added from provider side
+        if "encryption-secret" in diff.added:
+            payload = {
+                "prefix": self.relation_data.prefix,
+                "encryption-secret": event.relation.data[event.relation.app].get(
+                    "encryption-secret"
+                ),
+            }
+            if self.relation_data.mtls_cert:
+                payload["mtls-cert"] = self.relation_data.mtls_cert
+
+            self.relation_data.update_relation_data(
+                event.relation.id,
+                payload,
+            )
+            return
+
         # Register all new secrets with their labels
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
