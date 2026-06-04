@@ -1591,11 +1591,41 @@ class Data(ABC):
             return {}
 
         if fields:
-            return {
+            relation_data = {
                 k: relation.data[component][k] for k in fields if k in relation.data[component]
             }
         else:
-            return dict(relation.data[component])
+            relation_data = dict(relation.data[component])
+
+        try:
+            remote_model = relation.remote_model.uuid
+        except (FileNotFoundError, ModelError, RuntimeError):
+            # access to remote model added in Juju 3.6.2, fails with 2.9
+            remote_model = ""
+
+        # if not a cross-model relation we can return data as-is
+        if remote_model == "" or self._model.uuid == remote_model:
+            return relation_data
+
+        encryption_key = None
+        if encryption_secret := relation.data[relation.app].get("encryption-secret"):
+            secret = self._model.get_secret(id=encryption_secret)
+            encryption_key = secret.get_content().get("encryption-key")
+
+        if not encryption_key:
+            return relation_data
+
+        # still here means sensitive data needs to be decrypted
+        for key, value in relation_data:
+            if key in CROSS_MODEL_RELATION_CONSUMER_SECRETS:
+                try:
+                    f = Fernet(encryption_key)
+                    decrypted_value = f.decrypt(value.encode()).decode()
+                    relation_data[key] = decrypted_value
+                except (AttributeError, InvalidToken, TypeError, ValueError):
+                    logger.warning("Could not decrypt sensitive field in cross-model relation")
+
+        return relation_data
 
     def _fetch_relation_data_with_secrets(
         self,
