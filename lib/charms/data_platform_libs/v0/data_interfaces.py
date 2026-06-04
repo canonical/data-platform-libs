@@ -1654,7 +1654,7 @@ class Data(ABC):
 
         try:
             remote_model = relation.remote_model.uuid
-        except (ModelError, RuntimeError):
+        except (FileNotFoundError, ModelError, RuntimeError):
             # access to remote model added in Juju 3.6.2, fails with 2.9
             remote_model = ""
 
@@ -2160,7 +2160,7 @@ class RequirerData(Data):
 
         try:
             remote_model = self.relations[0].remote_model.uuid
-        except (ModelError, RuntimeError):
+        except (FileNotFoundError, ModelError, RuntimeError):
             # access to remote model added in Juju 3.6.2, fails with 2.9
             return False
 
@@ -2446,7 +2446,7 @@ class ProviderEventHandlers(EventHandlers):
 
         try:
             remote_model = event.relation.remote_model.uuid
-        except (ModelError, RuntimeError):
+        except (FileNotFoundError, ModelError, RuntimeError):
             # access to remote model added in Juju 3.6.2, fails with 2.9
             return
 
