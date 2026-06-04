@@ -433,6 +433,7 @@ from typing import (
     overload,
 )
 
+from cryptography.fernet import Fernet, InvalidToken
 from ops import JujuVersion, Model, Secret, SecretInfo, SecretNotFoundError
 from ops.charm import (
     CharmBase,
@@ -488,6 +489,10 @@ MODEL_ERRORS = {
     "no_label_and_uri": "ERROR either URI or label should be used for getting an owned secret but not both",
     "owner_no_refresh": "ERROR secret owner cannot use --refresh",
 }
+
+CROSS_MODEL_RELATION_CONSUMER_SECRETS = [
+    "mtls-cert",
+]
 
 
 ##############################################################################
@@ -1637,8 +1642,28 @@ class Data(ABC):
         if component not in relation.data or relation.data[component] is None:
             return
 
-        if relation:
-            relation.data[component].update(data)
+        if not relation:
+            return
+
+        # ensure no sensitive information is stored in relation data
+        encryption_key = None
+        if encryption_secret := relation.data[relation.app].get("encryption-secret"):
+            # get the encryption secret created on provider side
+            secret = self._model.get_secret(id=encryption_secret)
+            encryption_key = secret.get_content().get("encryption-key")
+
+        if encryption_key and self._model.uuid != relation.remote_model.uuid:
+            for key, value in data.items():
+                try:
+                    f = Fernet(encryption_key)
+                    if key in CROSS_MODEL_RELATION_CONSUMER_SECRETS:
+                        encrypted_value = f.encrypt(value.encode()).decode()
+                        data[key] = encrypted_value
+                except (AttributeError, InvalidToken, TypeError, ValueError):
+                    logger.warning("Could not encrypt sensitive field in cross-model relation")
+                    data[key] = ""
+
+        relation.data[component].update(data)
 
     def _delete_relation_data_without_secrets(
         self, component: Union[Application, Unit], relation: Relation, fields: List[str]
@@ -2112,7 +2137,9 @@ class RequirerData(Data):
             field
             for field in self.SECRET_LABEL_MAP.keys()
             if field not in self._remote_secret_fields
-            and not (field == "mtls-cert" and self.is_cross_model_relation)
+            and not (
+                field in CROSS_MODEL_RELATION_CONSUMER_SECRETS and self.is_cross_model_relation
+            )
         ]
         if additional_secret_fields:
             self._remote_secret_fields += additional_secret_fields
