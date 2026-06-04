@@ -2427,6 +2427,29 @@ class ProviderEventHandlers(EventHandlers):
                 raise ValueError(f"Cannot change {key} after relation has already been created")
 
     # Event handlers
+    def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
+        """Event emitted when a relation is created."""
+        if not self.relation_data.local_unit.is_leader():
+            return
+
+        if self.model.uuid == event.relation.remote_model.uuid:
+            return
+
+        # in cross-model relations, generate an encryption key and share it with the requirer as a secret
+        event_data = {}
+        secret_label = f"{self.model.uuid}-{event.relation.id}-encryption-secret"
+
+        if not (secret := self.charm.model.get_secret(label=secret_label)):
+            encryption_key = Fernet.generate_key()
+            content = {"encryption-key": encryption_key.decode()}
+            secret = self.charm.app.add_secret(content, label=secret_label)
+
+        secret.grant(event.relation)
+        if not secret.id:
+            raise SecretError("Encryption secret is missing secred id")
+        event_data["encryption-secret"] = secret.id
+
+        self.relation_data.update_relation_data(event.relation.id, event_data)
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Event emitted when the relation data has changed."""
