@@ -745,7 +745,7 @@ async def test_postgresql_plugin(ops_test: OpsTest):
 
 
 async def test_two_applications_dont_share_the_same_relation_data(
-    ops_test: OpsTest, application_charm
+    ops_test: OpsTest, application_charm, dp_libs_ubuntu_series
 ):
     """Test that two different application connect to the database with different credentials."""
     # Set some variables to use in this test.
@@ -755,7 +755,9 @@ async def test_two_applications_dont_share_the_same_relation_data(
 
     # Deploy another application.
     await ops_test.model.deploy(
-        application_charm, application_name=another_application_app_name, series="jammy"
+        application_charm,
+        application_name=another_application_app_name,
+        series=dp_libs_ubuntu_series,
     )
     await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
 
