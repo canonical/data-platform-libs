@@ -1652,7 +1652,13 @@ class Data(ABC):
             secret = self._model.get_secret(id=encryption_secret)
             encryption_key = secret.get_content().get("encryption-key")
 
-        if encryption_key and self._model.uuid != relation.remote_model.uuid:
+        try:
+            remote_model = relation.remote_model.uuid
+        except ModelError:
+            # access to remote model added in Juju 3.6.2, fails with 2.9
+            remote_model = ""
+
+        if encryption_key and remote_model != "" and self._model.uuid != remote_model:
             for key, value in data.items():
                 try:
                     f = Fernet(encryption_key)
@@ -2152,7 +2158,13 @@ class RequirerData(Data):
         if len(self.relations) == 0:
             return False
 
-        if self._model.uuid != self.relations[0].remote_model.uuid:
+        try:
+            remote_model = self.relations[0].remote_model.uuid
+        except ModelError:
+            # access to remote model added in Juju 3.6.2, fails with 2.9
+            return False
+
+        if self._model.uuid != remote_model:
             return True
 
         return False
@@ -2432,7 +2444,13 @@ class ProviderEventHandlers(EventHandlers):
         if not self.relation_data.local_unit.is_leader():
             return
 
-        if self.model.uuid == event.relation.remote_model.uuid:
+        try:
+            remote_model = event.relation.remote_model.uuid
+        except ModelError:
+            # access to remote model added in Juju 3.6.2, fails with 2.9
+            return
+
+        if self.model.uuid == remote_model:
             return
 
         # in cross-model relations, generate an encryption key and share it with the requirer as a secret
