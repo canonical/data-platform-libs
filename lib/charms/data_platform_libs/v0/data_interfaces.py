@@ -4450,6 +4450,33 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
 
+        # send request again if encryption secret was added from provider side
+        if "encryption-secret" in diff.added and self.relation_data.local_unit.is_leader():
+            relation_data = {
+                "topic": self.relation_data.topic,
+                "encryption-secret": event.relation.data[event.relation.app].get(
+                    "encryption-secret"
+                ),
+            }
+
+            if self.relation_data.mtls_cert:
+                relation_data["mtls-cert"] = self.relation_data.mtls_cert
+
+            if self.relation_data.consumer_group_prefix:
+                relation_data["consumer-group-prefix"] = self.relation_data.consumer_group_prefix
+
+            if self.relation_data.extra_user_roles:
+                relation_data["extra-user-roles"] = self.relation_data.extra_user_roles
+            if self.relation_data.extra_group_roles:
+                relation_data["extra-group-roles"] = self.relation_data.extra_group_roles
+            if self.relation_data.entity_type:
+                relation_data["entity-type"] = self.relation_data.entity_type
+            if self.relation_data.entity_permissions:
+                relation_data["entity-permissions"] = self.relation_data.entity_permissions
+
+            self.relation_data.update_relation_data(event.relation.id, relation_data)
+            return
+
         # Check if the topic is created
         # (the Kafka charm shared the credentials).
 
@@ -5729,7 +5756,7 @@ class EtcdRequirerEventHandlers(RequirerEventHandlers):
         diff = self._diff(event)
 
         # send request again if encryption secret was added from provider side
-        if "encryption-secret" in diff.added:
+        if "encryption-secret" in diff.added and self.relation_data.local_unit.is_leader():
             payload = {
                 "prefix": self.relation_data.prefix,
                 "encryption-secret": event.relation.data[event.relation.app].get(
