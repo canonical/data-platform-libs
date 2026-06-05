@@ -14,7 +14,6 @@ from pytest_operator.plugin import OpsTest
 
 from .helpers import (
     build_connection_string,
-    check_logs,
     get_application_relation_data,
     get_juju_secret,
     get_leader_id,
