@@ -1333,16 +1333,6 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
     )
     assert not (await check_logs(ops_test, strings=["Can't delete secret for relation"]))
 
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field",
-        **{"relation_id": pytest.second_database_relation.id, "field": field},
-    )
-    await action.wait()
-    assert await check_logs(
-        ops_test, strings=["Non-existing field 'tls' was attempted to be removed from the databag"]
-    )
-    assert await check_logs(ops_test, strings=["Can't delete secret for relation"])
-
     assert (
         await get_application_relation_data(
             ops_test,

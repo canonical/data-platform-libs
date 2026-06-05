@@ -1960,7 +1960,7 @@ class ProviderData(Data):
         """Set values for fields not caring whether it's a secret or not."""
         keys = set(data.keys())
         if self.fetch_relation_field(relation.id, self.RESOURCE_FIELD) is None and (
-            keys - {"endpoints", "read-only-endpoints", "replset"}
+            keys - {"endpoints", "read-only-endpoints", "replset", "encryption-secret"}
         ):
             raise PrematureDataAccessError(
                 "Premature access to relation data, update is forbidden before the connection is initialized."
@@ -2487,7 +2487,10 @@ class ProviderEventHandlers(EventHandlers):
         event_data = {}
         secret_label = f"{self.model.uuid}-{event.relation.id}-encryption-secret"
 
-        if not (secret := self.charm.model.get_secret(label=secret_label)):
+        try:
+            # check if secret was already created to avoid duplicates
+            secret = self.charm.model.get_secret(label=secret_label)
+        except SecretNotFoundError:
             encryption_key = Fernet.generate_key()
             content = {"encryption-key": encryption_key.decode()}
             secret = self.charm.app.add_secret(content, label=secret_label)
