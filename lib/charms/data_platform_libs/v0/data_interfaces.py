@@ -1616,7 +1616,7 @@ class Data(ABC):
             return relation_data
 
         # still here means sensitive data needs to be decrypted
-        for key, value in relation_data:
+        for key, value in relation_data.items():
             if key in CROSS_MODEL_RELATION_CONSUMER_SECRETS:
                 try:
                     f = Fernet(encryption_key)
