@@ -1598,13 +1598,14 @@ class Data(ABC):
             relation_data = dict(relation.data[component])
 
         try:
-            remote_model = relation.remote_model.uuid
-        except (FileNotFoundError, ModelError, RuntimeError):
+            remote_model_uuid = relation.remote_model.uuid
+        except (FileNotFoundError, ModelError, RuntimeError) as e:
             # access to remote model added in Juju 3.6.2, fails with 2.9
-            remote_model = ""
+            logger.warning("Access to remote model failed: %s", e)
+            remote_model_uuid = ""
 
         # if not a cross-model relation we can return data as-is
-        if remote_model == "" or self._model.uuid == remote_model:
+        if remote_model_uuid == "" or self._model.uuid == remote_model_uuid:
             return relation_data
 
         encryption_key = None
