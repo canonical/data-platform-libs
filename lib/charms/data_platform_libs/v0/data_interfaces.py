@@ -1232,6 +1232,15 @@ class Data(ABC):
         """Load secrets from the databag."""
         raise NotImplementedError
 
+    def _get_encryption_key(self, relation: Relation) -> Optional[str]:
+        """Fetch the encryption key from the encryption secret if available."""
+        if not (encryption_secret := relation.data[relation.app].get("encryption-secret")):
+            return None
+
+        # get the encryption secret created on provider side
+        secret = self._model.get_secret(id=encryption_secret)
+        return secret.get_content().get("encryption-key")
+
     def _fetch_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
@@ -1608,12 +1617,7 @@ class Data(ABC):
         if remote_model_uuid == "" or self._model.uuid == remote_model_uuid:
             return relation_data
 
-        encryption_key = None
-        if encryption_secret := relation.data[relation.app].get("encryption-secret"):
-            secret = self._model.get_secret(id=encryption_secret)
-            encryption_key = secret.get_content().get("encryption-key")
-
-        if not encryption_key:
+        if not (encryption_key := self._get_encryption_key(relation)):
             return relation_data
 
         # still here means sensitive data needs to be decrypted
@@ -1677,19 +1681,15 @@ class Data(ABC):
             return
 
         # ensure no sensitive information is stored in relation data
-        encryption_key = None
-        if encryption_secret := relation.data[relation.app].get("encryption-secret"):
-            # get the encryption secret created on provider side
-            secret = self._model.get_secret(id=encryption_secret)
-            encryption_key = secret.get_content().get("encryption-key")
+        encryption_key = self._get_encryption_key(relation)
 
         try:
-            remote_model = relation.remote_model.uuid
+            remote_model_uuid = relation.remote_model.uuid
         except (FileNotFoundError, ModelError, RuntimeError):
             # access to remote model added in Juju 3.6.2, fails with 2.9
-            remote_model = ""
+            remote_model_uuid = ""
 
-        if encryption_key and remote_model != "" and self._model.uuid != remote_model:
+        if encryption_key and remote_model_uuid != "" and self._model.uuid != remote_model_uuid:
             for key, value in data.items():
                 try:
                     f = Fernet(encryption_key)
@@ -2190,12 +2190,12 @@ class RequirerData(Data):
             return False
 
         try:
-            remote_model = self.relations[0].remote_model.uuid
+            remote_model_uuid = self.relations[0].remote_model.uuid
         except (FileNotFoundError, ModelError, RuntimeError):
             # access to remote model added in Juju 3.6.2, fails with 2.9
             return False
 
-        if self._model.uuid != remote_model:
+        if self._model.uuid != remote_model_uuid:
             return True
 
         return False
@@ -2476,12 +2476,12 @@ class ProviderEventHandlers(EventHandlers):
             return
 
         try:
-            remote_model = event.relation.remote_model.uuid
+            remote_model_uuid = event.relation.remote_model.uuid
         except (FileNotFoundError, ModelError, RuntimeError):
             # access to remote model added in Juju 3.6.2, fails with 2.9
             return
 
-        if self.model.uuid == remote_model:
+        if self.model.uuid == remote_model_uuid:
             return
 
         # in cross-model relations, generate an encryption key and share it with the requirer as a secret
