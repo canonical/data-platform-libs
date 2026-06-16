@@ -456,7 +456,7 @@ LIBAPI = 0
 # to 0 if you are raising the major API version
 LIBPATCH = 59
 
-PYDEPS = ["ops>=2.0.0", "cryptography"]
+PYDEPS = ["ops>=2.0.0"]
 
 # Starting from what LIBPATCH number to apply legacy solutions
 # v0.17 was the last version without secrets
