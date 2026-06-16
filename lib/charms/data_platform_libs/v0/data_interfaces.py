@@ -433,7 +433,11 @@ from typing import (
     overload,
 )
 
-from cryptography.fernet import Fernet, InvalidToken
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+except ImportError:
+    Fernet = None
+    InvalidToken = None
 from ops import JujuVersion, Model, Secret, SecretInfo, SecretNotFoundError
 from ops.charm import (
     CharmBase,
@@ -1620,6 +1624,12 @@ class Data(ABC):
         if not (encryption_key := self._get_encryption_key(relation)):
             return relation_data
 
+        if not Fernet:
+            logger.warning(
+                "Cryptography module not installed. Could not decrypt sensitive field in cross-model relation"
+            )
+            return relation_data
+
         # still here means sensitive data needs to be decrypted
         for key, value in relation_data.items():
             if key in CROSS_MODEL_RELATION_CONSUMER_SECRETS:
@@ -1627,7 +1637,12 @@ class Data(ABC):
                     f = Fernet(encryption_key)
                     decrypted_value = f.decrypt(value.encode()).decode()
                     relation_data[key] = decrypted_value
-                except (AttributeError, InvalidToken, TypeError, ValueError):
+                except (
+                    AttributeError,
+                    InvalidToken,
+                    TypeError,
+                    ValueError,
+                ):  # pyright: ignore [reportGeneralTypeIssues]
                     logger.warning("Could not decrypt sensitive field in cross-model relation")
 
         return relation_data
@@ -1692,12 +1707,22 @@ class Data(ABC):
         if encryption_key and remote_model_uuid != "" and self._model.uuid != remote_model_uuid:
             for key, value in data.items():
                 try:
-                    f = Fernet(encryption_key)
+                    f = Fernet(encryption_key)  # pyright: ignore [reportOptionalCall]
                     if key in CROSS_MODEL_RELATION_CONSUMER_SECRETS:
                         encrypted_value = f.encrypt(value.encode()).decode()
                         data[key] = encrypted_value
-                except (AttributeError, InvalidToken, TypeError, ValueError):
+                except (
+                    AttributeError,
+                    InvalidToken,
+                    ValueError,
+                ):  # pyright: ignore [reportGeneralTypeIssues]
                     logger.warning("Could not encrypt sensitive field in cross-model relation")
+                    data[key] = ""
+                except TypeError:
+                    # "TypeError: 'NoneType' object is not callable" raised when Fernet is `None`
+                    logger.warning(
+                        "Cryptography module not installed. Could not decrypt sensitive field in cross-model relation"
+                    )
                     data[key] = ""
 
         relation.data[component].update(data)
@@ -2484,6 +2509,12 @@ class ProviderEventHandlers(EventHandlers):
         if self.model.uuid == remote_model_uuid:
             return
 
+        if not Fernet:
+            logger.warning(
+                "Cryptography module not installed. Could not decrypt sensitive field in cross-model relation"
+            )
+            return
+
         # in cross-model relations, generate an encryption key and share it with the requirer as a secret
         event_data = {}
         secret_label = f"{self.model.uuid}-{event.relation.id}-encryption-secret"
@@ -2492,7 +2523,7 @@ class ProviderEventHandlers(EventHandlers):
             # check if secret was already created to avoid duplicates
             secret = self.charm.model.get_secret(label=secret_label)
         except SecretNotFoundError:
-            encryption_key = Fernet.generate_key()
+            encryption_key = Fernet.generate_key()  # pyright: ignore [reportOptionalMemberAccess]
             content = {"encryption-key": encryption_key.decode()}
             secret = self.charm.app.add_secret(content, label=secret_label)
 
