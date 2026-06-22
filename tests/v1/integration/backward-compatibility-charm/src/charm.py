@@ -35,6 +35,16 @@ class ClientCharm(CharmBase):
         self.database = DatabaseRequires(self, "backward-database", "bwclient")
         self.framework.observe(self.database.on.database_created, self._on_resource_created)
 
+        self.database_prefixes = DatabaseRequires(
+            charm=self,
+            relation_name="backward-prefix-database",
+            database_name="testdb*",
+            requested_entity_name="testuser",
+        )
+        self.framework.observe(
+            self.database_prefixes.on.database_created, self._on_resource_created
+        )
+
     def _on_start(self, _) -> None:
         """Only sets an active status."""
         self.unit.status = ActiveStatus("Backward compatibility charm ready!")
