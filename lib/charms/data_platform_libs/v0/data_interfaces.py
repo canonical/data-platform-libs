@@ -458,7 +458,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 59
+LIBPATCH = 60
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -5422,6 +5422,8 @@ class OpenSearchRequiresData(RequirerData):
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
         entity_permissions: Optional[str] = None,
+        requested_entity_name: Optional[str] = None,
+        requested_entity_password: Optional[str] = None,
     ):
         """Manager of OpenSearch client relations."""
         super().__init__(
@@ -5432,6 +5434,9 @@ class OpenSearchRequiresData(RequirerData):
             extra_group_roles,
             entity_type,
             entity_permissions,
+            None,
+            requested_entity_name,
+            requested_entity_password,
         )
         self.index = index
 
@@ -5465,6 +5470,18 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
             data["entity-type"] = self.relation_data.entity_type
         if self.relation_data.entity_permissions:
             data["entity-permissions"] = self.relation_data.entity_permissions
+
+        if self.relation_data.requested_entity_name:
+            content = {"entity-name": self.relation_data.requested_entity_name}
+            if self.relation_data.requested_entity_password:
+                content["password"] = self.relation_data.requested_entity_password
+            secret = self.charm.app.add_secret(
+                content, label=f"{self.model.uuid}-{event.relation.id}-requested-entity"
+            )
+            secret.grant(event.relation)
+            if not secret.id:
+                raise SecretError("Secret helper missing Id")
+            data["requested-entity-secret"] = secret.id
 
         self.relation_data.update_relation_data(event.relation.id, data)
 
@@ -5545,6 +5562,17 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
                 event.relation, app=event.app, unit=event.unit
             )
 
+            if (
+                self.relation_data.local_unit.is_leader()
+                and self.relation_data.requested_entity_name
+                and (secret_uri := app_databag.get("requested-entity-secret"))
+            ):
+                try:
+                    secret = self.framework.model.get_secret(id=secret_uri)
+                    secret.remove_all_revisions()
+                except ModelError:
+                    logger.debug("Unable to remove helper secret")
+
             # To avoid unnecessary application restarts do not trigger other events.
             return
 
@@ -5574,6 +5602,8 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
         entity_permissions: Optional[str] = None,
+        requested_entity_name: Optional[str] = None,
+        requested_entity_password: Optional[str] = None,
     ) -> None:
         OpenSearchRequiresData.__init__(
             self,
@@ -5585,6 +5615,8 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
             extra_group_roles,
             entity_type,
             entity_permissions,
+            requested_entity_name,
+            requested_entity_password,
         )
         OpenSearchRequiresEventHandlers.__init__(self, charm, self)
 
