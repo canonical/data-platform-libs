@@ -142,12 +142,9 @@ class TestCharm(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.harness.set_model_name("testing")
         cls.harness.begin()
+        cls.addClassCleanup(cls.harness.cleanup)
 
     def setUp(self) -> None:
-        # Instantiate the Charmed Operator Framework test harness
-
-        self.addCleanup(self.harness.cleanup)
-
         self.assertIsInstance(self.harness.charm, TestCharmCharm)
 
     def test_config_parsing_ok(self):
