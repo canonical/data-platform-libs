@@ -271,11 +271,14 @@ class ApplicationCharm(CharmBase):
 
         # OpenSearch events
 
+        _entity_name, _entity_password = self.requested_entities_secret_content
         self.opensearch = OpenSearchRequires(
             charm=self,
             relation_name="opensearch-client-index",
             index="test-index",
             extra_user_roles=EXTRA_USER_ROLES_OPENSEARCH,
+            requested_entity_name=_entity_name,
+            requested_entity_password=_entity_password,
         )
         self.framework.observe(self.opensearch.on.index_created, self._on_opensearch_index_created)
         self.framework.observe(
