@@ -22,3 +22,5 @@ parts:
   charm:
     charm-binary-python-packages:
       - psycopg[binary]
+      - cryptography
+      - cffi

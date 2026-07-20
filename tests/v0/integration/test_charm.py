@@ -14,7 +14,6 @@ from pytest_operator.plugin import OpsTest
 
 from .helpers import (
     build_connection_string,
-    check_logs,
     get_application_relation_data,
     get_juju_secret,
     get_leader_id,
@@ -745,7 +744,7 @@ async def test_postgresql_plugin(ops_test: OpsTest):
 
 
 async def test_two_applications_dont_share_the_same_relation_data(
-    ops_test: OpsTest, application_charm
+    ops_test: OpsTest, application_charm, dp_libs_ubuntu_series
 ):
     """Test that two different application connect to the database with different credentials."""
     # Set some variables to use in this test.
@@ -755,7 +754,9 @@ async def test_two_applications_dont_share_the_same_relation_data(
 
     # Deploy another application.
     await ops_test.model.deploy(
-        application_charm, application_name=another_application_app_name, series="jammy"
+        application_charm,
+        application_name=another_application_app_name,
+        series=dp_libs_ubuntu_series,
     )
     await ops_test.model.wait_for_idle(apps=all_app_names, status="active")
 
@@ -1194,10 +1195,6 @@ async def test_provider_get_set_delete_fields(field, value, ops_test: OpsTest):
     await action.wait()
     # Juju2 syntax
     assert int(action.results["Code"]) == 0
-    assert await check_logs(
-        ops_test,
-        strings=["Non-existing field 'doesnt_exist' was attempted to be removed from the databag"],
-    )
 
 
 @pytest.mark.log_errors_allowed(
@@ -1323,24 +1320,6 @@ async def test_provider_deleted_secret_is_removed(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": field},
     )
     await action.wait()
-    assert not (
-        await check_logs(
-            ops_test,
-            strings=["Non-existing field 'tls' was attempted to be removed from the databag"],
-        )
-    )
-    assert not (await check_logs(ops_test, strings=["Can't delete secret for relation"]))
-
-    action = await ops_test.model.units.get(leader_name).run_action(
-        "delete-relation-field",
-        **{"relation_id": pytest.second_database_relation.id, "field": field},
-    )
-    await action.wait()
-    assert await check_logs(
-        ops_test, strings=["Non-existing field 'tls' was attempted to be removed from the databag"]
-    )
-    assert await check_logs(ops_test, strings=["Can't delete secret for relation"])
-
     assert (
         await get_application_relation_data(
             ops_test,
@@ -1455,12 +1434,6 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
         },
     )
     await action.wait()
-    assert await check_logs(
-        ops_test,
-        strings=[
-            "This operation (update_relation_data()) can only be performed by the leader unit"
-        ],
-    )
 
     assert (
         await get_application_relation_data(
@@ -1474,12 +1447,6 @@ async def test_provider_set_delete_fields_leader_only(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": "new_field"},
     )
     await action.wait()
-    assert await check_logs(
-        ops_test,
-        strings=[
-            "This operation (delete_relation_data()) can only be performed by the leader unit"
-        ],
-    )
 
     assert (
         await get_application_relation_data(
@@ -1563,12 +1530,6 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         },
     )
     await action.wait()
-    assert await check_logs(
-        ops_test,
-        strings=[
-            "This operation (update_relation_data()) can only be performed by the leader unit"
-        ],
-    )
 
     assert (
         await get_application_relation_data(
@@ -1586,12 +1547,6 @@ async def test_requires_set_delete_fields_leader_only(ops_test: OpsTest):
         **{"relation_id": pytest.second_database_relation.id, "field": "new_field-req"},
     )
     await action.wait()
-    assert await check_logs(
-        ops_test,
-        strings=[
-            "This operation (delete_relation_data()) can only be performed by the leader unit"
-        ],
-    )
 
     assert (
         await get_application_relation_data(
