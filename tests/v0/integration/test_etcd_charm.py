@@ -17,7 +17,7 @@ from jubilant import Juju, TaskError
 from tests.jubilant_helpers import (
     TLSType,
     apps_active_and_agents_idle,
-    download_client_certificate_from_unit,
+    # download_client_certificate_from_unit,
     get_certificate_from_unit,
     get_cluster_endpoints,
     get_role,
@@ -120,8 +120,8 @@ def test_relate_client_charm(juju_lxd_model: Juju):
         )
     )
 
-    endpoints = get_cluster_endpoints(juju_lxd_model, ETCD_APP_NAME, tls_enabled=True)
-    download_client_certificate_from_unit(juju_lxd_model, ETCD_APP_NAME)
+    endpoints = get_cluster_endpoints(juju_lxd_model, ETCD_APP_NAME)
+    # download_client_certificate_from_unit(juju_lxd_model, ETCD_APP_NAME)
     secret = get_secret_by_label_jubilant(
         juju_lxd_model, label=f"{PEER_RELATION}.{ETCD_APP_NAME}.app"
     )
@@ -131,9 +131,7 @@ def test_relate_client_charm(juju_lxd_model: Juju):
     # check if user and role are created for the common name and that the role is assigned to the user
     common_name = get_requirer_common_name(juju_lxd_model)
     logger.info(f"Requirer has common names: {common_name}")
-    user_roles = get_user(
-        endpoints, common_name, user=INTERNAL_USER, password=password, tls_enabled=True
-    )
+    user_roles = get_user(endpoints, common_name, user=INTERNAL_USER, password=password)
     assert user_roles, f"failed to get user roles for {common_name}"
     assert common_name in user_roles, f"failed to get user roles for {common_name}"
 
