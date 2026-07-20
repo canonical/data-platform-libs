@@ -74,7 +74,7 @@ def download_client_certificate_from_unit(juju: Juju, app_name: str = ETCD_APP_N
     tls_path = TLS_ROOT_DIR
 
     for file in ["client.pem", "client.key", "client_ca.pem"]:
-        juju.scp(f"{unit}:{tls_path}/{file}", file)
+        juju.scp(f"root@{unit}:{tls_path}/{file}", file)
 
 
 def get_secret_by_label_jubilant(juju: Juju, label: str) -> Dict[str, str]:
