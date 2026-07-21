@@ -17,6 +17,9 @@ ETCD_APP_NAME = "charmed-etcd"
 TLS_ROOT_DIR = "/var/snap/charmed-etcd/current/tls"
 CLIENT_PORT = 2379
 
+TLSLIBID = "afd8c2bccf834997afce12c2706d2ede"
+CLIENT_TLS_RELATION_NAME = "client-certificates"
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,8 +76,15 @@ def download_client_certificate_from_unit(juju: Juju, app_name: str = ETCD_APP_N
 
     tls_path = TLS_ROOT_DIR
 
-    for file in ["client.pem", "client.key", "client_ca.pem"]:
+    for file in ["client.pem", "client_ca.pem"]:
         juju.scp(f"{unit}:{tls_path}/{file}", file)
+
+    private_key = get_secret_by_label_jubilant(
+        juju, label=f"{TLSLIBID}-private-key-{unit.split('/')[1]}-{CLIENT_TLS_RELATION_NAME}"
+    )["private-key"]
+
+    with open("client.key", "w") as f:
+        f.write(private_key)
 
 
 def get_secret_by_label_jubilant(juju: Juju, label: str) -> Dict[str, str]:
