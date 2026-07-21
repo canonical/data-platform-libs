@@ -89,3 +89,39 @@ async def test_backward_relation_with_charm_libraries_secrets(ops_test: OpsTest)
     assert len(password) == 16
     assert endpoints
     assert database == "bwclient"
+
+
+@pytest.mark.abort_on_fail
+async def test_backward_relation_with_prefix_and_username(ops_test: OpsTest):
+    prefix_relation = "backward-prefix-database"
+    # Relate the charms and wait for them exchanging some connection data.
+    await ops_test.model.add_relation(
+        DATABASE_APP_NAME, f"{APPLICATION_APP_NAME}:{prefix_relation}"
+    )
+    await ops_test.model.wait_for_idle(apps=APP_NAMES, status="active")
+
+    # check unit message to check if the topic_created_event is triggered
+    for unit in ops_test.model.applications[APPLICATION_APP_NAME].units:
+        assert unit.workload_status_message == "backward_database_created"
+
+    # Get the requests
+    secret_uri = (
+        await get_application_relation_data(
+            ops_test, APPLICATION_APP_NAME, prefix_relation, f"{PROV_SECRET_PREFIX}user"
+        )
+        or ""
+    )
+    secret_data = await get_juju_secret(ops_test, secret_uri)
+    username = secret_data["username"]
+    password = secret_data["password"]
+    endpoints = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, prefix_relation, "endpoints"
+    )
+    prefix_databases = await get_application_relation_data(
+        ops_test, APPLICATION_APP_NAME, prefix_relation, "prefix-databases"
+    )
+
+    assert username == "testuser"
+    assert len(password) == 16
+    assert endpoints
+    assert prefix_databases == "testdb1,testdb2"
