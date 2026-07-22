@@ -458,7 +458,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 59
+LIBPATCH = 60
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -496,6 +496,7 @@ MODEL_ERRORS = {
 
 CROSS_MODEL_RELATION_CONSUMER_SECRETS = [
     "mtls-cert",
+    "requested-entity-secret",
 ]
 
 
@@ -5422,6 +5423,8 @@ class OpenSearchRequiresData(RequirerData):
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
         entity_permissions: Optional[str] = None,
+        requested_entity_name: Optional[str] = None,
+        requested_entity_password: Optional[str] = None,
     ):
         """Manager of OpenSearch client relations."""
         super().__init__(
@@ -5432,6 +5435,8 @@ class OpenSearchRequiresData(RequirerData):
             extra_group_roles,
             entity_type,
             entity_permissions,
+            requested_entity_name=requested_entity_name,
+            requested_entity_password=requested_entity_password,
         )
         self.index = index
 
@@ -5453,20 +5458,7 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
         if not self.relation_data.local_unit.is_leader():
             return
 
-        # Sets both index and extra user roles in the relation if the roles are provided.
-        # Otherwise, sets only the index.
-        data = {"index": self.relation_data.index}
-
-        if self.relation_data.extra_user_roles:
-            data["extra-user-roles"] = self.relation_data.extra_user_roles
-        if self.relation_data.extra_group_roles:
-            data["extra-group-roles"] = self.relation_data.extra_group_roles
-        if self.relation_data.entity_type:
-            data["entity-type"] = self.relation_data.entity_type
-        if self.relation_data.entity_permissions:
-            data["entity-permissions"] = self.relation_data.entity_permissions
-
-        self.relation_data.update_relation_data(event.relation.id, data)
+        self._update_request(event.relation.id)
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
         """Event notifying about a new value of a secret."""
@@ -5510,6 +5502,13 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
 
         # Check which data has changed to emit customs events.
         diff = self._diff(event)
+
+        # send request again if encryption secret was added from provider side
+        if "encryption-secret" in diff.added and self.relation_data.local_unit.is_leader():
+            self._update_request(
+                event.relation.id, event.relation.data[event.relation.app].get("encryption-secret")
+            )
+            return
 
         # Register all new secrets with their labels
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
@@ -5560,6 +5559,31 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
             # To avoid unnecessary application restarts do not trigger other events.
             return
 
+    def _update_request(self, relation_id: int, encryption_secret: str | None = None) -> None:
+        """Generate payload and update relation data."""
+        # Sets both index and extra user roles in the relation if the roles are provided.
+        # Otherwise, sets only the index.
+        payload = {
+            "index": self.relation_data.index,
+        }
+
+        if encryption_secret:
+            payload["encryption-secret"] = encryption_secret
+        if self.relation_data.extra_user_roles:
+            payload["extra-user-roles"] = self.relation_data.extra_user_roles
+        if self.relation_data.extra_group_roles:
+            payload["extra-group-roles"] = self.relation_data.extra_group_roles
+        if self.relation_data.entity_type:
+            payload["entity-type"] = self.relation_data.entity_type
+        if self.relation_data.entity_permissions:
+            payload["entity-permissions"] = self.relation_data.entity_permissions
+        if self.relation_data.requested_entity_name:
+            payload["requested-entity-secret"] = (
+                f"{self.relation_data.requested_entity_name}:{self.relation_data.requested_entity_password}"
+            )
+
+        self.relation_data.update_relation_data(relation_id, payload)
+
 
 class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers):
     """Requires-side of the OpenSearch relation."""
@@ -5574,6 +5598,8 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
         extra_group_roles: Optional[str] = None,
         entity_type: Optional[str] = None,
         entity_permissions: Optional[str] = None,
+        requested_entity_name: Optional[str] = None,
+        requested_entity_password: Optional[str] = None,
     ) -> None:
         OpenSearchRequiresData.__init__(
             self,
@@ -5585,6 +5611,8 @@ class OpenSearchRequires(OpenSearchRequiresData, OpenSearchRequiresEventHandlers
             extra_group_roles,
             entity_type,
             entity_permissions,
+            requested_entity_name,
+            requested_entity_password,
         )
         OpenSearchRequiresEventHandlers.__init__(self, charm, self)
 
