@@ -312,7 +312,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 PYDEPS = ["ops>=2.0.0", "pydantic>=2.11"]
 
@@ -496,6 +496,9 @@ TlsSecretBool = Annotated[OptionalSecretBool, Field(exclude=True, default=None),
 MtlsSecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "mtls"]
 ExtraSecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "extra"]
 EntitySecretStr = Annotated[OptionalSecretStr, Field(exclude=True, default=None), "entity"]
+RequestedEntitySecretStr = Annotated[
+    OptionalSecretStr, Field(exclude=True, default=None), "requested-entity"
+]
 
 
 class Scope(Enum):
@@ -833,9 +836,16 @@ class BaseCommonModel(BaseModel):
                 if not secret_uri:
                     continue
 
-                secret = repository.get_secret(
-                    secret_group, secret_uri=secret_uri, short_uuid=short_uuid
-                )
+                try:
+                    secret = repository.get_secret(
+                        secret_group, secret_uri=secret_uri, short_uuid=short_uuid
+                    )
+                except SecretNotFoundError:
+                    # v0 deletes the requested entity secret
+                    if secret_group == "requested-entity":
+                        logger.debug("Missing requested entity secret")
+                        continue
+                    raise
 
                 if not secret:
                     logger.info(f"No secret for group {secret_group} and short uuid {short_uuid}")
@@ -1002,6 +1012,13 @@ class RequirerCommonModel(CommonModel):
     entity_permissions: list[EntityPermissionModel] | None = Field(default=None)
     secret_mtls: SecretString | None = Field(default=None)
     mtls_cert: MtlsSecretStr = Field(default=None)
+    secret_requested_entity: SecretString | None = Field(
+        default=None,
+        validation_alias=AliasChoices("requested-entity-secret", "secret-requested-entity"),
+    )
+    entity_name: RequestedEntitySecretStr = Field(default=None)
+    entity_password: RequestedEntitySecretStr = Field(default=None, serialization_alias="password")
+    prefix_matching: Literal["all", "only-existing"] | None = Field(default=None)
 
     @model_validator(mode="after")
     def validate_fields(self):
@@ -1014,6 +1031,9 @@ class RequirerCommonModel(CommonModel):
 
         if self.entity_type == "GROUP" and self.extra_user_roles:
             raise ValueError("Inconsistent entity information. Use extra_group_roles instead")
+
+        if self.entity_password and not self.entity_name:
+            raise ValueError("Unable to set entity password without an entity name")
 
         return self
 
@@ -1047,6 +1067,7 @@ class ResourceProviderModel(ProviderCommonModel):
     entity_name: EntitySecretStr = Field(default=None)
     entity_password: EntitySecretStr = Field(default=None)
     version: str | None = Field(default=None)
+    prefix_resources: str | None = Field(default=None)
 
 
 class RequirerDataContractV0(RequirerCommonModel):
@@ -2090,6 +2111,12 @@ class AuthenticationUpdatedEvent(ResourceRequirerEvent[TResourceProviderModel]):
     pass
 
 
+class ResourcePrefixResourcesChangedEvent(ResourceRequirerEvent[TResourceProviderModel]):
+    """Prefix resources have changed."""
+
+    pass
+
+
 # Error Propagation Events
 
 
@@ -2148,6 +2175,7 @@ class ResourceRequiresEvents(CharmEvents, Generic[TResourceProviderModel]):
     authentication_updated = EventSource(AuthenticationUpdatedEvent)
     status_raised = EventSource(StatusRaisedEvent)
     status_resolved = EventSource(StatusResolvedEvent)
+    prefix_resources_changed = EventSource(ResourcePrefixResourcesChangedEvent)
 
 
 ##############################################################################
@@ -2632,6 +2660,11 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
             self.interface.write_model(
                 relation_id, response, context={"version": "v0"}
             )  # {"database": "database-name", "secret-user": "uri", ...}
+            # Set expected prefix field if present
+            if response.prefix_resources:
+                self.interface.repository(relation_id).write_field(
+                    "prefix-databases", response.prefix_resources
+                )
             return
 
         model = self.interface.build_model(relation_id, DataContractV1[response.__class__])
@@ -2874,6 +2907,10 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                 self.on.define_event(
                     f"{relation_alias}_read_only_endpoints_changed",
                     ResourceReadOnlyEndpointsChangedEvent,
+                )
+                self.on.define_event(
+                    f"{relation_alias}_prefix_resources_changed",
+                    ResourcePrefixResourcesChangedEvent,
                 )
 
     ##############################################################################
@@ -3240,4 +3277,12 @@ class ResourceRequirerEventHandler(EventHandlers, Generic[TResourceProviderModel
                 event.relation, app=event.app, unit=event.unit, response=response
             )
             self._emit_aliased_event(event, "authentication_updated", response)
+            return
+
+        if "prefix-resources" in _diff.added or "prefix-resources" in _diff.changed:
+            logger.info(f"prefix resources updated for {response.resource} at {datetime.now()}")
+            getattr(self.on, "prefix_resources_changed").emit(
+                event.relation, app=event.app, unit=event.unit, response=response
+            )
+            self._emit_aliased_event(event, "prefix_resources_changed", response)
             return

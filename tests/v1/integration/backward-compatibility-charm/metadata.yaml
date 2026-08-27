@@ -10,3 +10,5 @@ summary: |
 requires:
   backward-database:
     interface: database_client
+  backward-prefix-database:
+    interface: database_client
