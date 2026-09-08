@@ -25,7 +25,6 @@ jobs:
           python3 -m venv .venv
           . .venv/bin/activate
           pip install flake8 poetry pylint pytest tox
-          poetry install --all-groups
           echo PATH="$PATH" >> "$GITHUB_ENV"
 
       - name: Run coverage tests v0
