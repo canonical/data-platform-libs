@@ -6,13 +6,11 @@ providers:
     enable: true
     bootstrap: true
     channel: latest/stable
-  microk8s:
+  k8s:
     enable: true
     bootstrap: true
-    addons:
-      - dns
-      - hostpath-storage
-      - rbac
+    bootstrap-constraints:
+      root-disk: 5G
 host:
   snaps:
     jhack:
