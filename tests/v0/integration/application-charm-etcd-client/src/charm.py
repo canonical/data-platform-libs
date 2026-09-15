@@ -35,7 +35,6 @@ class ApplicationCharmEtcdClient(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.etcd_snap = snap.SnapCache()[SNAP_NAME]
 
         # Default charm events.
         self.framework.observe(self.on.start, self._on_start)
@@ -248,8 +247,8 @@ class ApplicationCharmEtcdClient(CharmBase):
     def _install_etcd_snap(self) -> bool:
         """Install the etcd snap."""
         try:
-            self.etcd_snap.ensure(snap.SnapState.Present, channel="3.6/edge")
-            self.etcd_snap.hold()
+            snap.ensure_installed(SNAP_NAME, channel="3.6/edge")
+            snap.hold(SNAP_NAME)
             return True
         except snap.SnapError as e:
             logger.error(str(e))
