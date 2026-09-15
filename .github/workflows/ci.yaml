@@ -67,31 +67,31 @@ jobs:
             bases-index: 1
         tests:
           - tox-environment: integration-db-v0
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-upgrade-v0-1
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-upgrade-v0-2
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-upgrade-v0-3
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-upgrade-v0-4
-            provider: microk8s
+            provider: k8s
           # To be enabled after data_interfaces v040
           # - integration-upgrade-v0-5
           # - integration-upgrade-v0-6
           # - integration-upgrade-v0-7
           - tox-environment: integration-upgrade-databag-v0
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-s3-v0
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-opensearch-v0
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-kafka-v0
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-kafka-connect-v0
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-status-v0
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-etcd-v0
             provider: lxd
         juju-version:
@@ -135,20 +135,47 @@ jobs:
       - lint
       - unit-test
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 126
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Purge Docker
+        # GitHub-hosted Azure runners ship Docker pre-installed and active.
+        # Canonical K8s requires "A system with no previous installations
+        # of containerd/docker as this may cause conflicts"
+        # (see https://documentation.ubuntu.com/canonical-kubernetes
+        # /release-1.32/snap/tutorial/getting-started/).
+        # Completely purging Docker requires also
+        # deleting the Docker-specific `iptables-nft` rulesets
+        # created on installation.
+        timeout-minutes: 5
+        run: |
+          sudo apt-get remove --purge -y docker-ce docker-ce-cli containerd.io docker.io containerd 2>/dev/null || true
+          sudo nft flush ruleset
+          sudo ip link delete docker0 2>/dev/null || true
+      - name: Remove podman CNI bridge config
+        # Ubuntu 24.04 runners ship podman with a CNI bridge config
+        # (/etc/cni/net.d/87-podman-bridge.conflist) that sorts
+        # lexicographically before Cilium's config (05-cilium.conflist).
+        # When that file is present, containerd picks the podman bridge
+        # as the active CNI before Cilium is ready, bypassing the
+        # node.kubernetes.io/network-unavailable taint and scheduling
+        # pods onto the 10.88.0.0/16 bridge instead of the Cilium pod
+        # CIDR. Removing the file ensures Cilium is the only CNI plugin
+        # from the start.
+        timeout-minutes: 1
+        run: |
+          sudo rm -f /etc/cni/net.d/87-podman-bridge.conflist
       - name: Setup concierge
         run: |
           sudo snap install --classic concierge
           sudo concierge prepare --juju-channel "${{ matrix.juju-version.juju-snap-channel}}" --extra-debs tox
           sudo snap install charmcraft --channel 2.x/stable --classic
       - name: Setup k8s controller
-        if: ${{ 'microk8s' == matrix.tests.provider }}
+        if: ${{ 'k8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
         run: |
-          juju switch concierge-microk8s
+          juju switch concierge-k8s
       - name: Setup lxd controller
         if: ${{ 'lxd' == matrix.tests.provider }}
         run: |
@@ -196,17 +223,17 @@ jobs:
             bases-index: 0
         tests:
           - tox-environment: integration-db-v1
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-opensearch-v1
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-kafka-v1
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-kafka-connect-v1
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-backward-compatibility-v1
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-status-v1
-            provider: microk8s
+            provider: k8s
           - tox-environment: integration-etcd-v1
             provider: lxd
         juju-version:
@@ -227,10 +254,10 @@ jobs:
           sudo snap install --classic concierge
           sudo concierge prepare --juju-channel "3.6/stable" --extra-debs tox --extra-snaps "charmcraft/3.x/stable"
       - name: Setup k8s controller
-        if: ${{ 'microk8s' == matrix.tests.provider }}
+        if: ${{ 'k8s' == matrix.tests.provider }}
         # TODO: Replace with custom image on self-hosted runner
         run: |
-          juju switch concierge-microk8s
+          juju switch concierge-k8s
       - name: Setup lxd controller
         if: ${{ 'lxd' == matrix.tests.provider }}
         run: |

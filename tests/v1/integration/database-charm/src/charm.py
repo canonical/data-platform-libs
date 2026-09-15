@@ -208,7 +208,7 @@ class DatabaseCharm(CharmBase):
                     "command": "/usr/local/bin/docker-entrypoint.sh postgres",
                     "startup": "enabled",
                     "environment": {
-                        "PGDATA": "/var/lib/postgresql/data/pgdata",
+                        "PGDATA": "/var/lib/postgresql/data/pgdata/pgdata",
                         "POSTGRES_PASSWORD": self._stored.password,
                     },
                 }
