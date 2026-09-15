@@ -7,6 +7,9 @@ on:
   schedule:
     - cron: "0 2 * * 6" # Every Saturday 2:00 AM UTC
   workflow_dispatch:
+  push:
+    branches:
+      - tiobe-weekly-scan
 
 jobs:
   TICS:
@@ -38,7 +41,7 @@ jobs:
           mv coverage.xml .cover/cobertura.xml
 
       - name: TICS GitHub Action
-        uses: tiobe/tics-github-action@v3
+        uses: tiobe/tics-github-action@v4
         with:
           mode: qserver
           project: data-platform-libs
