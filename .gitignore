@@ -5,6 +5,7 @@ build/
 .coverage
 __pycache__/
 *.py[cod]
+coverage.xml
 tests/v0/integration/application-charm/lib/charms/data_platform_libs/v0/database_requires.py
 tests/v0/integration/database-charm/lib/charms/data_platform_libs/v0/database_provides.py
 tests/v0/integration/application-charm/lib/charms/data_platform_libs/v0/data_interfaces.py
