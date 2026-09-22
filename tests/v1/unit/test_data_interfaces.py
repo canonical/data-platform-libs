@@ -132,6 +132,10 @@ class PeerUnitModel(PeerModel):
     mysecret2: MygroupSecretStr
 
 
+class PeerNamedModel(PeerModel):
+    name: str = Field(default="")
+
+
 class DatabaseCharm(CharmBase):
     """Mock database charm to use in units tests."""
 
@@ -426,6 +430,70 @@ class TestDatabaseProvides(DataProvidesBaseTests, unittest.TestCase):
         """Check the functionality of each public interface function."""
         interface = getattr(self.harness.charm, interface_attr)
         verify_relation_interface_functions(interface, self.harness.charm.peer_relation.id)
+
+    @parameterized.expand(
+        [
+            ("peer_relation_app", ""),
+            ("peer_relation_app", None),
+            ("peer_relation_unit", ""),
+            ("peer_relation_unit", None),
+        ]
+    )
+    def test_peer_relation_write_field_empty_value(self, interface_attr, empty_value):
+        """Check that writing an empty value removes the field, like Juju and ops do."""
+        relation_id: int = self.harness.charm.peer_relation.id
+        interface: RepositoryInterface = getattr(self.harness.charm, interface_attr)
+        repository = interface.repository(relation_id)
+        repository.write_field("something", "else")
+        assert repository.get_field("something") == "else"
+
+        repository.write_field("something", empty_value)
+
+        assert repository.get_field("something") is None
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    def test_peer_relation_write_fields(self, interface_attr):
+        """Check that write_fields writes every field of the mapping."""
+        relation_id: int = self.harness.charm.peer_relation.id
+        interface: RepositoryInterface = getattr(self.harness.charm, interface_attr)
+        repository = interface.repository(relation_id)
+
+        repository.write_fields({"something": "else", "other": "thing"})
+
+        assert repository.get_fields("something", "other") == {
+            "something": "else",
+            "other": "thing",
+        }
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    def test_peer_relation_delete_fields(self, interface_attr):
+        """Check that delete_fields removes every provided field."""
+        relation_id: int = self.harness.charm.peer_relation.id
+        interface: RepositoryInterface = getattr(self.harness.charm, interface_attr)
+        repository = interface.repository(relation_id)
+        repository.write_field("something", "else")
+        repository.write_field("other", "thing")
+
+        repository.delete_fields("something", "other")
+
+        assert repository.get_fields("something", "other") == {}
+
+    @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
+    def test_peer_relation_write_model_empty_string_field(self, interface_attr):
+        """Check that a field set back to its empty-string default is removed from the databag."""
+        relation_id: int = self.harness.charm.peer_relation.id
+        interface: RepositoryInterface = getattr(self.harness.charm, interface_attr)
+        repository = interface.repository(relation_id)
+
+        model = interface.build_model(relation_id, PeerNamedModel)
+        model.name = "x"
+        interface.write_model(relation_id, model)
+        assert repository.get_field("name") == "x"
+
+        model.name = ""
+        interface.write_model(relation_id, model)
+
+        assert repository.get_field("name") is None
 
     @parameterized.expand([("peer_relation_app",), ("peer_relation_unit",)])
     def test_peer_relation_interface_secret_fields(self, interface_attr):

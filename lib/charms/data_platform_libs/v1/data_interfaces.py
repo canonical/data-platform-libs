@@ -312,7 +312,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 PYDEPS = ["ops>=2.0.0", "pydantic>=2.11"]
 
@@ -1198,12 +1198,18 @@ class AbstractRepository(ABC):
 
     @abstractmethod
     def write_field(self, field: str, value: Any) -> None:
-        """Writes the value in the field, without any secret support."""
+        """Writes the value in the field, without any secret support.
+
+        Writing None or an empty string removes the field, matching Juju and ops behaviour.
+        """
         ...
 
     @abstractmethod
     def write_fields(self, mapping: dict[str, Any]) -> None:
-        """Writes the values of mapping in the fields without any secret support (keys of mapping)."""
+        """Writes the values of mapping in the fields without any secret support (keys of mapping).
+
+        Writing None or an empty string removes the field, matching Juju and ops behaviour.
+        """
         ...
 
     def write_secret_field(
@@ -1336,7 +1342,9 @@ class OpsRepository(AbstractRepository):
         if self.component not in self.relation.data:
             logger.info(f"Component {self.component} not in relation {self.relation}")
             return None
-        if not value:
+        if value is None or value == "":
+            logger.debug(f"Empty value for field {field}, removing it from the databag")
+            self.delete_field(field)
             return None
         self.relation.data[self.component].update({field: value})
 
@@ -1349,7 +1357,8 @@ class OpsRepository(AbstractRepository):
         if self.component not in self.relation.data:
             logger.info(f"Component {self.component} not in relation {self.relation}")
             return None
-        (self.write_field(field, value) for field, value in mapping.items())
+        for field, value in mapping.items():
+            self.write_field(field, value)
 
     @override
     @ensure_leader_for_app
@@ -1396,7 +1405,8 @@ class OpsRepository(AbstractRepository):
     @override
     @ensure_leader_for_app
     def delete_fields(self, *fields: str) -> None:
-        (self.delete_field(field) for field in fields)
+        for field in fields:
+            self.delete_field(field)
 
     @override
     @ensure_leader_for_app
@@ -1825,7 +1835,10 @@ def build_model(repository: AbstractRepository, model: type[TCommon] | TypeAdapt
 def write_model(
     repository: AbstractRepository, model: BaseModel, context: dict[str, str] | None = None
 ):
-    """Writes the data stored in the model using the repository object."""
+    """Writes the data stored in the model using the repository object.
+
+    Fields that dump to None or an empty string are removed from the databag.
+    """
     context = context or {}
     dumped = model.model_dump(
         mode="json", context={"repository": repository} | context, exclude_none=False
@@ -2588,12 +2601,14 @@ class ResourceProviderEventHandler(EventHandlers, Generic[TRequirerCommonModel])
             old_name = request_model.original_field
             request_model.request_id = None  # For safety, let's ensure that we don't have a model.
             self._handle_event(event, repository, request_model)
-            logger.info(
-                f"Patching databag for v0 compatibility: replacing 'resource' by '{old_name}'"
-            )
-            self.interface.repository(
-                event.relation.id,
-            ).write_field(old_name, request_model.resource)
+            # The requirer may not have requested a resource yet (e.g. only requested-secrets).
+            if old_name:
+                logger.info(
+                    f"Patching databag for v0 compatibility: replacing 'resource' by '{old_name}'"
+                )
+                self.interface.repository(
+                    event.relation.id,
+                ).write_field(old_name, request_model.resource)
         else:
             request_model = build_model(repository, RequirerDataContractV1[self.request_model])
             if self.bulk_event:
