@@ -500,12 +500,6 @@ CROSS_MODEL_RELATION_CONSUMER_SECRETS = [
     "requested-entity-secret",
 ]
 
-# Fields of the list above that hold credentials and must never be written in plain text
-# in a cross-model relation: without an encryption key they are not written at all.
-CROSS_MODEL_RELATION_ENCRYPTED_ONLY_FIELDS = [
-    "requested-entity-secret",
-]
-
 
 ##############################################################################
 # Exceptions
@@ -1732,13 +1726,6 @@ class Data(ABC):
                         "Cryptography module not installed. Could not decrypt sensitive field in cross-model relation"
                     )
                     data[key] = ""
-        elif remote_model_uuid != "" and self._model.uuid != remote_model_uuid:
-            # cross-model relation without an encryption key: credentials are not sent
-            for key in CROSS_MODEL_RELATION_ENCRYPTED_ONLY_FIELDS:
-                if data.pop(key, None):
-                    logger.warning(
-                        "No encryption key available, not sending %s in cross-model relation", key
-                    )
 
         relation.data[component].update(data)
 
