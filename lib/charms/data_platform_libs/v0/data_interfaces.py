@@ -5462,6 +5462,9 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
         if not self.relation_data.local_unit.is_leader():
             return
 
+        if not self.relation_data.secrets_enabled:
+            return
+
         try:
             secret = self.framework.model.get_secret(
                 label=self._requested_entity_secret_label(event.relation.id)
@@ -5605,7 +5608,11 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
         """Generate payload and update relation data."""
         relation = self.relation_data.get_relation(self.relation_data.relation_name, relation_id)
         requests_entity = bool(self.relation_data.requested_entity_name)
-        cross_model = self.model.uuid != relation.remote_model.uuid
+        try:
+            cross_model = self.model.uuid != relation.remote_model.uuid
+        except (FileNotFoundError, ModelError, RuntimeError):
+            # access to remote model added in Juju 3.6.2, fails with 2.9
+            cross_model = False
 
         # Requirer secrets cannot be shared in cross-model relations: the requested entity is sent
         # encrypted, so the whole request has to wait for the encryption key of the provider.
