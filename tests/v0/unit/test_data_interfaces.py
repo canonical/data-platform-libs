@@ -7,7 +7,7 @@ import unittest
 from abc import ABC, abstractmethod
 from logging import getLogger
 from typing import Dict, Tuple, Type
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import psycopg
 import pytest
@@ -3942,3 +3942,12 @@ class TestOpenSearchRequires(DataRequirerBaseTests, unittest.TestCase):
         assert event.password == "test-password"
         assert event.endpoints == "host1:port,host2:port"
         assert event.tls_ca == "Canonical"
+
+    @patch("ops.model.Relation.remote_model", new_callable=PropertyMock)
+    def test_request_sent_without_remote_model_access(self, remote_model):
+        """Asserts the request is sent when Juju cannot access the remote model (e.g. 2.9)."""
+        remote_model.side_effect = RuntimeError("command not found: relation-model-get")
+
+        rel_id = self.add_relation(self.harness, self.provider)
+
+        assert self.harness.get_relation_data(rel_id, self.app_name)["index"] == INDEX
