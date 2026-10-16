@@ -459,7 +459,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 61
+LIBPATCH = 62
 
 PYDEPS = ["ops>=2.0.0"]
 
@@ -5382,10 +5382,15 @@ class OpenSearchProvidesEventHandlers(ProviderEventHandlers):
 
         # Emit a permissions changed event if the setup key (index name)
         # was added to the relation databag, and the entity-permissions key changed.
+        # A removed entity-permissions key is a change too: the provider must revoke them.
         if (
             "index" not in diff.added
             and "entity-type" not in diff.added
-            and ("entity-permissions" in diff.added or "entity-permissions" in diff.changed)
+            and (
+                "entity-permissions" in diff.added
+                or "entity-permissions" in diff.changed
+                or "entity-permissions" in diff.deleted
+            )
         ):
             getattr(self.on, "index_entity_permissions_changed").emit(
                 event.relation, app=event.app, unit=event.unit
